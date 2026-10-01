@@ -1,0 +1,57 @@
+{
+  "name": "@david-crespo/ah",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Agent host: a local server and the web apps it hosts for watching coding agent sessions",
+  "license": "MIT",
+  "repository": "github:david-crespo/ah",
+  "bin": {
+    "ah": "dist/ah.js"
+  },
+  "files": [
+    "dist",
+    "app/**/*.css",
+    "app/dashboard/page.html",
+    "host/github-markdown.min.css",
+    "host/chat/chat.css"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "rm -rf dist && tsdown && node scripts/build-client.ts",
+    "prepack": "npm run build",
+    "fmt": "oxfmt --write .",
+    "fmt:check": "oxfmt --check .",
+    "lint": "oxlint",
+    "tsc": "tsc --noEmit",
+    "test": "vitest run",
+    "ci": "npm run tsc && npm run lint && npm run fmt:check && npm test"
+  },
+  "dependencies": {
+    "@lydell/node-pty": "^1.2.0-beta.15"
+  },
+  "devDependencies": {
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/language-data": "^6.5.2",
+    "@commander-js/extra-typings": "^15.0.0",
+    "@hono/node-server": "^2.1.3",
+    "@lezer/highlight": "^1.2.5",
+    "@types/node": "^24",
+    "@types/ws": "^8.18.2",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
+    "commander": "^15.0.0",
+    "markdown-exit": "^1.3.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "oxfmt": "^0.71.0",
+    "oxlint": "^1.86.0",
+    "tsdown": "^0.23.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3",
+    "ws": "^8.22.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

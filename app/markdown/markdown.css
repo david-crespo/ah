@@ -1,0 +1,286 @@
+/* Styles for <ah-markdown> (preview.ts), on top of github-markdown.css. Moved
+   from the file page; nested under the element so a page holding one (like
+   the dashboard) keeps its own .flash, .conflict, and so on. Sizing and
+   padding of the .markdown-body are left to the page, and it can set the
+   flash color with --ah-markdown-flash. */
+
+@keyframes ah-markdown-flash {
+  from {
+    background-color: var(--ah-markdown-flash, rgba(255, 223, 93, 0.5));
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@media (prefers-color-scheme: dark) {
+  @keyframes ah-markdown-flash {
+    from {
+      background-color: var(--ah-markdown-flash, rgba(187, 128, 9, 0.4));
+    }
+    to {
+      background-color: transparent;
+    }
+  }
+}
+
+ah-markdown {
+  display: block;
+  /* display: block would otherwise beat the browser's own [hidden] rule */
+  &[hidden] {
+    display: none;
+  }
+
+  .file-note {
+    max-width: 830px;
+    margin: 16px auto 0;
+    padding: 8px 16px;
+    border: 1px solid #d1d9e0;
+    border-radius: 6px;
+    font:
+      13px -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      sans-serif;
+  }
+  /* github-markdown.css drops every task item's marker, which hides a
+     numbered list's numbers (a tracker's item ids). Keep them, with the
+     checkbox after the number instead of pulled left into its place. In an
+     item with more than one block, the checkbox is in its first <p>. */
+  .markdown-body ol > .task-list-item {
+    list-style-type: decimal;
+  }
+  .markdown-body ol > .task-list-item > .task-list-item-checkbox,
+  .markdown-body ol > .task-list-item > p:first-child > .task-list-item-checkbox {
+    margin: 0 0.2em 0.25em 0;
+  }
+  .flash {
+    animation: ah-markdown-flash 1.8s ease-out;
+  }
+  .flash-inline {
+    animation: ah-markdown-flash 1.8s ease-out;
+    border-radius: 2px;
+  }
+  /* jj/git conflict regions: each side rendered as markdown in a labelled box */
+  .conflict {
+    border: 1px solid #d1d9e0;
+    border-left: 3px solid #bf8700;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .conflict-title {
+    padding: 6px 16px;
+    background: #f6f8fa;
+    border-bottom: 1px solid #d1d9e0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #9a6700;
+  }
+  .conflict-panel {
+    padding: 12px 16px;
+  }
+  .conflict-panel + .conflict-panel {
+    border-top: 1px dashed #d1d9e0;
+  }
+  .conflict-panel[data-kind="base"] {
+    background: #f6f8fa;
+    color: #59636e;
+  }
+  .conflict-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #59636e;
+    margin-bottom: 6px;
+  }
+  .conflict-panel[data-kind="side"] .conflict-label {
+    color: #0969da;
+  }
+  .conflict-body > :last-child {
+    margin-bottom: 0 !important;
+  }
+  .conflict-added {
+    background: #dafbe1;
+    border-radius: 2px;
+  }
+  .conflict-removed {
+    background: #ffebe9;
+    border-radius: 2px;
+  }
+  /* GitHub-style embeds (permalink snippets, assets) */
+  .gh-embed img,
+  .gh-embed video {
+    max-width: 100%;
+  }
+  .gh-embed {
+    margin-bottom: 16px;
+  }
+  .gh-embed-error {
+    color: #d1242f;
+    font-size: 13px;
+  }
+  .gh-blob {
+    border: 1px solid #d1d9e0;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+  .gh-blob-header {
+    padding: 8px 16px;
+    background: #f6f8fa;
+    border-bottom: 1px solid #d1d9e0;
+    font-size: 12px;
+    color: #59636e;
+  }
+  .gh-blob-header a {
+    font-weight: 600;
+  }
+  .gh-blob-body {
+    display: flex;
+  }
+  .gh-blob-body pre {
+    margin: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    font-size: 12px !important;
+    line-height: 20px;
+  }
+  .gh-blob-body > pre:last-child {
+    flex: 1;
+    min-width: 0;
+    overflow-x: auto;
+  }
+  .gh-blob-gutter {
+    color: #59636e;
+    text-align: right;
+    user-select: none;
+    padding-right: 0 !important;
+  }
+  /* lezer classHighlighter tokens in code blocks (GitHub palette) */
+  .tok-keyword,
+  .tok-operator,
+  .tok-modifier {
+    color: #cf222e;
+  }
+  .tok-string,
+  .tok-string2,
+  .tok-regexp {
+    color: #0a3069;
+  }
+  .tok-comment,
+  .tok-meta {
+    color: #59636e;
+  }
+  .tok-number,
+  .tok-bool,
+  .tok-literal,
+  .tok-atom,
+  .tok-constant {
+    color: #0550ae;
+  }
+  .tok-typeName,
+  .tok-className,
+  .tok-tagName,
+  .tok-standard {
+    color: #953800;
+  }
+  .tok-function,
+  .tok-macroName {
+    color: #8250df;
+  }
+  .tok-propertyName,
+  .tok-attributeName,
+  .tok-definition {
+    color: #0550ae;
+  }
+  .tok-heading {
+    font-weight: 600;
+  }
+  .tok-link {
+    text-decoration: underline;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .file-note {
+      border-color: #3d444d;
+      color: #f0f6fc;
+    }
+    .gh-embed-error {
+      color: #f85149;
+    }
+    .conflict {
+      border-color: #3d444d;
+      border-left-color: #9e6a03;
+    }
+    .conflict-title {
+      background: #151b23;
+      border-color: #3d444d;
+      color: #d29922;
+    }
+    .conflict-panel + .conflict-panel {
+      border-color: #3d444d;
+    }
+    .conflict-panel[data-kind="base"] {
+      background: #151b23;
+      color: #9198a1;
+    }
+    .conflict-label {
+      color: #9198a1;
+    }
+    .conflict-panel[data-kind="side"] .conflict-label {
+      color: #58a6ff;
+    }
+    .conflict-added {
+      background: #2ea04333;
+    }
+    .conflict-removed {
+      background: #f8514933;
+    }
+    .gh-blob {
+      border-color: #3d444d;
+    }
+    .gh-blob-header {
+      background: #151b23;
+      border-color: #3d444d;
+      color: #9198a1;
+    }
+    .gh-blob-gutter {
+      color: #9198a1;
+    }
+    .tok-keyword,
+    .tok-operator,
+    .tok-modifier {
+      color: #ff7b72;
+    }
+    .tok-string,
+    .tok-string2,
+    .tok-regexp {
+      color: #a5d6ff;
+    }
+    .tok-comment,
+    .tok-meta {
+      color: #9198a1;
+    }
+    .tok-number,
+    .tok-bool,
+    .tok-literal,
+    .tok-atom,
+    .tok-constant {
+      color: #79c0ff;
+    }
+    .tok-typeName,
+    .tok-className,
+    .tok-tagName,
+    .tok-standard {
+      color: #ffa657;
+    }
+    .tok-function,
+    .tok-macroName {
+      color: #d2a8ff;
+    }
+    .tok-propertyName,
+    .tok-attributeName,
+    .tok-definition {
+      color: #79c0ff;
+    }
+  }
+}

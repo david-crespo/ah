@@ -1,0 +1,10 @@
+{
+  "printWidth": 92,
+  "semi": false,
+  "ignorePatterns": [
+    "dist/**",
+    ".claude/**",
+    "host/github-markdown.min.css",
+    "app/markdown/xterm.css"
+  ]
+}

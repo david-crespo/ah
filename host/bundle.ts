@@ -1,0 +1,94 @@
+// Apps' client bundles, each served under its app as /app/<app>/<name>.
+// Running from source, the server builds one with vite the first time it's
+// asked for, so a restart picks up client edits; the published package ships
+// them prebuilt in dist/client/<app>/ (scripts/build-client.ts).
+
+import { readFile } from "node:fs/promises"
+import { assetPath } from "./assets.ts"
+
+/** Each app's bundles: served name to entry point in app/<app>/ */
+export const bundles = {
+  // bundle.js for a file's page, and preview.js with just the <ah-markdown>
+  // element, for other pages that show a file
+  markdown: { "bundle.js": "client.ts", "preview.js": "preview.ts" },
+  html: { "chat.js": "client.ts" },
+  dashboard: { "client.js": "client.ts" },
+} as const satisfies Record<string, Record<string, string>>
+
+export type BundleApp = keyof typeof bundles
+
+const fromSource = import.meta.filename.endsWith(".ts")
+
+export async function buildClientBundle(app: BundleApp, name: string): Promise<string> {
+  if (!fromSource) return await readFile(assetPath(`dist/client/${app}/${name}`), "utf8")
+  const files: Record<string, string> = bundles[app]
+  const entry = Object.hasOwn(files, name) ? files[name] : undefined
+  if (!entry) throw new Error(`no bundle ${name} in ${app}`)
+  // vite is a dev dependency, left out of the published build
+  const { build } = await import("vite")
+  const result = await build({
+    configFile: false,
+    logLevel: "warn",
+    build: {
+      write: false,
+      lib: {
+        entry: assetPath(`app/${app}/${entry}`),
+        formats: ["es"],
+        fileName: name.replace(/\.js$/, ""),
+      },
+      // One file per entry: @codemirror/language-data loads each language with
+      // a dynamic import, which would otherwise make a chunk per language
+      rolldownOptions: { output: { codeSplitting: false } },
+    },
+  })
+  const outputs = Array.isArray(result) ? result : [result]
+  for (const { output } of outputs as { output: { type: string; code?: string }[] }[]) {
+    const chunk = output.find((o) => o.type === "chunk")
+    if (chunk?.code) return chunk.code
+  }
+  throw new Error(`vite produced no chunk for app/${app}/${entry}`)
+}
+
+/** Builds each bundle once, on first request or ahead of it, for one app's
+ * routes */
+export class ClientBundles {
+  #app: BundleApp
+  #built = new Map<string, Promise<string>>()
+
+  constructor(app: BundleApp) {
+    this.#app = app
+  }
+
+  has(name: string): boolean {
+    return Object.hasOwn(bundles[this.#app], name)
+  }
+
+  get(name: string): Promise<string> {
+    let bundle = this.#built.get(name)
+    if (!bundle) {
+      bundle = buildClientBundle(this.#app, name).catch((e) => {
+        this.#built.delete(name) // retry on the next request
+        throw e
+      })
+      this.#built.set(name, bundle)
+    }
+    return bundle
+  }
+
+  /** Building takes a second or two, so a page's bundle starts when the page
+   * is opened, and the page's request for it waits */
+  prebuild(name: string) {
+    this.get(name).catch((e) => console.error(`ah: client bundle ${name} failed`, e))
+  }
+
+  /** The bundle as a response, or a 500 with the build error */
+  async response(name: string): Promise<Response> {
+    try {
+      return new Response(await this.get(name), {
+        headers: { "content-type": "text/javascript; charset=utf-8" },
+      })
+    } catch (e) {
+      return new Response(String(e), { status: 500 })
+    }
+  }
+}
