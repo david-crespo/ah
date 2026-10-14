@@ -13,13 +13,10 @@
 //     JSON on stdin (hook_event_name, session_id, cwd, prompt,
 //     transcript_path; Codex sends the same keys)
 //   .zshrc, at startup and on chpwd:         ah app sessions shell <label>
-//   .zshrc, at startup, before that:         ah app sessions terminal <tty>
-//     prints the shell's Ghostty terminal id, for .zshrc to export. Talks to
-//     Ghostty itself rather than the server, so a new shell never waits on
-//     the server starting.
 //
-// The terminal is GHOSTTY_TERMINAL_ID, which .zshrc exports into every
-// shell and so every agent run from it, and the label GHOSTTY_TAB_BASE_LABEL.
+// The terminal is REX_BLOCK, which Rex sets in every shell and so every
+// agent run from it. A session's label is its terminal's shell label, which
+// the registry has from `shell`, or failing that its directory's.
 // Except for Codex hooks run by its shared daemon, whose env belongs to
 // another shell: the server finds those sessions' terminals (tuis.ts).
 
@@ -30,12 +27,14 @@ import { isOneOf } from "../../host/guards.ts"
 import { ensureServer } from "../../host/server.ts"
 import { currentAgent } from "../../host/session.ts"
 import { sessionFile } from "../dashboard/api.ts"
-import { terminalForTty } from "../dashboard/ghostty.ts"
 import { underCodexDaemon } from "./tuis.ts"
 import { HARNESSES, HOOK_EVENTS, type Harness, type RegistryEvent } from "./registry.ts"
 import { sanitizeTitle } from "./summary.ts"
 
-/** ~/repos/ah → ah, ~/x → ~/x, as GTT labels a session with no shell label */
+/** The terminal pane a process was started in, from its env */
+export const terminalOf = (env: NodeJS.ProcessEnv) => env.REX_BLOCK || null
+
+/** ~/repos/ah → ah, ~/x → ~/x: a session's label when there's no shell label */
 export function abbreviatePath(path: string, home = homedir()): string {
   for (const dir of ["repos", "oxide", "jj-workspaces"]) {
     const prefix = `${home}/${dir}/`
@@ -95,8 +94,8 @@ export function hookEvent(
     event,
     harness,
     session,
-    terminal: env.GHOSTTY_TERMINAL_ID || null,
-    label: sanitizeTitle(env.GHOSTTY_TAB_BASE_LABEL || (cwd ? abbreviatePath(cwd) : "")),
+    terminal: terminalOf(env),
+    label: sanitizeTitle(cwd ? abbreviatePath(cwd) : ""),
     cwd,
     prompt: str(raw.prompt) ?? undefined,
     transcript: str(raw.transcript_path) ?? undefined,
@@ -119,7 +118,7 @@ export const hook = new Command("hook")
   .action(async ({ harness, port }) => {
     // Under Codex's daemon the env is the daemon's: leave the terminal and
     // label to the server (tuis.ts)
-    const daemon = harness === "codex" && (await underCodexDaemon())
+    const daemon = harness === "codex" && underCodexDaemon()
     const event = hookEvent(await readStdin(), harness, daemon ? {} : process.env)
     if (!event) return
     if (event.kind === "hook" && event.event === "SessionStart" && !daemon) {
@@ -139,16 +138,7 @@ export const shell = new Command("shell")
   .argument("<label>", "What the shell calls its directory")
   .addOption(portOption())
   .action(async (label, { port }) => {
-    const terminal = process.env.GHOSTTY_TERMINAL_ID
+    const terminal = terminalOf(process.env)
     const clean = sanitizeTitle(label)
     if (terminal && clean) await send(port, { kind: "shell", terminal, label: clean })
-  })
-
-export const terminal = new Command("terminal")
-  .description("Print the Ghostty terminal id for a tty, for a new shell to export")
-  .argument("<tty>", "The shell's controlling tty, zsh's $TTY")
-  .action(async (tty) => {
-    const id = await terminalForTty(tty)
-    if (!id) process.exit(1)
-    console.log(id)
   })

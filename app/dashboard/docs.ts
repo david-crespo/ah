@@ -16,7 +16,8 @@ import {
 } from "node:fs"
 import { dirname, join } from "node:path"
 import { isOneOf, isRecord, isStringOrNull } from "../../host/guards.ts"
-import { type Agent, opencodeRunning, processRunning } from "../../host/session.ts"
+import { ahStateDir, claudeSessionsDir } from "../../host/paths.ts"
+import { type Agent, agentAlive } from "../../host/session.ts"
 
 export interface ShownFile extends Agent {
   /** The session's workspace, which isn't always the file's: jjw
@@ -34,12 +35,7 @@ export interface Dirs {
 }
 
 export function defaultDirs(): Dirs {
-  const home = process.env.HOME!
-  const stateHome = process.env.XDG_STATE_HOME || join(home, ".local", "state")
-  return {
-    state: join(stateHome, "ah", "sessions"),
-    claudeSessions: join(home, ".claude", "sessions"),
-  }
+  return { state: ahStateDir("sessions"), claudeSessions: claudeSessionsDir() }
 }
 
 const isNotFound = (e: unknown) => (e as NodeJS.ErrnoException).code === "ENOENT"
@@ -58,23 +54,6 @@ export function repoRoot(dir: string): string | null {
   for (let d = dir; ; d = dirname(d)) {
     if (exists(join(d, ".jj")) || exists(join(d, ".git"))) return d
     if (dirname(d) === d) return null
-  }
-}
-
-/** Claude removes its sessions/<pid>.json when the session exits, which also
- * keeps a reused pid from looking alive. Codex keeps no such file, so its
- * process running has to do. */
-export function isAlive(dirs: Dirs, record: ShownFile): boolean {
-  switch (record.harness) {
-    case "claude":
-      return exists(join(dirs.claudeSessions, `${record.pid}.json`))
-    // Unlike `sessionAlive` (host/session.ts), which assumes a Codex session
-    // with no pid is there so a post can try, this assumes it's gone: an
-    // optimistic answer would keep its record forever
-    case "codex":
-      return record.pid !== null && processRunning(record.pid)
-    case "opencode":
-      return opencodeRunning()
   }
 }
 
@@ -120,14 +99,14 @@ function isShownFile(r: unknown): r is ShownFile {
 export function liveRecords(dirs: Dirs): ShownFile[] {
   return records(dirs)
     .map(({ record }) => record)
-    .filter((r): r is ShownFile => r !== null && isAlive(dirs, r))
+    .filter((r): r is ShownFile => r !== null && agentAlive(r, dirs.claudeSessions))
     .sort((a, b) => b.since.localeCompare(a.since))
 }
 
 export function writeRecord(dirs: Dirs, record: ShownFile) {
   mkdirSync(dirs.state, { recursive: true })
   for (const { record: r, path } of records(dirs)) {
-    if (!r || !isAlive(dirs, r)) rmSync(path)
+    if (!r || !agentAlive(r, dirs.claudeSessions)) rmSync(path)
   }
   const tmp = join(dirs.state, `.${record.key}.tmp`)
   writeFileSync(tmp, JSON.stringify(record, null, 2) + "\n")

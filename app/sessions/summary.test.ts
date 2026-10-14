@@ -1,5 +1,3 @@
-// Ported from ghostty-tab-title's tests (dotfiles bin/ghostty-tab-title_test.ts)
-
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -27,7 +25,7 @@ const codexUser = (text: string) => ({
 test("reads Claude user messages, short forms of commands, and skips the rest", async () => {
   const path = transcript([
     { type: "system", message: { content: "ignore" } },
-    { type: "user", message: { content: "Implement Ghostty titles for Codex" } },
+    { type: "user", message: { content: "Implement tab titles for Codex" } },
     { type: "user", message: { content: "<command-name>/clear</command-name>" } },
     {
       type: "user",
@@ -39,7 +37,7 @@ test("reads Claude user messages, short forms of commands, and skips the rest", 
     { type: "user", message: { content: "<system-reminder>x</system-reminder>" } },
   ])
   expect((await readTranscript(path)).userMessages).toEqual([
-    "Implement Ghostty titles for Codex",
+    "Implement tab titles for Codex",
     "/review 42",
     "$ jj log",
   ])
@@ -49,10 +47,10 @@ test("reads Codex user response items without event duplicates", async () => {
   const path = transcript([
     { type: "session_meta", payload: {} },
     { type: "event_msg", payload: { type: "user_message", message: "duplicate" } },
-    codexUser("Implement Ghostty titles for Codex"),
+    codexUser("Implement tab titles for Codex"),
   ])
   expect((await readTranscript(path)).userMessages).toEqual([
-    "Implement Ghostty titles for Codex",
+    "Implement tab titles for Codex",
   ])
 })
 
@@ -82,18 +80,18 @@ test("skips the AGENTS.md and environment context Codex starts a session with", 
 })
 
 test("includes a hook prompt not yet in the transcript", async () => {
-  const path = transcript([codexUser("Implement Ghostty titles for Codex")])
+  const path = transcript([codexUser("Implement tab titles for Codex")])
   expect(
     await buildSummaryPayload(
       path,
-      "Ghostty titles",
+      "tab titles",
       "Verify resume and split-pane behavior in the Codex CLI",
     ),
   ).toEqual({
-    priorSummary: "Ghostty titles",
-    firstMessage: "Implement Ghostty titles for Codex",
+    priorSummary: "tab titles",
+    firstMessage: "Implement tab titles for Codex",
     recentMessages: [
-      "Implement Ghostty titles for Codex",
+      "Implement tab titles for Codex",
       "Verify resume and split-pane behavior in the Codex CLI",
     ],
     lastReply: "",

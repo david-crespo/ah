@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import type { Snapshot } from "../dashboard/ghostty.ts"
+import type { Snapshot } from "../../host/rex.ts"
 import { apply, emptyRegistry, type Registry } from "../sessions/registry.ts"
 import { TitleSetter } from "./setter.ts"
 
@@ -33,7 +33,7 @@ function fake() {
   const pending: (() => void)[] = []
   let now = 0
   const setter = new TitleSetter(
-    (_tab, _terminal, title) =>
+    (_window, _tab, title) =>
       new Promise((resolve) => {
         calls.push(title)
         pending.push(() => resolve("set"))
@@ -94,13 +94,16 @@ test("leaves a tab alone when there's nothing to say about it", async () => {
   expect(calls).toEqual([])
 })
 
-test("Ghostty's bell prefix doesn't count as the title changing", async () => {
+test("a title too long for a Rex label is cut to fit, and then counts as set", async () => {
   const { setter, calls, flush, advance } = fake()
+  const long = "é".repeat(200)
   setter.onSnapshot(snapshot("zsh"))
-  setter.onRegistry(registry("ah"))
+  setter.onRegistry(registry(long))
   await flush()
+  const cut = "é".repeat(127) + "…"
+  expect(calls).toEqual([cut])
   advance(5000)
-  setter.onSnapshot(snapshot("🔔 ah"))
+  setter.onSnapshot(snapshot(cut))
   await flush()
-  expect(calls).toEqual(["ah"])
+  expect(calls).toEqual([cut])
 })

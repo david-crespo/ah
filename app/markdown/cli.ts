@@ -2,7 +2,7 @@
 
 import { spawn } from "node:child_process"
 import { realpathSync, statSync } from "node:fs"
-import { join, relative } from "node:path"
+import { basename, join, relative } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { threadCommands } from "../../host/chat/cli.ts"
 import { die, portOption } from "../../host/cli.ts"
@@ -70,7 +70,7 @@ markdown
         "window: a Chrome app window; tab: the default browser;",
         "dashboard: as this session's file in the dashboard, until the session ends or it's closed,",
         "opening a dashboard page if none is open;",
-        "split: glow in a new Ghostty split 35% above this terminal, focus staying put;",
+        "split: glow in a new Rex split 35% above this terminal, focus staying put;",
         "here: glow in this terminal",
       ].join(" "),
     )
@@ -94,12 +94,19 @@ markdown
     }
     // glow's TUI watches the file itself and keeps scroll position across reloads
     if (place === "split") {
-      return await runInherited("gpane", [
+      const block =
+        process.env.REX_BLOCK ?? die("ah app markdown open --in split: not running in Rex")
+      return await runInherited("rex", [
         "split",
-        "self",
-        "up",
-        "--size",
-        "35%",
+        "--block",
+        block,
+        "--split",
+        "above",
+        "--ratio",
+        "35",
+        "--focus=false",
+        "--label",
+        basename(path),
         "--",
         "glow",
         "--tui",

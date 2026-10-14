@@ -9,9 +9,9 @@
 // since the last one).
 
 import { mkdirSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
 import { DEFAULT_PORT } from "../cli.ts"
+import { ahStateDir } from "../paths.ts"
 import { describeSession, postToSession, type Session, sessionAlive } from "../session.ts"
 import {
   type ActivityInput,
@@ -22,8 +22,7 @@ import {
 } from "./events.ts"
 
 function logPath(app: string, file: string): string {
-  const stateHome = process.env.XDG_STATE_HOME || join(homedir(), ".local", "state")
-  const dir = join(stateHome, "ah", app)
+  const dir = ahStateDir(app)
   mkdirSync(dir, { recursive: true })
   // One log per file, named by its absolute path with slashes flattened
   return join(dir, file.replaceAll("/", "-") + ".comments.jsonl")

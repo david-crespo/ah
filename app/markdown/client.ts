@@ -12,6 +12,7 @@ import { FitAddon } from "@xterm/addon-fit"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Conversation } from "../../host/chat/conversation.ts"
 import { setUpSelectionComments } from "../../host/chat/selection.ts"
+import { theme } from "../../host/theme.ts"
 import "./preview.ts"
 
 const preview = document.querySelector("ah-markdown")!
@@ -60,15 +61,15 @@ let ptySock: WebSocket | null = null
 
 function startHelix(host: HTMLElement) {
   term = new Terminal({
-    fontSize: 13,
-    fontFamily: '"Berkeley Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: theme.fontSize,
+    fontFamily: theme.fontFamily,
     // xterm floors the 0.6em advance to whole device pixels and uses the
     // font's bare height, so 13px Berkeley Mono gets 15×30 cells at 2x where
     // Ghostty (with adjust-cell-height = 2) gives 16×33. letterSpacing is
     // added in device pixels; lineHeight multiplies the height.
     letterSpacing: 1,
     lineHeight: 1.1,
-    theme: { background: "#020202" },
+    theme: { background: theme.background },
     cursorBlink: false,
     macOptionIsMeta: true,
   })

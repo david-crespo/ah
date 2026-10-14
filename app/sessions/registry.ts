@@ -1,13 +1,10 @@
-// The session registry: which agent session is shown in which Ghostty
-// terminal, whether it's busy, and its summary. Agent hooks and zsh push
+// The session registry: which agent session is shown in which terminal,
+// whether it's busy, and its summary. Agent hooks and zsh push
 // events (`ah app sessions hook` and `shell`, posted to
-// /app/sessions/event), and the server applies them one at a time. This
-// replaced ghostty-tab-title (GTT), a script in the user's dotfiles that kept
-// the same model in files, one per entry, written by every hook process at
-// once, so it needed version tokens, retries and atomic writes. With one
-// process applying events in order, nothing races.
+// /app/sessions/event), and the server applies them one at a time, so
+// nothing races.
 //
-// The mapping is sticky, as in GTT: a session stays shown in its terminal
+// The mapping is sticky: a session stays shown in its terminal
 // after Stop or SessionEnd, so an idle pane keeps its summary, until another
 // session claims the terminal or the shell in it changes directory.
 //
@@ -16,9 +13,9 @@
 // does the async parts afterwards, so two events can't interleave.
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
-import { dirname, join } from "node:path"
+import { dirname } from "node:path"
 import { isOneOf, isRecord, isString, isStringOrNull } from "../../host/guards.ts"
+import { ahStateDir } from "../../host/paths.ts"
 
 export const HARNESSES = ["claude", "codex", "opencode", "pi"] as const
 export type Harness = (typeof HARNESSES)[number]
@@ -27,12 +24,11 @@ export interface SessionRecord {
   /** The terminal it last ran in, null if its hooks never said. Its
    * `visible` entry may have moved on since. */
   terminalId: string | null
-  /** null for sessions imported from GTT, which didn't record it */
-  harness: Harness | null
+  harness: Harness
   label: string
   cwd: string | null
-  /** "🌀" while a prompt runs, "" otherwise */
-  state: string
+  /** A prompt is running */
+  busy: boolean
   /** Bumped by every prompt, so a slow summary can't replace a newer one */
   promptSequence: number
   /** The latest summary written, and the prompt it was for. The title shows
@@ -71,10 +67,11 @@ export type RegistryEvent =
       event: HookEventName
       harness: Harness
       session: string
-      /** GHOSTTY_TERMINAL_ID in the hook's env. Without it the session is
-       * recorded but claims no terminal: GTT fell back to the focused pane,
-       * which let an agent run with a stripped env take over someone else's. */
+      /** REX_BLOCK in the hook's env. Without it the session is
+       * recorded but claims no terminal, so an agent run with a stripped env
+       * can't take over another session's. */
       terminal: string | null
+      /** The cwd abbreviated, for when the terminal has no shell label */
       label: string
       cwd: string | null
       prompt?: string
@@ -114,17 +111,19 @@ export function apply(r: Registry, e: RegistryEvent, now = Date.now()): Applied 
     }
     terminals.push(previous.terminalId)
   }
-  // The label is the one the session started with in its terminal, even if
-  // its directory changes since. A session resumed in another tab (Codex
+  // The label is the one the session started with in its terminal: the
+  // shell's label there if it reported one, else the hook's. It stays even if
+  // the directory changes since. A session resumed in another tab (Codex
   // sends no SessionStart for that) takes the new tab's.
   const fresh =
     e.event === "SessionStart" || !previous || terminalId !== previous.terminalId
+  const label = (terminalId && r.shellLabels.get(terminalId)) || e.label
   const record: SessionRecord = {
     terminalId,
     harness: e.harness,
-    label: fresh ? e.label : previous.label,
+    label: fresh ? label : previous.label,
     cwd: e.cwd ?? previous?.cwd ?? null,
-    state: previous?.state ?? "",
+    busy: previous?.busy ?? false,
     promptSequence: previous?.promptSequence ?? 0,
     summary: previous?.summary ?? null,
     summarySequence: previous?.summarySequence ?? 0,
@@ -132,7 +131,7 @@ export function apply(r: Registry, e: RegistryEvent, now = Date.now()): Applied 
   }
   let summarize: SummaryJob | null = null
   if (e.event === "UserPromptSubmit") {
-    record.state = "🌀"
+    record.busy = true
     record.promptSequence++
     if (e.transcript) {
       summarize = {
@@ -144,7 +143,7 @@ export function apply(r: Registry, e: RegistryEvent, now = Date.now()): Applied 
       }
     }
   } else if (e.event === "Stop" || e.event === "SessionEnd") {
-    record.state = ""
+    record.busy = false
   }
   r.sessions.set(e.session, record)
   if (terminalId) {
@@ -169,11 +168,11 @@ export function applySummary(
   return record.terminalId
 }
 
-/** Drop what nothing will need again: sessions with no event for a week (GTT
- * kept the same), and mappings and labels of terminals Ghostty no longer has.
- * `live` is every terminal in the tree; pass null when Ghostty isn't running,
+/** Drop what nothing will need again: sessions with no event for a week, and
+ * mappings and labels of terminals Rex no longer has.
+ * `live` is every terminal in the tree; pass null when Rex isn't running,
  * so quitting it doesn't forget everything. `recent` are terminals an event
- * just named, which a poller up to 2s behind may not have seen yet. Returns
+ * just named, which the last snapshot may not have caught up with. Returns
  * whether anything went. */
 export function prune(
   r: Registry,
@@ -202,8 +201,7 @@ export function prune(
 }
 
 export function registryFile(): string {
-  const stateHome = process.env.XDG_STATE_HOME || join(homedir(), ".local", "state")
-  return join(stateHome, "ah", "registry.json")
+  return ahStateDir("registry.json")
 }
 
 interface Stored {
@@ -233,10 +231,10 @@ function isSessionRecord(r: unknown): r is SessionRecord {
   return (
     isRecord(r) &&
     isStringOrNull(r.terminalId) &&
-    (r.harness === null || isOneOf(HARNESSES, r.harness)) &&
+    isOneOf(HARNESSES, r.harness) &&
     typeof r.label === "string" &&
     isStringOrNull(r.cwd) &&
-    typeof r.state === "string" &&
+    typeof r.busy === "boolean" &&
     typeof r.promptSequence === "number" &&
     isStringOrNull(r.summary) &&
     typeof r.summarySequence === "number" &&

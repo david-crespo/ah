@@ -10,19 +10,8 @@
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src 'none'; object-src 'none'"
     />
     <title>Workspace</title>
-    <style>
-      /* Fallbacks; /palette.css overrides these with Ghostty's own colors and font,
-       and adds the box-drawing rules */
-      :root {
-        --term-bg: #0b0e14;
-        --term-fg: #e6e1cf;
-        --term-font: ui-monospace, "SF Mono", Menlo, monospace;
-        --term-size: 13px;
-        --ansi-8: #686868;
-        --ansi-12: #68d5ff;
-      }
-    </style>
-    <link rel="stylesheet" href="/palette.css" />
+    <!-- The terminal theme's vars (host/theme.ts) and the box-drawing rules -->
+    <link rel="stylesheet" href="/theme.css" />
     <link rel="stylesheet" href="/github-markdown-dark.css" />
     <link rel="stylesheet" href="../markdown/markdown.css" />
     <style>
@@ -67,6 +56,7 @@
         border-radius: 5px;
         border: 1px solid var(--border);
         color: var(--muted);
+        cursor: pointer;
         transition:
           background-color 150ms,
           color 150ms,
@@ -76,10 +66,6 @@
         color: var(--accent);
         background: var(--accent-bg);
         border-color: transparent;
-      }
-      .chip .count {
-        opacity: 0.6;
-        margin-left: 4px;
       }
       header {
         display: flex;
@@ -170,7 +156,7 @@
     <header id="header"></header>
     <main>
       <div id="log-pane">
-        <p class="empty">Waiting for Ghostty…</p>
+        <p class="empty">Waiting for Rex…</p>
       </div>
       <div id="doc-pane">
         <div class="doc-name" id="doc-name"></div>

@@ -1,6 +1,5 @@
-// A short summary of what a session is working on, for its tab title. Ported
-// from ghostty-tab-title (dotfiles bin/lib/ghostty-title/summary.ts): read the
-// user's messages from the transcript (Claude's or Codex's format; pi's
+// A short summary of what a session is working on, for its tab title. Read
+// the user's messages from the transcript (Claude's or Codex's format; pi's
 // extension writes a Claude-shaped one), and ask a small model, through the
 // `ai` CLI, for a label that keeps the previous one unless the work changed.
 

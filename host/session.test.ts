@@ -19,7 +19,7 @@ const vars = [
   "OPENCODE_SESSION_ID",
   "CLAUDE_PID",
   "CLAUDE_CODE_SESSION_ID",
-  "GHOSTTY_TERMINAL_ID",
+  "REX_BLOCK",
   "XDG_STATE_HOME",
   "PATH",
 ]
@@ -137,7 +137,8 @@ test("a scrubbed env is no session's, whichever harness started it", () => {
     CLAUDE_CODE_SESSION_ID: "abc",
     CODEX_THREAD_ID: "thread",
     OPENCODE_SESSION_ID: "ses",
-    GHOSTTY_TERMINAL_ID: "term",
+    REX_BLOCK: "block:b",
+    REX_SESSION: "session:s",
     HOME: "/home/me",
   }
   scrubSessionEnv(env)

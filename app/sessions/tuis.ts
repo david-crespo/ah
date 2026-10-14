@@ -2,15 +2,18 @@
 // in one shared background server that every TUI is a client of: Codex's
 // app-server daemon, opencode's service. So what runs there, Codex's hooks
 // included, has the env of whichever shell started the server, not of the TUI
-// a session is in: its GHOSTTY_TERMINAL_ID names some other pane, often one
-// long closed. Nothing they report says which client it's for either (a
-// Codex hook's input is session_id, turn_id, cwd, transcript_path, model and
-// the like). So the server looks at the TUI processes instead: each has its
-// own pane's GHOSTTY_TERMINAL_ID, exported by .zshrc, and a cwd to match the
-// session's against.
+// a session is in: its REX_BLOCK names some other pane, often one long
+// closed. Nothing they report says which client it's for either (a Codex
+// hook's input is session_id, turn_id, cwd, transcript_path, model and the
+// like). So the server looks at the TUI processes instead, and the cwd of
+// each to match the session's against. A TUI's pane is the block whose
+// foreground process group it's in: Codex's TUI is a child of its npm
+// wrapper, so its own pid isn't the foreground one, but its group is. A TUI
+// suspended in the background isn't found.
 
-import { run } from "../../host/proc.ts"
-import type { Snapshot } from "../dashboard/ghostty.ts"
+import { ancestors, type Proc, processTable } from "../../host/proc.ts"
+import type { Snapshot } from "../../host/rex.ts"
+import { foregroundBlocks } from "../../host/rex.ts"
 
 export type TuiHarness = "codex" | "opencode"
 
@@ -20,34 +23,12 @@ export interface Tui {
   cwd: string
 }
 
-interface Proc {
-  pid: number
-  ppid: number
-  args: string
-}
-
-async function processTable(): Promise<Proc[]> {
-  const { success, stdout } = await run("ps", ["-axo", "pid=,ppid=,args="])
-  if (!success) return []
-  return stdout.split("\n").flatMap((line) => {
-    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
-    return m ? [{ pid: Number(m[1]), ppid: Number(m[2]), args: m[3] }] : []
-  })
-}
-
 const isDaemon = (args: string) => /(^|\/)codex app-server\b/.test(args)
 
 /** Whether this process runs under Codex's app-server daemon, so its env
  * is the daemon's */
-export async function underCodexDaemon(): Promise<boolean> {
-  const procs = new Map((await processTable()).map((p) => [p.pid, p]))
-  for (let pid = process.ppid; pid > 1;) {
-    const proc = procs.get(pid)
-    if (!proc) return false
-    if (isDaemon(proc.args)) return true
-    pid = proc.ppid
-  }
-  return false
+export function underCodexDaemon(): boolean {
+  return ancestors(processTable()).some((p) => isDaemon(p.args))
 }
 
 /** An interactive TUI, run bare or with flags. Codex: its native binary,
@@ -68,39 +49,26 @@ const BINARY: Record<TuiHarness, RegExp> = {
   opencode: /(^|\/)opencode(\.exe)?$/,
 }
 
-/** GHOSTTY_TERMINAL_ID from `ps -E` output, which appends the env to the
- * command line, space-separated */
-export function terminalFromEnv(line: string): string | null {
-  return line.match(/(?:^|\s)GHOSTTY_TERMINAL_ID=([0-9A-Fa-f-]+)(?=\s|$)/)?.[1] ?? null
+/** Every running TUI of the harness in the foreground of a block */
+export function readTuis(harness: TuiHarness): Tui[] {
+  const procs = processTable().filter((p) => isTui(harness, p.args))
+  return tuisInBlocks(procs, foregroundBlocks())
 }
 
-/** Every running TUI of the harness that knows its terminal */
-export async function readTuis(harness: TuiHarness): Promise<Tui[]> {
-  const pids = (await processTable())
-    .filter((p) => isTui(harness, p.args))
-    .map((p) => p.pid)
-  if (!pids.length) return []
-  const list = pids.join(",")
-  const [env, cwds] = await Promise.all([
-    run("ps", ["-E", "-o", "pid=,command=", "-p", list]),
-    run("lsof", ["-a", "-d", "cwd", "-Fn", "-p", list]),
-  ])
-  // lsof -F prints a p<pid> line, then fields of that process: n<path>
-  const cwdOf = new Map<number, string>()
-  let pid = 0
-  for (const line of cwds.stdout.split("\n")) {
-    if (line.startsWith("p")) pid = Number(line.slice(1))
-    else if (line.startsWith("n")) cwdOf.set(pid, line.slice(1))
-  }
-  return env.stdout.split("\n").flatMap((line) => {
-    const m = line.match(/^\s*(\d+)\s/)
-    const terminal = terminalFromEnv(line)
-    const cwd = m && cwdOf.get(Number(m[1]))
-    return m && terminal && cwd ? [{ pid: Number(m[1]), terminal, cwd }] : []
+/** The TUIs running in the foreground of a Rex block, given each block's
+ * foreground process group by leader pid. The cwd is the leader's, which for
+ * Codex is its wrapper's, the same as the TUI's. */
+export function tuisInBlocks(
+  procs: Proc[],
+  foreground: Map<number, { block: string; cwd: string }>,
+): Tui[] {
+  return procs.flatMap((p) => {
+    const fg = foreground.get(p.pgid)
+    return fg?.cwd ? [{ pid: p.pid, terminal: fg.block, cwd: fg.cwd }] : []
   })
 }
 
-/** The focused terminal of Ghostty's front window */
+/** The focused terminal of the front window */
 export function focusedTerminal(snapshot: Snapshot | null): string | null {
   const window = snapshot?.windows.find((w) => w.id === snapshot.front)
   return window?.tabs.find((t) => t.id === window.selectedTab)?.focused ?? null

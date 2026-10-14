@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "vitest"
-import type { Snapshot, Tab } from "./ghostty.ts"
+import type { Snapshot, Tab } from "../../host/rex.ts"
 import { resolve, rootFinder, type RootOf, tabRoot } from "./workspace.ts"
 
 function assertEquals(actual: unknown, expected: unknown) {
@@ -56,28 +56,30 @@ function snapshot(front: string, selected: Record<string, string>): Snapshot {
   }
 }
 
-test("resolve groups tabs by workspace in window id then tab order", () => {
+test("resolve lists tabs in workspaces in window id then tab order", () => {
   const state = resolve(snapshot("w1", { w1: "b", w2: "c" }), rootOf, null)
-  assertEquals(state.focused, "/r/b")
+  assertEquals(state.focused, "b")
   assertEquals(
-    state.workspaces.map((w) => [w.name, w.tabs.map((t) => t.id)]),
+    state.tabs.map((t) => [t.id, t.name, t.session, t.root]),
     [
-      ["a", ["a", "a2"]],
-      ["b", ["b"]],
-      ["c", ["c"]],
+      ["a", "a", "w1", "/r/a"],
+      ["b", "b", "w1", "/r/b"],
+      ["c", "c", "w2", "/r/c"],
+      // a second tab in the same workspace gets a number
+      ["a2", "a 2", "w2", "/r/a"],
     ],
   )
 })
 
 test("resolve follows the front window's selected tab", () => {
-  assertEquals(resolve(snapshot("w2", { w1: "b", w2: "c" }), rootOf, null).focused, "/r/c")
+  assertEquals(resolve(snapshot("w2", { w1: "b", w2: "c" }), rootOf, null).focused, "c")
 })
 
 test("resolve keeps the previous focus on a tab outside any workspace", () => {
   const s = snapshot("w1", { w1: "x", w2: "c" })
-  assertEquals(resolve(s, rootOf, "/r/c").focused, "/r/c")
-  // unless that workspace has no tabs left
-  assertEquals(resolve(s, rootOf, "/r/gone").focused, null)
+  assertEquals(resolve(s, rootOf, "c").focused, "c")
+  // unless that tab is gone
+  assertEquals(resolve(s, rootOf, "gone").focused, null)
 })
 
 test("resolve disambiguates workspaces with the same basename", () => {
@@ -93,7 +95,7 @@ test("resolve disambiguates workspaces with the same basename", () => {
   }
   const nested: RootOf = (dir) => dir.match(/^\/r\/[^/]+\/[^/]+/)?.[0] ?? null
   assertEquals(
-    resolve(s, nested, null).workspaces.map((w) => w.name),
+    resolve(s, nested, null).tabs.map((t) => t.name),
     ["x/app", "y/app"],
   )
 })

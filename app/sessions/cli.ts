@@ -2,11 +2,11 @@
 // works with the server down.
 
 import { Command } from "@commander-js/extra-typings"
-import { type Snapshot, snapshotOnce } from "../dashboard/ghostty.ts"
-import { hook, shell, terminal } from "./hook.ts"
+import { type Snapshot, snapshotOnce } from "../../host/rex.ts"
+import { hook, shell } from "./hook.ts"
 import { emptyRegistry, loadRegistry } from "./registry.ts"
 import { isCurrent } from "./routes.ts"
-import { Harnesses, listSessions, readClaudeProcesses } from "./sessions.ts"
+import { listSessions, readClaudeProcesses } from "./sessions.ts"
 
 export const sessions = new Command("sessions")
   .description("Agent sessions across harnesses, and which terminal each is in")
@@ -20,28 +20,21 @@ sessions
   .option("-a, --all", "Include sessions no longer in a terminal or running")
   .option("--json", "Print JSON")
   .action(async ({ all, json }) => {
-    // Without Ghostty (or the Automation grant) there are no places, only sessions
-    const snapshot: Snapshot | null = await snapshotOnce().then(
-      (s) => s.snapshot,
-      () => null,
-    )
-    const list = (
-      await listSessions(
-        loadRegistry() ?? emptyRegistry(),
-        await readClaudeProcesses(),
-        snapshot,
-        new Harnesses(),
-      )
+    // Without Rex there are no places, only sessions
+    const snapshot: Snapshot | null = await snapshotOnce().catch(() => null)
+    const list = listSessions(
+      loadRegistry() ?? emptyRegistry(),
+      await readClaudeProcesses(),
+      snapshot,
     ).filter((s) => all || isCurrent(s))
     if (json) return console.log(JSON.stringify(list, null, 2))
     for (const s of list.toSorted((a, b) =>
       (a.place?.tab ?? "").localeCompare(b.place?.tab ?? ""),
     )) {
-      const harness = s.harness ? `${s.harness}${s.harnessFrom === "id" ? "?" : ""}` : "?"
       const where = s.place ? s.place.tab : s.terminal ? "gone" : "-"
       const proc = s.process ? `pid ${s.process.pid}` : ""
       const activity = [s.busy ? "🌀" : "", s.summary ?? ""].filter(Boolean).join(" ")
-      console.log([s.id.slice(0, 8), harness, where, s.label, proc, activity].join("\t"))
+      console.log([s.id.slice(0, 8), s.harness, where, s.label, proc, activity].join("\t"))
     }
   })
 
@@ -58,4 +51,3 @@ sessions
 
 sessions.addCommand(hook)
 sessions.addCommand(shell)
-sessions.addCommand(terminal)

@@ -4,7 +4,6 @@ import { join } from "node:path"
 import { test } from "vitest"
 import { ansiToHtml } from "./ansi.ts"
 import { isIgnored, opHeadsDir, SnapshotWatcher } from "./jj.ts"
-import { paletteCss, parseConfig } from "../../host/palette.ts"
 
 function assertEquals(actual: unknown, expected: unknown) {
   const a = JSON.stringify(actual)
@@ -14,7 +13,7 @@ function assertEquals(actual: unknown, expected: unknown) {
 
 const ESC = "\x1b"
 
-test("ansiToHtml maps jj's 256-color output onto palette vars", () => {
+test("ansiToHtml maps jj's 256-color output onto theme vars", () => {
   // the start of a real `jj log --color always` line
   const line = `${ESC}[1m${ESC}[38;5;2m@${ESC}[0m  ${ESC}[1m${ESC}[38;5;13mmu${ESC}[38;5;8mwp${ESC}[39m x${ESC}[0m`
   assertEquals(
@@ -35,30 +34,20 @@ test("ansiToHtml handles basic, bright, and truecolor codes", () => {
   assertEquals(ansiToHtml(`${ESC}[38;2;1;2;3ma`), '<span style="color:rgb(1,2,3)">a</span>')
 })
 
-test("ansiToHtml escapes HTML and drops non-SGR sequences", () => {
-  assertEquals(ansiToHtml(`<b>&${ESC}[2K${ESC}]8;;http://x${ESC}\\`), "&lt;b&gt;&amp;")
-})
-
-test("parseConfig reads colors and the first font family", () => {
-  const p = parseConfig(
-    [
-      "font-family = Berkeley Mono",
-      "font-family = Symbols Nerd Font",
-      "font-size = 14",
-      "background = #020202",
-      "foreground = #e6e1cf",
-      "palette = 0=#000000",
-      "palette = 13=#ffa3aa",
-    ].join("\n"),
+test("ansiToHtml computes indexed colors past the theme's 16", () => {
+  assertEquals(ansiToHtml(`${ESC}[38;5;17ma`), '<span style="color:rgb(0,0,95)">a</span>')
+  assertEquals(
+    ansiToHtml(`${ESC}[38;5;208ma`),
+    '<span style="color:rgb(255,135,0)">a</span>',
   )
   assertEquals(
-    [p.fontFamily, p.fontSize, p.background, p.colors[0], p.colors[13]],
-    ["Berkeley Mono", 14, "#020202", "#000000", "#ffa3aa"],
+    ansiToHtml(`${ESC}[38;5;244ma`),
+    '<span style="color:rgb(128,128,128)">a</span>',
   )
-  const css = paletteCss(p)
-  if (!css.includes("--ansi-13: #ffa3aa;") || !css.includes('"Berkeley Mono"')) {
-    throw new Error(css)
-  }
+})
+
+test("ansiToHtml escapes HTML and drops non-SGR sequences", () => {
+  assertEquals(ansiToHtml(`<b>&${ESC}[2K${ESC}]8;;http://x${ESC}\\`), "&lt;b&gt;&amp;")
 })
 
 test("opHeadsDir follows a secondary workspace's repo pointer", async () => {

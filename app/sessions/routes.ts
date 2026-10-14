@@ -1,5 +1,5 @@
 // The sessions app's routes, under /app/sessions/: GET the sessions as JSON,
-// from the registry and the poller's latest snapshot (`?all` includes ones
+// from the registry and Rex's latest snapshot (`?all` includes ones
 // that aren't in a terminal or running any more), and POST `event` for the
 // hooks (cli.ts) to report into the registry.
 //
@@ -12,7 +12,7 @@
 import { appendFileSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { isOneOf, isRecord } from "../../host/guards.ts"
-import type { Snapshot } from "../dashboard/ghostty.ts"
+import type { Snapshot } from "../../host/rex.ts"
 import { focusedTerminal, pickTerminal, readTuis } from "./tuis.ts"
 import {
   apply,
@@ -28,12 +28,7 @@ import {
   saveRegistry,
   type SummaryJob,
 } from "./registry.ts"
-import {
-  type AgentSession,
-  Harnesses,
-  listSessions,
-  readClaudeProcesses,
-} from "./sessions.ts"
+import { type AgentSession, listSessions, readClaudeProcesses } from "./sessions.ts"
 import { buildSummaryPayload, generateSummary } from "./summary.ts"
 
 /** In a terminal that still exists, or running */
@@ -73,7 +68,7 @@ export function parseEvent(o: unknown): RegistryEvent | null {
 }
 
 /** Every terminal in the tree. null when there are no windows, which means
- * Ghostty isn't running (or the poller can't see it), not that every
+ * Rex isn't running (or ah can't reach it), not that every
  * terminal closed. */
 const liveTerminals = (snapshot: Snapshot | null): Set<string> | null =>
   snapshot?.windows.length
@@ -89,15 +84,11 @@ type Listener = (registry: Registry, terminals: string[]) => void
 export class SessionsApp {
   readonly registry: Registry
   #snapshot: Snapshot | null = null
-  #harnesses = new Harnesses()
   #listeners: Listener[] = []
-  /** Terminals named by an event in the last few seconds, which the poller
-   * may not have seen yet, so pruning leaves them alone */
+  /** Terminals named by an event in the last few seconds, which the
+   * snapshot may not have caught up with, so pruning leaves them alone */
   #recent = new Map<string, number>()
   #saveTimer: NodeJS.Timeout | null = null
-  /** Events wait here for the one before to be applied, since finding a
-   * Codex session's terminal takes a moment */
-  #queue: Promise<void> = Promise.resolve()
   #file: string
   #log: string
 
@@ -126,22 +117,24 @@ export class SessionsApp {
     if (prune(this.registry, live, new Set(this.#recent.keys()))) this.#changed([])
   }
 
-  /** Apply one event, after any before it; what the event endpoint does */
+  /** Apply one event; what the event endpoint does */
   receive(event: RegistryEvent) {
-    this.#queue = this.#queue
-      .then(async () => this.#apply(await this.#locate(event)))
-      .catch((e) => console.error(`ah: couldn't apply an event: ${e}`))
+    try {
+      this.#apply(this.#locate(event))
+    } catch (e) {
+      console.error(`ah: couldn't apply an event: ${e}`)
+    }
   }
 
   /** A Codex or opencode event without a terminal (it came from their
    * shared server) gets the one its TUI is in, and that terminal's shell
    * label */
-  async #locate(event: RegistryEvent): Promise<RegistryEvent> {
+  #locate(event: RegistryEvent): RegistryEvent {
     if (event.kind !== "hook" || event.terminal) return event
     if (event.harness !== "codex" && event.harness !== "opencode") return event
     const terminal = pickTerminal(
       event.cwd,
-      await readTuis(event.harness),
+      readTuis(event.harness),
       this.registry.sessions.get(event.session)?.terminalId ?? null,
       focusedTerminal(this.#snapshot),
       liveTerminals(this.#snapshot),
@@ -166,16 +159,12 @@ export class SessionsApp {
 
   /** A summary from the harness itself, e.g. opencode's session title */
   retitle(session: string, title: string) {
-    this.#queue = this.#queue
-      .then(() => {
-        const record = this.registry.sessions.get(session)
-        if (!record || record.summary === title) return
-        this.#write("summary", { session, sequence: record.promptSequence, summary: title })
-        record.summary = title
-        record.summarySequence = record.promptSequence
-        this.#changed(record.terminalId ? [record.terminalId] : [])
-      })
-      .catch((e) => console.error(`ah: couldn't apply a retitle: ${e}`))
+    const record = this.registry.sessions.get(session)
+    if (!record || record.summary === title) return
+    this.#write("summary", { session, sequence: record.promptSequence, summary: title })
+    record.summary = title
+    record.summarySequence = record.promptSequence
+    this.#changed(record.terminalId ? [record.terminalId] : [])
   }
 
   async #summarize(job: SummaryJob) {
@@ -232,11 +221,10 @@ export class SessionsApp {
     }
     if (rest !== "") return new Response("not found", { status: 404 })
     const all = new URL(req.url).searchParams.has("all")
-    const sessions = await listSessions(
+    const sessions = listSessions(
       this.registry,
       await readClaudeProcesses(),
       this.#snapshot,
-      this.#harnesses,
     )
     return Response.json(all ? sessions : sessions.filter(isCurrent))
   }

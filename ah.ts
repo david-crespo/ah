@@ -3,8 +3,8 @@
 // sessions. The layout mirrors the CLI and the routes: app/<name>/ holds an
 // app's commands (cli.ts, `ah app <name>`) and its routes (routes.ts,
 // /app/<name>/), and host/ holds what isn't any one app's: starting and
-// stopping the server, colors from Ghostty's config, posting to sessions,
-// and the chat layer (host/chat/: a page's thread with its session).
+// stopping the server, the terminal theme, posting to sessions, and the
+// chat layer (host/chat/: a page's thread with its session).
 //
 //   ah start                    start the server on 127.0.0.1:7420 (and 7421
 //                               for html pages) in the background; commands
@@ -26,7 +26,7 @@
 //                               sessions and directories (app/sessions/hook.ts)
 //   ah app tabtitle check       tab titles ah computes vs what the tabs show;
 //                               the server keeps them set
-//   ah debug tabs               print what the poller sees, once
+//   ah debug tabs               print what ah sees of Rex, once
 
 import { Command } from "@commander-js/extra-typings"
 import { serve as nodeServe } from "@hono/node-server"
@@ -35,7 +35,6 @@ import type { Duplex } from "node:stream"
 import { WebSocketServer, type WebSocket } from "ws"
 import { dashboard } from "./app/dashboard/cli.ts"
 import { dashboardStatus, sessionFile } from "./app/dashboard/api.ts"
-import { watchGhostty } from "./app/dashboard/ghostty.ts"
 import { Dashboard } from "./app/dashboard/routes.ts"
 import { markdown } from "./app/markdown/cli.ts"
 import { MarkdownApp } from "./app/markdown/routes.ts"
@@ -48,11 +47,12 @@ import { tabtitle } from "./app/tabtitle/cli.ts"
 import { TabTitleApp } from "./app/tabtitle/routes.ts"
 import { assetPath } from "./host/assets.ts"
 import { boxCss } from "./host/box.ts"
-import { die, parseInteger, parseNumber, portOption } from "./host/cli.ts"
+import { die, parseNumber, portOption } from "./host/cli.ts"
 import { currentAgent, scrubSessionEnv } from "./host/session.ts"
 import { debug } from "./host/debug.ts"
 import { gateHeaders, requestGate } from "./host/origin.ts"
-import { paletteCss, readPalette } from "./host/palette.ts"
+import { themeCss } from "./host/theme.ts"
+import { type Snapshot, watchRex } from "./host/rex.ts"
 import {
   ensureServer,
   defaultFiles,
@@ -78,13 +78,9 @@ interface AppRoutes {
 }
 
 /** `snapshotDelayMs` null turns off snapshotting the focused workspace */
-async function serve(port: number, intervalMs: number, snapshotDelayMs: number | null) {
+async function serve(port: number, snapshotDelayMs: number | null) {
   scrubSessionEnv(process.env)
-  const palette = await readPalette()
-  if (!palette) {
-    console.error("ah: couldn't read Ghostty's config, using default colors")
-  }
-  const css = (palette ? paletteCss(palette) + "\n" : "") + boxCss()
+  const css = themeCss() + boxCss()
   // The stylesheet follows the OS theme, as the markdown app's pages do. The
   // dashboard is always dark, like the terminal, so its copy drops the light
   // theme.
@@ -112,10 +108,11 @@ async function serve(port: number, intervalMs: number, snapshotDelayMs: number |
     tabtitle: tabtitleApp,
   }
 
-  // One poller for every app that follows Ghostty, and one session registry.
-  // An app that throws on a snapshot mustn't keep it from the others, or
-  // take down the poller.
-  void watchGhostty(intervalMs, (snapshot) => {
+  // One watcher for every app that follows the terminal, and one session
+  // registry. An app
+  // that throws on a snapshot mustn't keep it from the others, or take down
+  // the watcher.
+  const onSnapshot = (snapshot: Snapshot) => {
     for (const app of [dashboardApp, sessionsApp, tabtitleApp]) {
       try {
         app.onSnapshot(snapshot)
@@ -123,7 +120,8 @@ async function serve(port: number, intervalMs: number, snapshotDelayMs: number |
         console.error(`ah: ${app.constructor.name} failed on a snapshot:`, e)
       }
     }
-  })
+  }
+  void watchRex(onSnapshot)
   tabtitleApp.onRegistry(sessionsApp.registry)
   sessionsApp.subscribe((registry) => tabtitleApp.onRegistry(registry))
   // opencode has no hooks: its service streams its sessions' events
@@ -157,7 +155,7 @@ async function serve(port: number, intervalMs: number, snapshotDelayMs: number |
     if (pathname === "/github-markdown.css") return cssResponse(markdownCss)
     if (pathname === "/github-markdown-dark.css") return cssResponse(markdownDarkCss)
     if (pathname === "/chat.css") return cssResponse(chatCss)
-    if (pathname === "/palette.css") return cssResponse(css)
+    if (pathname === "/theme.css") return cssResponse(css)
     return new Response("not found", { status: 404 })
   }
 
@@ -259,20 +257,14 @@ program
   .description("Run the server in the foreground, logging to the terminal; start runs this")
   .addOption(portOption("Port to serve on"))
   .option(
-    "-i, --interval <ms>",
-    "How often to ask Ghostty for the selected tab",
-    parseInteger,
-    200,
-  )
-  .option(
     "--snapshot-delay <seconds>",
     "Snapshot the focused workspace once its files have been quiet this long",
     parseNumber,
     2,
   )
   .option("--no-snapshot", "Never snapshot; @ only updates when some jj command runs")
-  .action(async ({ port, interval, snapshot, snapshotDelay }) => {
-    await serve(port, interval, snapshot ? snapshotDelay * 1000 : null)
+  .action(async ({ port, snapshot, snapshotDelay }) => {
+    await serve(port, snapshot ? snapshotDelay * 1000 : null)
   })
 
 program

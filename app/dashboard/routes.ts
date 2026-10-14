@@ -1,5 +1,5 @@
 // The dashboard's routes, under /app/dashboard/: the page, and the SSE stream
-// it follows. The server polls Ghostty (ghostty.ts) and hands each snapshot
+// it follows. The server follows Rex (host/rex.ts) and hands each snapshot
 // to onSnapshot; the dashboard keeps a live jj log for
 // every open workspace (jj.ts), and pushes both to the page (page.html, with
 // its script in client.ts), along
@@ -12,11 +12,11 @@ import { assetPath } from "../../host/assets.ts"
 import { ClientBundles } from "../../host/bundle.ts"
 import { fileId } from "../../host/id.ts"
 import type { MarkdownApp } from "../markdown/routes.ts"
-import type { Snapshot } from "./ghostty.ts"
+import { focusWindow, type Snapshot } from "../../host/rex.ts"
 import { LogWatcher, SnapshotWatcher } from "./jj.ts"
 import { defaultDirs } from "./docs.ts"
 import { type Doc, DocView } from "./doc_view.ts"
-import { resolve, rootFinder, type State } from "./workspace.ts"
+import { focusedRoot, resolve, rootFinder, type State } from "./workspace.ts"
 
 // Changes on every server start. The page reloads when it reconnects to a
 // different server, so restarting the server is enough to pick up page edits.
@@ -49,7 +49,7 @@ export interface DashboardOptions {
 export class Dashboard {
   #page = readFile(assetPath("app/dashboard/page.html"), "utf8")
   #bundles = new ClientBundles("dashboard")
-  #state: State = { focused: null, workspaces: [] }
+  #state: State = { focused: null, tabs: [] }
   #stateJson = JSON.stringify(this.#state)
   #logs = new Map<string, LogWatcher>()
   #snapshotter: SnapshotWatcher | null = null
@@ -102,7 +102,7 @@ export class Dashboard {
   // A log watcher for every open workspace, not only the focused one, so a
   // tab switch shows an up-to-date log straight from the page's cache.
   #syncWatchers() {
-    const open = new Set(this.#state.workspaces.map((w) => w.root))
+    const open = new Set(this.#state.tabs.map((t) => t.root))
     for (const [root, watcher] of this.#logs) {
       if (open.has(root)) continue
       watcher.close()
@@ -118,7 +118,7 @@ export class Dashboard {
     this.#docs.setRoots(open)
     // Only the focused workspace gets snapshotted: it's the one on screen, and
     // watching every file in every open workspace would be wasteful
-    const { focused } = this.#state
+    const focused = focusedRoot(this.#state)
     if (this.#snapshotter?.root !== focused) {
       this.#snapshotter?.close()
       const delay = this.options.snapshotDelayMs
@@ -128,7 +128,7 @@ export class Dashboard {
   }
 
   /** `rest` is the path after /app/dashboard/ */
-  async handle(_req: Request, rest: string): Promise<Response> {
+  async handle(req: Request, rest: string): Promise<Response> {
     if (rest === "") {
       this.#bundles.prebuild("client.js")
       return new Response(await this.#page, {
@@ -137,7 +137,22 @@ export class Dashboard {
     }
     if (this.#bundles.has(rest)) return await this.#bundles.response(rest)
     if (rest === "events") return this.#events()
+    if (rest === "focus" && req.method === "POST") return await this.#focus(req)
     return new Response("not found", { status: 404 })
+  }
+
+  /** Show a tab in Rex, for a click on its chip */
+  async #focus(req: Request): Promise<Response> {
+    const { tab: id }: { tab?: unknown } = await req.json()
+    const tab = this.#state.tabs.find((t) => t.id === id)
+    if (!tab) return new Response("no such tab", { status: 404 })
+    try {
+      await focusWindow(tab.session, tab.id)
+    } catch (e) {
+      console.error("ah:", e)
+      return new Response("couldn't focus the tab", { status: 502 })
+    }
+    return new Response(null, { status: 204 })
   }
 
   #events(): Response {

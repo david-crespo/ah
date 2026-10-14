@@ -16,13 +16,12 @@
 //   background service that every TUI is a client of; posting to the
 //   service's /api/session/<id>/prompt steers a busy session mid-turn.
 
-import { execFileSync } from "node:child_process"
 import { readFileSync, statSync } from "node:fs"
 import { createConnection } from "node:net"
-import { homedir } from "node:os"
 import { basename, join } from "node:path"
 import { isRecord } from "./guards.ts"
-import { run } from "./proc.ts"
+import { claudeSessionsDir, stateHome } from "./paths.ts"
+import { ancestors, command, processTable, run } from "./proc.ts"
 
 export type Session =
   | {
@@ -68,7 +67,7 @@ export function parseSession(value: unknown): Session | null {
   }
 }
 
-/** What the harnesses (and Ghostty) export that says which session and
+/** What the harnesses (and the terminals) export that says which session and
  * terminal a process is in */
 const SESSION_ENV = [
   "CLAUDE_CODE_MESSAGING_SOCKET",
@@ -77,8 +76,8 @@ const SESSION_ENV = [
   "CLAUDE_PID",
   "CODEX_THREAD_ID",
   "OPENCODE_SESSION_ID",
-  "GHOSTTY_TERMINAL_ID",
-  "GHOSTTY_TAB_BASE_LABEL",
+  "REX_BLOCK",
+  "REX_SESSION",
 ]
 
 /** For the server, which belongs to no session: it inherits the env of
@@ -89,7 +88,7 @@ export function scrubSessionEnv(env: NodeJS.ProcessEnv) {
 }
 
 /** The harness this command runs in, and the processes above it if they
- * were needed to tell (see `ancestors`) */
+ * were needed to tell (see `harnessesAbove`) */
 function here(): { harness: PostHarness; procs: Ancestor[] } | null {
   const env = process.env
   const set: PostHarness[] = []
@@ -98,7 +97,7 @@ function here(): { harness: PostHarness; procs: Ancestor[] } | null {
   if (env.OPENCODE_SESSION_ID) set.push("opencode")
   if (!set.length) return null
   // Codex's process is how its sessions are told apart
-  const procs = set.includes("codex") || set.length > 1 ? ancestors() : []
+  const procs = set.includes("codex") || set.length > 1 ? harnessesAbove() : []
   // One harness run from another's shell inherits the outer one's
   // variables too; the nearer harness process is the one this runs in
   const nearest = procs.find((p) => p.harness && set.includes(p.harness))?.harness
@@ -172,37 +171,21 @@ type Ancestor = { pid: number; harness: PostHarness | null }
 /** The processes above this one, nearest first, each with the harness it
  * is, if any. Claude's is CLAUDE_PID. Codex runs shell commands as children
  * of its native binary, itself under the node wrapper npm installs as
- * `codex`. opencode runs every session's commands under its one service.
- * Empty when `ps` can't run, as in Codex's sandbox. */
-function ancestors(): Ancestor[] {
-  let table: string
-  try {
-    table = execFileSync("ps", ["-axo", "pid=,ppid=,comm="], { encoding: "utf8" })
-  } catch {
-    return []
-  }
-  const procs = new Map<number, { ppid: number; comm: string }>()
-  for (const line of table.split("\n")) {
-    const m = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)
-    if (m) procs.set(Number(m[1]), { ppid: Number(m[2]), comm: basename(m[3]) })
-  }
+ * `codex`. opencode runs every session's commands under its one service. */
+function harnessesAbove(): Ancestor[] {
   const claudePid = Number(process.env.CLAUDE_PID)
-  const found: Ancestor[] = []
-  for (let pid = process.ppid; pid > 1;) {
-    const proc = procs.get(pid)
-    if (!proc) break
+  return ancestors(processTable()).map(({ pid, args }) => {
+    const comm = command(args)
     const harness: PostHarness | null =
       pid === claudePid
         ? "claude"
-        : proc.comm === "codex"
+        : comm === "codex"
           ? "codex"
-          : proc.comm.startsWith("opencode")
+          : comm.startsWith("opencode")
             ? "opencode"
             : null
-    found.push({ pid, harness })
-    pid = proc.ppid
-  }
-  return found
+    return { pid, harness }
+  })
 }
 
 /** For `ls` and logs: the harness and where posts go, never the token */
@@ -217,31 +200,50 @@ export function describeSession(session: Session): string {
   }
 }
 
-// Sync so the feed snapshot can include it without plumbing promises through
+// Whether a session still runs, asked for two reasons. `sessionAlive` decides
+// whether a post can go to it, so a Codex session whose TUI pid isn't known
+// is assumed there until a post fails. `agentAlive` decides whether the
+// dashboard deletes a session's record, so it assumes the opposite: an
+// optimistic answer would keep the record forever. A reused pid passes for
+// Codex. Claude removes its ~/.claude/sessions/<pid>.json when the session
+// exits, so a reused pid doesn't fool that check, and the socket file, which
+// can outlive the process, is only a fallback.
+// Both are sync so the feed snapshot can include them without promises.
+
 export function sessionAlive(session: Session | null): boolean {
   if (!session) return false
   switch (session.harness) {
     case "claude": {
-      // A session's registry entry, ~/.claude/sessions/<pid>.json, exists
-      // only while it runs; the socket file itself can outlive the process
       const pid = basename(session.socket).match(/^(\d+)\.sock$/)?.[1]
-      const probe = pid
-        ? join(homedir(), ".claude", "sessions", `${pid}.json`)
-        : session.socket
-      try {
-        statSync(probe)
-        return true
-      } catch {
-        return false
-      }
+      return pid ? claudeRunning(pid) : exists(session.socket)
     }
-    // Without the TUI's pid, assumed there until a post to it fails. A
-    // reused pid passes too. The dashboard's `isAlive` (docs.ts) assumes the
-    // opposite, since it decides whether to delete a record.
     case "codex":
       return session.pid === null || processRunning(session.pid)
     case "opencode":
       return opencodeRunning()
+  }
+}
+
+export function agentAlive(agent: Agent, claudeSessions = claudeSessionsDir()): boolean {
+  switch (agent.harness) {
+    case "claude":
+      return agent.pid !== null && claudeRunning(agent.pid, claudeSessions)
+    case "codex":
+      return agent.pid !== null && processRunning(agent.pid)
+    case "opencode":
+      return opencodeRunning()
+  }
+}
+
+const claudeRunning = (pid: number | string, dir = claudeSessionsDir()) =>
+  exists(join(dir, `${pid}.json`))
+
+function exists(path: string): boolean {
+  try {
+    statSync(path)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -311,8 +313,7 @@ type OpencodeService = { url: string; pid: number; password: string }
  * password (0600). opencode's main branch has since split the password into
  * its own file beside server.json, so read either. */
 export function opencodeService(): OpencodeService | null {
-  const stateHome = process.env.XDG_STATE_HOME || join(homedir(), ".local", "state")
-  const dir = join(stateHome, "opencode")
+  const dir = join(stateHome(), "opencode")
   for (const name of ["service.json", "server.json"]) {
     try {
       const service = JSON.parse(readFileSync(join(dir, name), "utf8"))

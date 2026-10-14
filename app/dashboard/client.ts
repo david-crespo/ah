@@ -1,9 +1,9 @@
 /// <reference lib="dom" />
 
 // Browser half of the dashboard, served as /app/dashboard/client.js to
-// page.html. It follows the server's event stream (routes.ts): the
-// workspaces and which is focused, each workspace's jj log, and each one's
-// file, shown with <ah-markdown> from ../markdown/preview.js.
+// page.html. It follows the server's event stream (routes.ts): the Rex
+// tabs in jj workspaces and which is focused, each workspace's jj log, and
+// each one's file, shown with <ah-markdown> from ../markdown/preview.js.
 
 import type { State } from "./workspace.ts"
 
@@ -16,7 +16,9 @@ const docName = byId("doc-name")
 const status = byId("status")
 
 let version: string | null = null
-let state: State = { focused: null, workspaces: [] }
+let state: State = { focused: null, tabs: [] }
+// Not workspace.ts's: importing a value from there would bundle node:fs
+const focusedRoot = () => state.tabs.find((t) => t.id === state.focused)?.root ?? null
 const logs = new Map<string, string>() // root -> html
 const scrollTops = new Map<string, number>() // root -> scroll position, kept across tab switches
 let shown: { root: string | null; html: string | null } = { root: null, html: null }
@@ -36,25 +38,22 @@ function el(tag: string, attrs: Partial<HTMLElement>, ...children: (Node | strin
 }
 
 function render() {
-  const { focused, workspaces } = state
+  const { focused, tabs } = state
   strip.replaceChildren(
-    ...workspaces.map((w) => {
-      const chip = el(
+    ...tabs.map((t) =>
+      el(
         "span",
         {
-          className: "chip" + (w.root === focused ? " focused" : ""),
-          title: w.tabs.map((t) => t.name).join("\n"),
+          className: "chip" + (t.id === focused ? " focused" : ""),
+          title: t.title,
+          onclick: () => void focus(t.id),
         },
-        w.name,
-      )
-      if (w.tabs.length > 1) {
-        chip.append(el("span", { className: "count" }, "×" + w.tabs.length))
-      }
-      return chip
-    }),
+        t.name,
+      ),
+    ),
   )
 
-  const w = workspaces.find((w) => w.root === focused)
+  const w = tabs.find((t) => t.id === focused)
   renderDoc(w?.root ?? null)
   if (!w) {
     header.replaceChildren()
@@ -77,6 +76,13 @@ function render() {
   logPane.replaceChildren(pre)
   if (shown.root !== w.root) logPane.scrollTop = scrollTops.get(w.root) ?? 0
   shown = { root: w.root, html }
+}
+
+/** Show the tab in Rex. Its state comes back over the event
+ * stream like any other tab switch. */
+async function focus(tab: string) {
+  const res = await fetch("focus", { method: "POST", body: JSON.stringify({ tab }) })
+  if (!res.ok) console.error("ah: focus failed:", res.status, await res.text())
 }
 
 function renderDoc(root: string | null) {
@@ -104,7 +110,7 @@ events.addEventListener("state", (e) => {
 events.addEventListener("jj", (e) => {
   const { root, html }: { root: string; html: string } = JSON.parse(e.data)
   logs.set(root, html)
-  if (root === state.focused) render()
+  if (root === focusedRoot()) render()
 })
 events.addEventListener("doc", (e) => {
   const { root, path, url }: { root: string; path: string | null; url: string | null } =
@@ -117,12 +123,12 @@ events.addEventListener("doc", (e) => {
     t.path = path
     t.view.setAttribute("src", url) // a no-op for the same file
   } else {
-    const view = el("ah-markdown", { hidden: root !== state.focused })
+    const view = el("ah-markdown", { hidden: root !== focusedRoot() })
     view.setAttribute("src", url)
     docPane.append(view)
     docs.set(root, { path, view })
   }
-  if (root === state.focused) renderDoc(root)
+  if (root === focusedRoot()) renderDoc(root)
 })
 events.onopen = () => {
   status.className = "live"

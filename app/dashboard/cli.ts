@@ -5,7 +5,7 @@ import { portOption } from "../../host/cli.ts"
 import { ensureDashboardPage } from "./api.ts"
 
 export const dashboard = new Command("dashboard")
-  .description("The page that follows the focused Ghostty tab's jj workspace")
+  .description("The page that follows the focused Rex tab's jj workspace")
   .action(function () {
     this.help()
   })

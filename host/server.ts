@@ -1,15 +1,14 @@
-// Starting and stopping `ah serve`, the foreground server process. There's no LaunchAgent: commands that need
-// the server call ensureServer, which starts one detached if nothing answers,
-// so it outlives the agent's Bash command and the session. Because it
-// descends from Ghostty, Ghostty stays the responsible process for its Apple
-// events. The server writes its pid to a file so `ah stop` can kill it even
-// when it's too hung to answer.
+// Starting and stopping `ah serve`, the foreground server process. There's no
+// LaunchAgent: commands that need the server call ensureServer, which starts
+// one detached if nothing answers, so it outlives the agent's Bash command and
+// the session. The server writes its pid to a file so `ah stop` can kill it
+// even when it's too hung to answer.
 
 import { spawn } from "node:child_process"
 import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
 import { isRecord } from "./guards.ts"
+import { ahStateDir } from "./paths.ts"
 import { run } from "./proc.ts"
 
 export interface ServerFiles {
@@ -18,8 +17,7 @@ export interface ServerFiles {
 }
 
 export function defaultFiles(): ServerFiles {
-  const stateHome = process.env.XDG_STATE_HOME || join(homedir(), ".local", "state")
-  const dir = join(stateHome, "ah")
+  const dir = ahStateDir()
   return { pid: join(dir, "serve.pid"), log: join(dir, "serve.log") }
 }
 

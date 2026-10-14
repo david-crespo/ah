@@ -1,5 +1,5 @@
-// ANSI SGR escapes to HTML spans. Indexed colors become var(--ansi-N), so the
-// page can paint them with the terminal's own palette (see palette.ts).
+// ANSI SGR escapes to HTML spans. The 16 theme colors become var(--ansi-N), so
+// the page can paint them from the theme (see theme.ts).
 // Other escape sequences are dropped. Box-drawing characters get wrapped so
 // the page can draw them like Ghostty does (see box.ts).
 
@@ -37,9 +37,21 @@ function css(style: Style): string {
   return out.join(";")
 }
 
+/** Indexed color n: a theme var for 0–15, else xterm's fixed cube and grays */
+function indexed(n: number): string {
+  if (n < 16) return `var(--ansi-${n})`
+  if (n >= 232) {
+    const v = 8 + 10 * (n - 232)
+    return `rgb(${v},${v},${v})`
+  }
+  const level = (k: number) => (k ? 55 + 40 * k : 0)
+  const j = n - 16
+  return `rgb(${level(Math.floor(j / 36))},${level(Math.floor(j / 6) % 6)},${level(j % 6)})`
+}
+
 /** Consume an extended color (`5;n` or `2;r;g;b`) starting at codes[i]; returns [color, next index]. */
 function extendedColor(codes: number[], i: number): [string | null, number] {
-  if (codes[i] === 5) return [`var(--ansi-${codes[i + 1]})`, i + 2]
+  if (codes[i] === 5) return [indexed(codes[i + 1]), i + 2]
   if (codes[i] === 2) {
     const [r, g, b] = codes.slice(i + 1, i + 4)
     return [`rgb(${r},${g},${b})`, i + 4]

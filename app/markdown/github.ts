@@ -2,8 +2,8 @@
 // and user-attachments assets, which the page renders the way GitHub does.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { dirname, join } from "node:path"
+import { cacheHome } from "../../host/paths.ts"
 import { run } from "../../host/proc.ts"
 
 let ghTokenPromise: Promise<string | null> | undefined
@@ -19,11 +19,7 @@ async function ghHeaders(): Promise<HeadersInit> {
   return token ? { authorization: `Bearer ${token}` } : {}
 }
 
-const cacheDir = join(
-  process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? homedir(), ".cache"),
-  "ah",
-  "markdown",
-)
+const cacheDir = join(cacheHome(), "ah", "markdown")
 
 // File contents at a ref. A full commit sha is immutable, so those are cached
 // on disk forever; branch names and short shas are fetched every time.
