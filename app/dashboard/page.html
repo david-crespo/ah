@@ -4,10 +4,11 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- As the markdown file page's: the jj log and the file's preview are
-         set as HTML, and a markdown file can hold any -->
+         set as HTML, and a markdown file can hold any. Frames are the html
+         app's pages, on the server's port + 1. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src 'none'; object-src 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src http://127.0.0.1:*; object-src 'none'"
     />
     <title>Workspace</title>
     <!-- The terminal theme's vars (host/theme.ts) and the box-drawing rules -->
@@ -19,7 +20,7 @@
         color-scheme: dark;
         --bg: var(--term-bg);
         --text: var(--term-fg);
-        --muted: var(--ansi-8);
+        --muted: color-mix(in srgb, var(--term-fg) 65%, var(--term-bg));
         --surface: color-mix(in srgb, var(--term-fg) 4%, var(--term-bg));
         --border: color-mix(in srgb, var(--term-fg) 14%, var(--term-bg));
         --accent: var(--ansi-12);
@@ -53,6 +54,7 @@
       }
       .chip {
         padding: 2px 9px;
+        font-size: 1.1em;
         border-radius: 5px;
         border: 1px solid var(--border);
         color: var(--muted);
@@ -64,22 +66,9 @@
       }
       .chip.focused {
         color: var(--accent);
+        font-weight: bold;
         background: var(--accent-bg);
         border-color: transparent;
-      }
-      header {
-        display: flex;
-        gap: 12px;
-        align-items: baseline;
-        padding: 12px 20px 0;
-      }
-      h1 {
-        margin: 0;
-        font-size: 1.3em;
-        font-weight: bold;
-      }
-      .root {
-        color: var(--muted);
       }
       main {
         flex: 1;
@@ -89,7 +78,7 @@
       #log-pane {
         flex: 1 1 0;
         overflow: auto;
-        padding: 10px 20px 20px;
+        padding: 16px 20px 20px;
       }
       /* Only shown when the focused workspace has a file to show; otherwise
        the log takes the full width */
@@ -102,6 +91,24 @@
       }
       body.has-doc #doc-pane {
         display: block;
+      }
+      /* A frame has the pane to itself, with no file name */
+      body.has-doc.doc-frame #doc-pane {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
+      }
+      body.doc-frame .doc-name {
+        display: none;
+      }
+      #doc-pane iframe {
+        flex: 1;
+        width: 100%;
+        border: none;
+      }
+      #doc-pane iframe[hidden] {
+        display: none;
       }
       @media (max-width: 900px) {
         main {
@@ -153,7 +160,6 @@
       <nav id="strip"></nav>
       <div id="status" title="disconnected"></div>
     </div>
-    <header id="header"></header>
     <main>
       <div id="log-pane">
         <p class="empty">Waiting for Rex…</p>

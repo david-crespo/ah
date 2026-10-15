@@ -6,7 +6,7 @@ import { HtmlApp, inject } from "./routes.ts"
 
 test("ah's tags go before the last </body>", () => {
   const html = '<body><script>const s = "</body>"</script></BODY >\n</html>'
-  const out = inject(html, "dash-1a2b3c4d", true)
+  const out = inject(html, "dash-1a2b3c4d", { chat: true })
   const at = out.indexOf('<script type="module" src="/app/html/chat.js"')
   expect(at).toBeGreaterThan(out.indexOf('"</body>"'))
   expect(at).toBeLessThan(out.indexOf("</BODY >"))
@@ -15,11 +15,18 @@ test("ah's tags go before the last </body>", () => {
 })
 
 test("without </body>, at the end; with chat off, only the script", () => {
-  const out = inject("<p>hi</p>", "p-00000000", false)
+  const out = inject("<p>hi</p>", "p-00000000", { chat: false })
   expect(out.startsWith("<p>hi</p>\n<script")).toEqual(true)
   expect(out).toContain('data-ah-chat="off"')
   expect(out).not.toContain("popover")
   expect(out).not.toContain("/chat.css")
+  expect(out).not.toContain("color-scheme")
+})
+
+test("in the dashboard, dark and see-through over the page's own style", () => {
+  const out = inject("<p>hi</p>", "p-00000000", { chat: false, dashboard: true })
+  expect(out).toContain("color-scheme: dark !important")
+  expect(out).toContain("background: transparent !important")
 })
 
 describe("the API and pages ports", () => {
@@ -79,5 +86,20 @@ describe("the API and pages ports", () => {
       body: JSON.stringify({ kind: "message", text: "hello" }),
     })
     expect(comment.status).toEqual(200)
+  })
+
+  test("the handoff gives the CLI each open file with its session, and pages nothing", async () => {
+    await writeFile(join(dir, "report.html"), "<body></body>")
+    const path = join(dir, "report.html")
+    const session = { harness: "claude", socket: "/tmp/1.sock", token: "secret" }
+    await api("files", { method: "POST", body: JSON.stringify({ path, session }) })
+    expect(await (await api("files/handoff")).json()).toEqual([
+      { path, session, agent: null },
+    ])
+    const fromPage = { headers: { "sec-fetch-site": "same-origin" } }
+    expect((await api("files/handoff", fromPage)).status).toEqual(403)
+    const withOrigin = { headers: { origin: "http://127.0.0.1:7420" } }
+    expect((await api("files/handoff", withOrigin)).status).toEqual(403)
+    expect((await pages("files/handoff")).status).toEqual(404)
   })
 })

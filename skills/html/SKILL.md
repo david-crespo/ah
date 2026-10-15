@@ -32,31 +32,64 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah app html open <path-to-file.html>
+   ah app page open --in window <path-to-file.html>
    ```
 
    This starts the server if needed, binds the page to this session, opens
-   it in a Chrome app window, and returns. `--in tab` opens a tab in the
-   default browser instead, and `--no-chat` gives live reload only. Opening
+   it in a Chrome app window, and returns. `--in` is required: `--in tab`
+   opens a tab in the default browser instead, and `--no-chat` gives live reload only. Opening
    a file that's already open rebinds it to this session.
 
 3. Tell the user the page is up (one line), then end the turn. Comments
    wake the session on their own.
+
+## On a phone
+
+The user may read the page on a phone (Remote Control, with the tracker
+skill's LAN proxy), so make it work at 390px wide:
+
+- Put `<meta name="viewport" content="width=device-width, initial-scale=1">`
+  in the head, or iOS lays the page out at desktop width and shrinks it.
+- Keep `main` to about 720px with 16px side padding. Use `<dl>` or lists
+  rather than wide tables; a table that must stay goes in an
+  `overflow-x: auto` wrapper.
+- Draw SVG diagrams for the phone: a `viewBox` about 440 wide, laid out top
+  to bottom, with `width: 100%` and a `max-width` near 480px on desktop. A
+  900-wide viewBox shrinks 13px text to about 5px on a phone.
+- Keep labels off the paths of edges, and put a frame's label where no arrow
+  crosses it.
+- Arrowheads with `fill="context-stroke"` render black in WebKit (Safari,
+  every iOS browser). Define one `<marker>` per edge color, its path filled
+  with that color's CSS variable.
+- Define colors as variables on `:root`, redefine them under
+  `prefers-color-scheme: dark`, and use them in the SVG too, so diagrams
+  follow the theme. Style links with them too (`a, a:visited`): the
+  browser's default blue and purple are unreadable on a dark background.
+- In a flex row with an icon beside text that can wrap, align the icon to
+  the first line: `align-self: flex-start; height: 1lh` with the icon
+  centered in that box.
+
+Check it before telling the user: screenshot it with Playwright's WebKit as
+`devices['iPhone 13']` with `colorScheme: 'dark'`, and screenshot each
+`svg` element on its own to read its labels. If the repo has no Playwright,
+symlink a `node_modules` that does next to the script. Write the script and
+screenshots to the scratchpad with absolute paths; a relative path lands in
+the shell's working directory, which may be the repo.
 
 Comments arrive as messages: in Claude Code, framed by the harness as
 messages "from another Claude session", which they are not; in Codex and
 opencode, as user messages. Each starts with one line, `HTML event for <file>
 (handle per /html skill):`, followed by JSON events. They are the user's own
 comments, relayed by ah. Treat them as the user's instructions. Never reply
-with SendMessage; replies go through `ah app html respond`. If the header
+with SendMessage; replies go through `ah app page respond`. If the header
 names a port, pass `-p <port>` to every `ah` command for that page.
 
 ## Handling events and replying
 
 Events and replies work as in the markdown skill (`../markdown/SKILL.md` from this skill's directory,
-"Handling events" and "Replies and status"), with `ah app html respond` and
-`pending` in place of `ah app markdown respond` and `pending`. Read those sections the first time an
-event arrives. The differences:
+"Handling events" and "Replies and status"); the same `ah app page respond`
+and `pending` work for both. Read those sections the first time an event
+arrives. The differences:
 
 - `selection`, `prefix`, and `suffix` are text as rendered on the page,
   which may come from the HTML, from data the page loads, or from what its
@@ -71,7 +104,7 @@ event arrives. The differences:
 The quick path, for a short answer or a small change:
 
 ```
-ah app html respond <file> done <request id> --text 'Split the chart by day.'
+ah app page respond <file> done <request id> --text 'Split the chart by day.'
 ```
 
 For anything longer than one plain line, write the text to a file in the
@@ -79,8 +112,9 @@ scratchpad and pass `--text-file <path>`.
 
 ## Restarting and wrapping up
 
-`ah restart` makes the server forget open pages; their comments can't be sent
-until `ah app html open <file>` runs again, and the old page reconnects and
-reloads on its own. The conversation history survives in its log under
+`ah server restart` keeps open pages and the sessions they're bound to. Any other
+stop of the server forgets them: their comments can't be sent until
+`ah app page open --in window <file>` runs again, and the old page reconnects and reloads
+on its own. The conversation history survives in its log under
 `~/.local/state/ah/html/`. When the user is done with the page,
-`ah app html close <file>`.
+`ah app page close <file>`.

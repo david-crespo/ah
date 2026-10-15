@@ -60,7 +60,7 @@ rex capture --block <id> --trim --unwrap
 To block until a pane's command exits, `rex wait --for 10m <id>` returns that
 command's exit status. It works on `--keep-open` panes too, since it waits for
 the command, not the pane. For long waits, run it as a background command so
-you're told when it ends. For a markdown file, `ah app markdown open <file> --in
+you're told when it ends. For a markdown file, `ah app page open <file> --in
 split` opens it in `glow` above you.
 
 ## Sandbox

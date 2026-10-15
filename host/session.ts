@@ -1,6 +1,6 @@
 // Posting into an agent session. A command run in the session's shell knows
 // which session it's in from what the harness exports to its children, and
-// hands that to the server, as `ah app markdown open` does; the server isn't
+// hands that to the server, as `ah app page open` does; the server isn't
 // the session's child, so it can't look for itself. Each harness takes a post
 // its own way, and each starts a turn when the session is idle:
 //
@@ -19,6 +19,7 @@
 import { readFileSync, statSync } from "node:fs"
 import { createConnection } from "node:net"
 import { basename, join } from "node:path"
+import type { AgentRef } from "../app/sessions/registry.ts"
 import { isRecord } from "./guards.ts"
 import { claudeSessionsDir, stateHome } from "./paths.ts"
 import { ancestors, command, processTable, run } from "./proc.ts"
@@ -126,43 +127,41 @@ export function currentSession(): Session | null {
   }
 }
 
-/** The agent a command runs under, for records that should last as long as
- * it does. Claude and Codex: the harness's process, which outlives a /clear
- * or /new. opencode: the session, since its shell commands all run under one
- * service shared by every session. */
-export interface Agent {
-  harness: PostHarness
-  /** Unique across harnesses, safe in a file name */
-  key: string
-  pid: number | null
-  sessionId: string | null
-}
-
-export function currentAgent(): Agent | null {
-  const session = currentSession()
+/** Which agent a command runs under, for the server to find its record
+ * (app/sessions/registry.ts): its harness and session, and its pane or,
+ * outside Rex, its process. Claude and Codex: the harness's process, which
+ * outlives a /clear or /new. opencode: the session, since its shell
+ * commands all run under one service shared by every session. */
+export function currentAgent(session = currentSession()): AgentRef | null {
+  const terminal = process.env.REX_BLOCK || null
   switch (session?.harness) {
     case undefined:
       return null
     case "claude": {
-      if (!process.env.CLAUDE_PID) return null
-      const pid = Number(process.env.CLAUDE_PID)
-      const sessionId = process.env.CLAUDE_CODE_SESSION_ID ?? null
-      return { harness: "claude", key: `claude-${pid}`, pid, sessionId }
+      const pid = process.env.CLAUDE_PID
+      return {
+        harness: "claude",
+        session: process.env.CLAUDE_CODE_SESSION_ID ?? null,
+        terminal,
+        process: pid ? `claude-${pid}` : null,
+      }
     }
     case "codex": {
       const { pid, thread } = session
-      if (!pid) {
-        console.error(
-          "ah: no codex process above this one; is ah running in Codex's sandbox?",
-        )
-        return null
+      return {
+        harness: "codex",
+        session: thread,
+        terminal,
+        process: pid ? `codex-${pid}` : null,
       }
-      return { harness: "codex", key: `codex-${pid}`, pid, sessionId: thread }
     }
-    case "opencode": {
-      const { id } = session
-      return { harness: "opencode", key: `opencode-${id}`, pid: null, sessionId: id }
-    }
+    case "opencode":
+      return {
+        harness: "opencode",
+        session: session.id,
+        terminal,
+        process: `opencode-${session.id}`,
+      }
   }
 }
 
@@ -200,15 +199,13 @@ export function describeSession(session: Session): string {
   }
 }
 
-// Whether a session still runs, asked for two reasons. `sessionAlive` decides
-// whether a post can go to it, so a Codex session whose TUI pid isn't known
-// is assumed there until a post fails. `agentAlive` decides whether the
-// dashboard deletes a session's record, so it assumes the opposite: an
-// optimistic answer would keep the record forever. A reused pid passes for
-// Codex. Claude removes its ~/.claude/sessions/<pid>.json when the session
-// exits, so a reused pid doesn't fool that check, and the socket file, which
-// can outlive the process, is only a fallback.
-// Both are sync so the feed snapshot can include them without promises.
+// Whether a session still runs, which decides whether a post can go to it,
+// so a Codex session whose TUI pid isn't known is assumed there until a post
+// fails. A reused pid passes for Codex. Claude removes its
+// ~/.claude/sessions/<pid>.json when the session exits, so a reused pid
+// doesn't fool that check, and the socket file, which can outlive the
+// process, is only a fallback. Sync so the feed snapshot can include it
+// without promises.
 
 export function sessionAlive(session: Session | null): boolean {
   if (!session) return false
@@ -219,17 +216,6 @@ export function sessionAlive(session: Session | null): boolean {
     }
     case "codex":
       return session.pid === null || processRunning(session.pid)
-    case "opencode":
-      return opencodeRunning()
-  }
-}
-
-export function agentAlive(agent: Agent, claudeSessions = claudeSessionsDir()): boolean {
-  switch (agent.harness) {
-    case "claude":
-      return agent.pid !== null && claudeRunning(agent.pid, claudeSessions)
-    case "codex":
-      return agent.pid !== null && processRunning(agent.pid)
     case "opencode":
       return opencodeRunning()
   }

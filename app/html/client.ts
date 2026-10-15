@@ -57,8 +57,11 @@ function connect() {
   const ws = new WebSocket(url)
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data)
-    if (msg.type === "conversation") conversation?.receive(msg, msg.replay)
-    else if (msg.type === "reload") reload()
+    if (msg.type === "conversation") {
+      conversation?.receive(msg, msg.replay)
+      // For the page's own scripts, such as tracker.js, even with the chat off
+      document.dispatchEvent(new CustomEvent("ah-conversation", { detail: msg }))
+    } else if (msg.type === "reload") reload()
     else if (msg.type === "closed") closed = true
   }
   ws.onopen = () => {

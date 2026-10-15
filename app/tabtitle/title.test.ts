@@ -1,17 +1,19 @@
 import { expect, test } from "vitest"
-import type { Registry, SessionRecord } from "../sessions/registry.ts"
+import type { AgentRecord, Registry } from "../sessions/registry.ts"
 import { tabTitle } from "./title.ts"
 
-const session = (
-  terminalId: string,
+const agent = (
+  block: string,
   label: string,
-  more: Partial<SessionRecord> = {},
-): SessionRecord => ({
-  terminalId,
+  more: Partial<AgentRecord> = {},
+): AgentRecord => ({
+  block,
   harness: "claude",
+  session: `s-${block}`,
   label,
   cwd: null,
   busy: false,
+  shown: true,
   promptSequence: 1,
   summary: null,
   summarySequence: 0,
@@ -20,48 +22,40 @@ const session = (
 })
 
 function registry(
-  sessions: Record<string, SessionRecord>,
-  visible: Record<string, string>,
+  agents: AgentRecord[],
   shellLabels: Record<string, string> = {},
 ): Registry {
   return {
-    sessions: new Map(Object.entries(sessions)),
-    visible: new Map(Object.entries(visible)),
+    agents: new Map(agents.map((a) => [a.block!, a])),
+    files: new Map(),
     shellLabels: new Map(Object.entries(shellLabels)),
   }
 }
 
 test("label once per run of terminals sharing it, then each one's summary", () => {
-  const r = registry(
-    {
-      a: session("t1", "ah", { busy: true, summary: "Port titles" }),
-      b: session("t2", "ah", { summary: "Edit README" }),
-      c: session("t3", "dotfiles"),
-    },
-    { t1: "a", t2: "b", t3: "c" },
-  )
+  const r = registry([
+    agent("t1", "ah", { busy: true, summary: "Port titles" }),
+    agent("t2", "ah", { summary: "Edit README" }),
+    agent("t3", "dotfiles"),
+  ])
   expect(tabTitle(["t1", "t2", "t3"], r)).toBe("ah | Port titles | Edit README | dotfiles")
 })
 
-test("a session that moved to another terminal doesn't count where it was", () => {
-  const r = registry({ a: session("t2", "ah", { summary: "x" }) }, { t1: "a", t2: "a" })
-  expect(tabTitle(["t1"], r)).toBeUndefined()
-  expect(tabTitle(["t2"], r)).toBe("ah | x")
+test("an agent its pane no longer shows doesn't count", () => {
+  const r = registry([agent("t1", "ah", { summary: "x", shown: false })], { t1: "ah/app" })
+  expect(tabTitle(["t1"], r)).toBe("ah/app")
 })
 
-test("with no sessions, the first shell label; with none of those, nothing", () => {
-  const r = registry({}, {}, { t2: "repos", t3: "other" })
+test("with no agents, the first shell label; with none of those, nothing", () => {
+  const r = registry([], { t2: "repos", t3: "other" })
   expect(tabTitle(["t1", "t2", "t3"], r)).toBe("repos")
   expect(tabTitle(["t1"], r)).toBeUndefined()
 })
 
-test("a closed terminal's session drops out because the tab no longer lists it", () => {
-  const r = registry(
-    {
-      a: session("t1", "ah", { summary: "mine" }),
-      b: session("t2", "ah", { summary: "gone" }),
-    },
-    { t1: "a", t2: "b" },
-  )
+test("a closed terminal's agent drops out because the tab no longer lists it", () => {
+  const r = registry([
+    agent("t1", "ah", { summary: "mine" }),
+    agent("t2", "ah", { summary: "gone" }),
+  ])
   expect(tabTitle(["t1"], r)).toBe("ah | mine")
 })

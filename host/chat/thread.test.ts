@@ -65,7 +65,7 @@ test("a comment goes to the bound session after the edits it follows", async () 
     const { path, doc } = await markdownFile("hello world\n")
     const file = {
       path,
-      session: { harness: "claude" as const, socket: session.socket, token: "t" },
+      address: () => ({ harness: "claude" as const, socket: session.socket, token: "t" }),
     }
     const thread = await markdownThread(file, doc)
     await writeFile(path, "hello there\n")
@@ -89,7 +89,7 @@ test("a comment goes to the bound session after the edits it follows", async () 
 
 test("without a session, a comment is kept for later and activity still lands", async () => {
   const { path, doc } = await markdownFile("text\n")
-  const file = { path, session: null }
+  const file = { path, address: () => null }
   const thread = await markdownThread(file, doc)
   const { event, agentConnected } = await thread.comment(
     parseUser({ kind: "message", text: "hi" }),
@@ -105,6 +105,45 @@ test("without a session, a comment is kept for later and activity still lands", 
   // The log outlives the server
   const reopened = await markdownThread(file, doc)
   expect(reopened.state().events.length).toEqual(3)
+})
+
+test("comments no agent took go to the next one, unless handled by then", async () => {
+  const agent = await inbox()
+  try {
+    const { path, doc } = await markdownFile("text\n")
+    let address: { harness: "claude"; socket: string } | null = null
+    const sent: { agentConnected: boolean }[] = []
+    const thread = await Thread.open(
+      { path, address: () => address },
+      {
+        app: "markdown",
+        port: 7420,
+        broadcast: (m) => sent.push(JSON.parse(m)),
+        context: async () => (await doc.refresh(), doc.takeEdit()),
+      },
+    )
+    const first = await thread.comment(parseUser({ kind: "message", text: "one" }))
+    const second = await thread.comment(parseUser({ kind: "message", text: "two" }))
+    expect([first.agentConnected, second.agentConnected]).toEqual([false, false])
+    // Nothing changed: the pages aren't told again
+    await thread.refresh()
+    expect(sent.length).toEqual(2)
+    // The second was caught up on with `pending` and started
+    await thread.activity(
+      parseActivity({ phase: "start", requestIds: [second.event.id], workId: "w1" }),
+    )
+    address = { harness: "claude", socket: agent.socket }
+    await thread.refresh()
+    expect(sent.at(-1)?.agentConnected).toEqual(true)
+    expect(agent.posts.length).toEqual(1)
+    expect(agent.posts[0]).toContain(first.event.id)
+    expect(agent.posts[0]).not.toContain(second.event.id)
+    // Sent once
+    await thread.refresh()
+    expect(agent.posts.length).toEqual(1)
+  } finally {
+    agent.close()
+  }
 })
 
 test("the header names the port only when it isn't the default", () => {

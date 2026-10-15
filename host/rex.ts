@@ -146,11 +146,12 @@ export async function setWindowLabel(
   }
 }
 
-/** Show a tab in the Rex app, then bring the app to the front, since the click
- * that asked for it was in another app. The app keeps its own selected tab
- * and doesn't follow `session.focus_window`, so this asks it to with its
- * `session.select` action, which needs Remote Control on in its settings. */
-export async function focusWindow(session: string, window: string): Promise<void> {
+/** Show a tab in the Rex app, leaving whichever app is in front there: the
+ * click that asked for it was in the dashboard, which stays. The app keeps its
+ * own selected tab and doesn't follow `session.focus_window`, so this asks it
+ * to with its `session.select` action, which needs Remote Control on in its
+ * settings. */
+export async function selectWindow(session: string, window: string): Promise<void> {
   const list = await call("client.list")
   const app =
     isRecord(list) && Array.isArray(list.clients)
@@ -167,7 +168,6 @@ export async function focusWindow(session: string, window: string): Promise<void
     `window_id=${window}`,
   ])
   if (!success) throw new Error(`rex do session.select: ${stderr.trim()}`)
-  await run("open", ["-b", "com.superlogical.rex"])
 }
 
 /** A block's directory from a `process` result or `process_changed` event:

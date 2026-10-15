@@ -1,4 +1,4 @@
-// A thread: the conversation between a page and the session it's bound to.
+// A thread: the conversation between a page and the agent it's bound to.
 // The user's comments and messages from the page are posted into the session,
 // and the agent's activity (`ah app <name> respond`) is shown back on the
 // page. One append-only log per file, under ~/.local/state/ah/<app>/, is both
@@ -40,10 +40,12 @@ export function header(
   return `${tool} event for ${file} (handle per /${app} skill${where}):`
 }
 
-/** The file and where its comments go, which changes when it's reopened */
+/** The file, and where its comments go now: its agent's address, which
+ * changes as the agent moves through sessions, or the session that opened
+ * it */
 export interface Bound {
   readonly path: string
-  session: Session | null
+  address(): Session | null
 }
 
 export interface ThreadOptions {
@@ -65,6 +67,12 @@ export class Thread {
   #log: ActivityLog
   #options: ThreadOptions
   #queue: Promise<unknown> = Promise.resolve()
+  /** Comments no agent took, each with the lines its post had, to send to
+   * the next one that turns up. In memory: after a restart, an agent catches
+   * up on them with `pending`. */
+  #held: { id: string; lines: string[] }[] = []
+  /** Whether the pages were last told an agent is there */
+  #told: boolean | null = null
 
   private constructor(file: Bound, log: ActivityLog, options: ThreadOptions) {
     this.#file = file
@@ -88,31 +96,48 @@ export class Thread {
   /** For the page: the whole conversation, and whether a session is there to
    * read it. `replay` marks the one sent on connect. */
   snapshot(replay: boolean): string {
-    const snapshot = this.#log.snapshot(sessionAlive(this.#file.session))
+    const snapshot = this.#log.snapshot(sessionAlive(this.#file.address()))
     return JSON.stringify({ ...snapshot, replay })
   }
 
   /** Requests and history, for the agent */
   state() {
-    return this.#log.snapshot(sessionAlive(this.#file.session))
+    return this.#log.snapshot(sessionAlive(this.#file.address()))
   }
 
   #broadcast() {
-    this.#options.broadcast(this.snapshot(false))
+    this.#told = sessionAlive(this.#file.address())
+    const snapshot = this.#log.snapshot(this.#told)
+    this.#options.broadcast(JSON.stringify({ ...snapshot, replay: false }))
   }
 
   /** Log a comment or message and post it to the session, with the context
-   * ahead of it. A failed post leaves it waiting in the log for the session to
-   * catch up on, so it never fails the user's send. */
+   * ahead of it. A failed post leaves it waiting in the log, and held for
+   * the next agent to turn up, so it never fails the user's send. */
   comment(input: UserInput): Promise<CommentResult> {
     return this.#serially(async () => {
       const context = (await this.#options.context?.()) ?? null
       const event = await this.#log.append(input)
-      const agentConnected = await this.#deliver(
-        [context, JSON.stringify(event)].filter((line) => line !== null),
-      )
+      const lines = [context, JSON.stringify(event)].filter((line) => line !== null)
+      const agentConnected = await this.#deliver(lines)
+      if (!agentConnected) this.#held.push({ id: event.id, lines })
       this.#broadcast()
       return { event, agentConnected }
+    })
+  }
+
+  /** For when agents come and go: send the held comments that are still
+   * waiting, if an agent is there now, and tell the pages if that changed */
+  refresh(): Promise<void> {
+    return this.#serially(async () => {
+      const alive = sessionAlive(this.#file.address())
+      if (alive && this.#held.length) {
+        const requests = new Map(this.#log.snapshot(true).requests.map((r) => [r.id, r]))
+        const waiting = this.#held.filter((h) => requests.get(h.id)?.status === "waiting")
+        if (!waiting.length || (await this.#deliver(waiting.flatMap((h) => h.lines))))
+          this.#held = []
+      }
+      if (alive !== this.#told) this.#broadcast()
     })
   }
 
@@ -126,7 +151,7 @@ export class Thread {
   }
 
   async #deliver(events: string[]): Promise<boolean> {
-    const session = this.#file.session
+    const session = this.#file.address()
     if (!session) return false
     try {
       const first = header(this.#options, this.#file.path, this.#options.port)

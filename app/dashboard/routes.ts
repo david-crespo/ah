@@ -2,20 +2,20 @@
 // it follows. The server follows Rex (host/rex.ts) and hands each snapshot
 // to onSnapshot; the dashboard keeps a live jj log for
 // every open workspace (jj.ts), and pushes both to the page (page.html, with
-// its script in client.ts), along
-// with each workspace's file to show (doc_view.ts), which the page shows with
-// the markdown app's <ah-markdown> element. The focused workspace gets
+// its script in client.ts), along with each tab's file, its agent's
+// (tab_files.ts), which the page shows with the markdown app's <ah-markdown>
+// element, or in a frame for an html file. The focused workspace gets
 // snapshotted once edits settle, so @ stays current between jj commands.
 
 import { readFile } from "node:fs/promises"
 import { assetPath } from "../../host/assets.ts"
 import { ClientBundles } from "../../host/bundle.ts"
-import { fileId } from "../../host/id.ts"
+import type { HtmlApp } from "../html/routes.ts"
 import type { MarkdownApp } from "../markdown/routes.ts"
-import { focusWindow, type Snapshot } from "../../host/rex.ts"
+import type { SessionsApp } from "../sessions/routes.ts"
+import { selectWindow, type Snapshot } from "../../host/rex.ts"
 import { LogWatcher, SnapshotWatcher } from "./jj.ts"
-import { defaultDirs } from "./docs.ts"
-import { type Doc, DocView } from "./doc_view.ts"
+import { tabFiles } from "./tab_files.ts"
 import { focusedRoot, resolve, rootFinder, type State } from "./workspace.ts"
 
 // Changes on every server start. The page reloads when it reconnects to a
@@ -31,19 +31,31 @@ const send = (c: Client, event: string, data: string) =>
 
 const logEvent = (root: string, html: string) => JSON.stringify({ root, html })
 
-const docEvent = (root: string, doc: Doc | null) =>
+/** A tab's file as the page shows it: `frame` for an html page, in an
+ * <iframe> of `url`, otherwise in <ah-markdown> */
+interface ShownDoc {
+  path: string
+  url: string
+  frame: boolean
+}
+
+const docEvent = (tab: string, doc: ShownDoc | null) =>
   JSON.stringify({
-    root,
+    tab,
     path: doc?.path ?? null,
-    url: doc ? `/app/markdown/${fileId(doc.path)}/` : null,
+    url: doc?.url ?? null,
+    frame: doc?.frame ?? false,
   })
 
 export interface DashboardOptions {
   /** null turns off snapshotting the focused workspace */
   snapshotDelayMs: number | null
-  /** The page shows each file with <ah-markdown>, so the markdown app has
-   * to hold the file open before the page hears about it */
+  /** The page shows each file with <ah-markdown> or in a frame of an html
+   * page, so the app has to hold the file open before the page hears about it */
   markdown: MarkdownApp
+  html: HtmlApp
+  /** The agents, whose files the tabs show */
+  sessions: SessionsApp
 }
 
 export class Dashboard {
@@ -54,28 +66,64 @@ export class Dashboard {
   #logs = new Map<string, LogWatcher>()
   #snapshotter: SnapshotWatcher | null = null
   #clients = new Set<Client>()
-  #docs: DocView
+  #snapshot: Snapshot | null = null
+  /** tab -> its file */
+  #files = new Map<string, string>()
+  /** tab -> what the page was last told to show */
+  #shown = new Map<string, ShownDoc>()
   #docQueue: Promise<void> = Promise.resolve()
 
   readonly options: DashboardOptions
 
   constructor(options: DashboardOptions) {
     this.options = options
-    this.#docs = new DocView(defaultDirs(), (root, doc) => {
+    options.sessions.subscribe(() => this.#syncFiles())
+  }
+
+  /** Each tab's file, from the last snapshot and the registry; tells the
+   * page about the ones that changed */
+  #syncFiles() {
+    if (!this.#snapshot) return
+    const ids = new Set(this.#state.tabs.map((t) => t.id))
+    const next = tabFiles(this.#snapshot, ids, this.options.sessions.registry)
+    for (const tab of new Set([...this.#files.keys(), ...next.keys()])) {
+      const path = next.get(tab) ?? null
+      if ((this.#files.get(tab) ?? null) === path) continue
       // One at a time, since show takes a moment: two quick changes for a
-      // workspace would otherwise broadcast whichever finished last
+      // tab would otherwise broadcast whichever finished last
       this.#docQueue = this.#docQueue.then(async () => {
         // Also reopens it if someone closed it
-        if (doc && !(await options.markdown.show(doc.path))) doc = null
-        this.#broadcast("doc", docEvent(root, doc))
+        const shown = path && (await this.#show(path))
+        if (shown) this.#shown.set(tab, shown)
+        else this.#shown.delete(tab)
+        this.#broadcast("doc", docEvent(tab, shown || null))
       })
-    })
+    }
+    this.#files = next
+  }
+
+  /** Open the file in the app that shows it. An html page's conversation is
+   * hidden: its buttons and comments wake the agent, which answers in the
+   * terminal. And it's dark and see-through, to match the dashboard. */
+  async #show(path: string): Promise<ShownDoc | null> {
+    if (/\.html?$/i.test(path)) {
+      const info = await this.options.html.show(path)
+      return info && { path, url: `${info.url}?chat=off&in=dashboard`, frame: true }
+    }
+    const info = await this.options.markdown.show(path)
+    return info && { path, url: info.url, frame: false }
   }
 
   onSnapshot(snapshot: Snapshot) {
     // A fresh finder each time: a cached root can be removed (`jjw rm` with
     // a tab still in it), and a cached miss can become a workspace
-    const next = resolve(snapshot, rootFinder(), this.#state.focused)
+    this.#snapshot = snapshot
+    this.#setState(resolve(snapshot, rootFinder(), this.#state.focused))
+    // Tabs open and close
+    this.#syncFiles()
+  }
+
+  #setState(next: State) {
     const nextJson = JSON.stringify(next)
     if (nextJson === this.#stateJson) return
     this.#state = next
@@ -115,7 +163,6 @@ export class Dashboard {
         new LogWatcher(root, (html) => this.#broadcast("jj", logEvent(root, html))),
       )
     }
-    this.#docs.setRoots(open)
     // Only the focused workspace gets snapshotted: it's the one on screen, and
     // watching every file in every open workspace would be wasteful
     const focused = focusedRoot(this.#state)
@@ -141,17 +188,20 @@ export class Dashboard {
     return new Response("not found", { status: 404 })
   }
 
-  /** Show a tab in Rex, for a click on its chip */
+  /** Show a tab in Rex, for a click on its chip, leaving focus on the dashboard */
   async #focus(req: Request): Promise<Response> {
     const { tab: id }: { tab?: unknown } = await req.json()
     const tab = this.#state.tabs.find((t) => t.id === id)
     if (!tab) return new Response("no such tab", { status: 404 })
     try {
-      await focusWindow(tab.session, tab.id)
+      await selectWindow(tab.session, tab.id)
     } catch (e) {
       console.error("ah:", e)
       return new Response("couldn't focus the tab", { status: 502 })
     }
+    // Rex in the background may not report the switch until it's in front,
+    // so the dashboard follows the click itself
+    this.#setState({ ...this.#state, focused: tab.id })
     return new Response(null, { status: 204 })
   }
 
@@ -161,14 +211,16 @@ export class Dashboard {
       start: (c) => {
         controller = c
         this.#clients.add(c)
+        // Reconnect soon after a restart, so the page is back before a command
+        // looks for one to show something in (EventSource waits seconds by
+        // default)
+        c.enqueue(encoder.encode("retry: 500\n\n"))
         send(c, "hello", JSON.stringify({ version: SERVER_VERSION }))
         send(c, "state", this.#stateJson)
         for (const [root, watcher] of this.#logs) {
           if (watcher.html !== null) send(c, "jj", logEvent(root, watcher.html))
         }
-        for (const [root, doc] of this.#docs.entries()) {
-          send(c, "doc", docEvent(root, doc))
-        }
+        for (const [tab, doc] of this.#shown) send(c, "doc", docEvent(tab, doc))
       },
       cancel: () => {
         this.#clients.delete(controller)

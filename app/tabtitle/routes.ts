@@ -1,5 +1,5 @@
 // The tabtitle app: the setter that keeps tab titles, and its
-// routes, under /app/tabtitle/: each tab's title as ah has it and as the tab
+// routes (it has no commands; `ah debug tabs` compares titles once), under /app/tabtitle/: each tab's title as ah has it and as the tab
 // shows it, as JSON.
 
 import type { Snapshot } from "../../host/rex.ts"

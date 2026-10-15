@@ -1,18 +1,19 @@
-// `ah app sessions hook` and `shell`: how agents and zsh report into the session
+// `ah hook agent` and `ah hook shell`: how agents and zsh report into the session
 // registry. Each reads what it's told, posts one event to the server, and
 // exits. Neither may break what called it: an agent waits on its hooks, and
 // a hook's stdout on SessionStart or UserPromptSubmit becomes context for
 // Claude, so they always exit 0, give up after a short wait rather than hold
 // up a prompt while ah is down, and print nothing but one thing: on
-// SessionStart, the session's file in the dashboard. That record belongs to
-// the agent's process, so it's only there after /clear, /new, or compaction,
-// and the new session would otherwise start without its tracker.
+// SessionStart, the file in the dashboard for the agent's tab, which the
+// server sends back. The file belongs to the tab, so it's there after
+// /clear, /new, compaction, or a restart in any of the tab's panes, and the
+// new session would otherwise start without its tracker.
 //
-//   claude/settings.json, codex/hooks.json:  ah app sessions hook --harness <name>
+//   claude/settings.json, codex/hooks.json:  ah hook agent --harness <name>
 //     on SessionStart, UserPromptSubmit, Stop, SessionEnd, with the hook's
 //     JSON on stdin (hook_event_name, session_id, cwd, prompt,
 //     transcript_path; Codex sends the same keys)
-//   .zshrc, at startup and on chpwd:         ah app sessions shell <label>
+//   .zshrc, at startup and on chpwd:         ah hook shell <label>
 //
 // The terminal is REX_BLOCK, which Rex sets in every shell and so every
 // agent run from it. A session's label is its terminal's shell label, which
@@ -25,8 +26,7 @@ import { homedir } from "node:os"
 import { portOption } from "../../host/cli.ts"
 import { isOneOf } from "../../host/guards.ts"
 import { ensureServer } from "../../host/server.ts"
-import { currentAgent } from "../../host/session.ts"
-import { sessionFile } from "../dashboard/api.ts"
+import { currentAgent, currentSession, type Session } from "../../host/session.ts"
 import { underCodexDaemon } from "./tuis.ts"
 import { HARNESSES, HOOK_EVENTS, type Harness, type RegistryEvent } from "./registry.ts"
 import { sanitizeTitle } from "./summary.ts"
@@ -44,7 +44,11 @@ export function abbreviatePath(path: string, home = homedir()): string {
   return path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path
 }
 
-const post = (port: number, event: RegistryEvent, timeoutMs: number) =>
+/** An event, and where the agent can be reached now, which the server keeps
+ * apart from the event since it has Claude's token */
+type Report = RegistryEvent & { address?: Session | null }
+
+const post = (port: number, event: Report, timeoutMs: number) =>
   fetch(`http://127.0.0.1:${port}/app/sessions/event`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -52,17 +56,28 @@ const post = (port: number, event: RegistryEvent, timeoutMs: number) =>
     signal: AbortSignal.timeout(timeoutMs),
   })
 
+/** What the server answers an event with */
+export interface EventReply {
+  /** The file in the dashboard for the agent's tab */
+  file: string | null
+}
+
 /** Post, starting the server if nothing answers. Failures go to stderr,
  * which agents don't show for a hook that exits 0. */
-async function send(port: number, event: RegistryEvent) {
+async function send(port: number, event: Report): Promise<EventReply | null> {
   try {
     const res = await post(port, event, 1000).catch(async () => {
       await ensureServer(port)
       return post(port, event, 1000)
     })
-    if (!res.ok) console.error(`ah: event refused: ${res.status} ${await res.text()}`)
+    if (!res.ok) {
+      console.error(`ah: event refused: ${res.status} ${await res.text()}`)
+      return null
+    }
+    return res.status === 204 ? null : ((await res.json()) as EventReply)
   } catch (e) {
     console.error(`ah: couldn't post the event: ${e}`)
+    return null
   }
 }
 
@@ -104,10 +119,11 @@ export function hookEvent(
 
 /** What a starting session is told about the file it inherited */
 export const startContext = (file: string) =>
-  `This session's tracker (its file in the ah dashboard, kept across /clear or ` +
-  `compaction) is ${file}. Check it when picking up work, and keep it updated.`
+  `This session's tracker (its tab's file in the ah dashboard, kept across ` +
+  `/clear, compaction, or a restart in the tab) is ${file}. Check it when picking up ` +
+  `work, and keep it updated.`
 
-export const hook = new Command("hook")
+const agent = new Command("agent")
   .description("Report an agent hook (its JSON on stdin) to the session registry")
   .addOption(
     new Option("--harness <name>", "The agent the hook is from")
@@ -120,20 +136,18 @@ export const hook = new Command("hook")
     // label to the server (tuis.ts)
     const daemon = harness === "codex" && underCodexDaemon()
     const event = hookEvent(await readStdin(), harness, daemon ? {} : process.env)
-    if (!event) return
-    if (event.kind === "hook" && event.event === "SessionStart" && !daemon) {
-      try {
-        const agent = currentAgent()
-        const file = agent && sessionFile(agent)
-        if (file) console.log(startContext(file))
-      } catch (e) {
-        console.error(`ah: couldn't look up the session's file: ${e}`)
-      }
-    }
-    await send(port, event)
+    if (event?.kind !== "hook") return
+    // Outside Rex the agent is its process. Finding Codex's takes a ps, so
+    // only then.
+    if (!event.terminal && !daemon) event.process = currentAgent()?.process ?? null
+    // Claude's inbox socket, so a page bound to the agent reaches a new
+    // process in its pane. Codex and opencode are reached by their session.
+    const address = harness === "claude" ? currentSession() : null
+    const reply = await send(port, { ...event, address })
+    if (event.event === "SessionStart" && reply?.file) console.log(startContext(reply.file))
   })
 
-export const shell = new Command("shell")
+const shell = new Command("shell")
   .description("Report a shell's directory label, which drops its terminal's session")
   .argument("<label>", "What the shell calls its directory")
   .addOption(portOption())
@@ -142,3 +156,8 @@ export const shell = new Command("shell")
     const clean = sanitizeTitle(label)
     if (terminal && clean) await send(port, { kind: "shell", terminal, label: clean })
   })
+
+export const hook = new Command("hook")
+  .description("What agent hooks and zsh run to report into the session registry")
+  .addCommand(agent)
+  .addCommand(shell)

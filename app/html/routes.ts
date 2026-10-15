@@ -25,7 +25,7 @@ import type { WebSocket } from "ws"
 import { ClientBundles } from "../../host/bundle.ts"
 import { chatStylesheet, selectionPopover } from "../../host/chat/page.ts"
 import { threadRoute } from "../../host/chat/routes.ts"
-import { OpenFiles } from "../../host/files/files.ts"
+import { type AgentDirectory, type FileInfo, OpenFiles } from "../../host/files/files.ts"
 import { fileRoutes } from "../../host/files/routes.ts"
 import { type HtmlFile, htmlFiles, type LiveReload } from "./files.ts"
 
@@ -54,10 +54,25 @@ const types: Record<string, string> = {
 // Pages reload on every change, so nothing they load should be cached
 const noStore = { "cache-control": "no-store" }
 
-/** The file with ah's tags before </body>, or at the end without one */
-export function inject(html: string, id: string, chat: boolean): string {
+// For the dashboard's frames: dark over the page's own color-scheme, which
+// may leave it to the browser's, since the dashboard is dark whatever that
+// is; and see-through, so the page sits on the dashboard's background
+const dashboardStyle =
+  "<style>:root { color-scheme: dark !important; } html, body { background: transparent !important; }</style>"
+
+/** The file with ah's tags before </body>, or at the end without one.
+ * `dashboard` is for the dashboard's frames of it. */
+export function inject(
+  html: string,
+  id: string,
+  { chat, dashboard = false }: { chat: boolean; dashboard?: boolean },
+): string {
   const script = `<script type="module" src="/app/html/chat.js" data-ah-thread="/app/html/${id}/_ah/"${chat ? "" : ' data-ah-chat="off"'}></script>`
-  const tags = (chat ? [chatStylesheet, selectionPopover, script] : [script]).join("\n")
+  const tags = [
+    ...(dashboard ? [dashboardStyle] : []),
+    ...(chat ? [chatStylesheet, selectionPopover] : []),
+    script,
+  ].join("\n")
   const end = html.search(/<\/body\s*>(?![\s\S]*<\/body\s*>)/i)
   return end < 0 ? html + "\n" + tags : html.slice(0, end) + tags + "\n" + html.slice(end)
 }
@@ -68,11 +83,25 @@ export class HtmlApp {
   /** Where the pages are */
   readonly pagesOrigin: string
 
-  /** `port` is the server's, for telling the agent which one to answer, and
-   * `pagesPort` the one pages are served on */
-  constructor(port: number, pagesPort: number) {
+  /** `port` is the server's, for telling the agent which one to answer,
+   * `pagesPort` the one pages are served on, and `directory` where the
+   * agents its files are bound to are now */
+  constructor(port: number, pagesPort: number, directory: AgentDirectory | null = null) {
     this.pagesOrigin = `http://127.0.0.1:${pagesPort}`
-    this.files = new OpenFiles(port, htmlFiles, this.pagesOrigin)
+    this.files = new OpenFiles(port, htmlFiles, { pageOrigin: this.pagesOrigin, directory })
+  }
+
+  /** Open `path` for the dashboard to show in a frame, leaving any binding
+   * alone; null if it isn't a readable file */
+  async show(path: string): Promise<FileInfo | null> {
+    try {
+      if (!(await stat(path)).isFile()) return null
+      const file = await this.files.ensure(path)
+      this.#bundles.prebuild("chat.js")
+      return this.files.info(file)
+    } catch {
+      return null
+    }
   }
 
   /** On the API port; `rest` is the path after /app/html/ */
@@ -122,14 +151,16 @@ export class HtmlApp {
       return (await threadRoute(req, sub.slice("_ah/".length), file.thread)) ?? notFound()
     }
     if (sub === "") {
-      const chat = new URL(req.url).searchParams.get("chat") !== "off"
+      const query = new URL(req.url).searchParams
+      const chat = query.get("chat") !== "off"
+      const dashboard = query.get("in") === "dashboard"
       let html: string
       try {
         html = await readFile(file.path, "utf8")
       } catch {
         return new Response(`can't read ${file.path}`, { status: 404 })
       }
-      return new Response(inject(html, file.id, chat), {
+      return new Response(inject(html, file.id, { chat, dashboard }), {
         headers: { "content-type": "text/html; charset=utf-8", ...noStore },
       })
     }

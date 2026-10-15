@@ -1,5 +1,5 @@
-// `ah app <name> respond` and `ah app <name> pending`: how the agent answers a
-// thread, for any app whose pages have one
+// `ah app page respond` and `ah app page pending`: how the agent answers a
+// page's thread
 
 import { readFileSync } from "node:fs"
 import { Argument, Command } from "@commander-js/extra-typings"
@@ -8,12 +8,9 @@ import { absolute } from "../files/cli.ts"
 import { type FeedSnapshot, PHASES } from "./events.ts"
 
 /** `threadUrl` is where the file's thread takes the agent's events on that port */
-export function threadCommands(
-  app: string,
-  threadUrl: (path: string, port: number) => string,
-) {
+export function threadCommands(threadUrl: (path: string, port: number) => string) {
   const notOpen = (path: string, file: string) =>
-    die(`ah: ${path} isn't open; open it with \`ah app ${app} open ${file}\``)
+    die(`ah: ${path} isn't open; open it with \`ah app page open --in <place> ${file}\``)
   const snapshot = async (url: string, path: string, file: string) => {
     const res = await fetch(url)
     if (res.status === 404) notOpen(path, file)

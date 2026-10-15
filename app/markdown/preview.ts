@@ -142,7 +142,7 @@ export class AhMarkdown extends HTMLElement {
     }
     if (status === 404) {
       this.#note(
-        "This file isn't open in ah anymore (the server restarted?). Open it again with ah app markdown open.",
+        "This file isn't open in ah anymore (the server restarted?). Open it again with ah app page open.",
       )
     } else if (status === 0) {
       this.#note("Can't reach ah. Retrying…")
@@ -170,7 +170,7 @@ export class AhMarkdown extends HTMLElement {
 
   #showClosed() {
     this.#closed = true
-    this.#note("This file was closed. Open it again with ah app markdown open.")
+    this.#note("This file was closed. Open it again with ah app page open.")
     this.dispatchEvent(new Event("closed"))
   }
 

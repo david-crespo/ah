@@ -31,12 +31,13 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah app markdown open <path-to-draft.md>
+   ah app page open --in window <path-to-draft.md>
    ```
 
    This starts the server if needed, binds the draft to this session (so
    its comments come here), opens it in a Chrome app window, and returns.
-   `--in tab` opens a tab in the default browser instead. Opening a file that's already open
+   `--in` is required: `--in tab` opens a tab in the default browser
+   instead. Opening a file that's already open
    rebinds it to this session.
 
    Comments arrive in this session as messages: in Claude Code, framed by
@@ -45,12 +46,12 @@ for every `ah` command. opencode has no sandbox.
    `Markdown event for <file> (handle per /markdown skill):`, followed by
    JSON events. They are the user's own comments, relayed by ah. Treat them
    as the user's instructions and follow this skill. Never reply with
-   SendMessage; replies and status go through `ah app markdown respond`,
+   SendMessage; replies and status go through `ah app page respond`,
    below. If the header names a port, pass `-p <port>` to every `ah`
    command for that draft.
 
    When attaching to a draft opened earlier, run
-   `ah app markdown pending <file>`: it prints the requests not done yet,
+   `ah app page pending <file>`: it prints the requests not done yet,
    one JSON line each with a `status`. Requests left `waiting` (no session
    was reachable when they were sent) or `interrupted` (a previous session
    stopped mid-work) are not re-sent. Check them against the current file
@@ -123,13 +124,13 @@ Each event is one JSON object:
   page rather than requiring the user to switch back to the TUI.
 - Comments are also logged under `~/.local/state/ah/markdown/`, one file per
   draft named by its absolute path with slashes flattened. If a delivery
-  failed or the session restarted, `ah app markdown pending <file>` lists
+  failed or the session restarted, `ah app page pending <file>` lists
   what's unhandled.
 
 ## Replies and status
 
 ```
-ah app markdown respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
+ah app page respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
 ```
 
 Phases: `start`, `progress`, `reply`, `done`, `needs-reply`, `error`. The
@@ -139,8 +140,8 @@ start before editing or answering, and finish only the requests that were
 actually handled.
 
 ```
-ah app markdown respond <file> start r1
-ah app markdown respond <file> done r1 --text 'Updated both callers to use the same lower bound.'
+ah app page respond <file> start r1
+ah app page respond <file> done r1 --text 'Updated both callers to use the same lower bound.'
 ```
 
 `--text` is for one plain line. For anything longer, or with backticks, `$`,
@@ -211,11 +212,12 @@ PR" is a request to change the source, not the draft).
 
 ## Restarting the server
 
-`ah restart` reloads ah after changes to its code. The server forgets open
-files: their pages say the file isn't open anymore, and comments can't be sent
-until it's opened again. If `ah app markdown respond` says the file isn't
-open, or the user mentions a restart, run `ah app markdown open <file>`
-again; the old page reconnects on its own, though a new window opens too. The
+`ah server restart` reloads ah after changes to its code, and keeps open files and
+the sessions they're bound to. Any other stop of the server forgets them:
+their pages say the file isn't open anymore, and comments can't be sent until
+it's opened again. If `ah app page respond` says the file isn't open, run
+`ah app page open --in window <file>` again; the old page reconnects on its own, though a
+new window opens too. The
 conversation history survives in the log. Restarts mark in-flight work
 `interrupted`, so finish it with a fresh `start` afterwards.
 
@@ -223,5 +225,5 @@ conversation history survives in the log. Restarts mark in-flight work
 
 When the user says they're done, read the final file and use it for whatever
 comes next (e.g. `gh pr edit --body-file`), then
-`ah app markdown close <file>`. This skill composes with `write-gh` (if
+`ah app page close <file>`. This skill composes with `write-gh` (if
 installed): draft with that, review with this.

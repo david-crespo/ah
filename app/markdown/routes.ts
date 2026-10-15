@@ -15,7 +15,7 @@ import type { WebSocket } from "ws"
 import { assetPath } from "../../host/assets.ts"
 import { ClientBundles } from "../../host/bundle.ts"
 import { threadRoute } from "../../host/chat/routes.ts"
-import { type FileInfo, OpenFiles } from "../../host/files/files.ts"
+import { type AgentDirectory, type FileInfo, OpenFiles } from "../../host/files/files.ts"
 import { fileRoutes } from "../../host/files/routes.ts"
 import { type LiveMarkdown, markdownFiles, type MarkdownFile } from "./files.ts"
 import { fetchBlob, mimeTypes, resolveAsset } from "./github.ts"
@@ -28,9 +28,10 @@ export class MarkdownApp {
   files: OpenFiles<LiveMarkdown>
   #bundles = new ClientBundles("markdown")
 
-  /** `port` is the server's, for telling the agent which one to answer */
-  constructor(port: number) {
-    this.files = new OpenFiles(port, markdownFiles)
+  /** `port` is the server's, for telling the agent which one to answer, and
+   * `directory` where the agents its files are bound to are now */
+  constructor(port: number, directory: AgentDirectory | null = null) {
+    this.files = new OpenFiles(port, markdownFiles, { directory })
   }
 
   /** Open `path` for another app's page to show with <ah-markdown>, without

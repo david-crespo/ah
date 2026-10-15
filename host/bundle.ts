@@ -11,7 +11,7 @@ export const bundles = {
   // bundle.js for a file's page, and preview.js with just the <ah-markdown>
   // element, for other pages that show a file
   markdown: { "bundle.js": "client.ts", "preview.js": "preview.ts" },
-  html: { "chat.js": "client.ts" },
+  html: { "chat.js": "client.ts", "tracker.js": "tracker.ts" },
   dashboard: { "client.js": "client.ts" },
 } as const satisfies Record<string, Record<string, string>>
 

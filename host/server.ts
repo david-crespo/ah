@@ -1,7 +1,7 @@
-// Starting and stopping `ah serve`, the foreground server process. There's no
+// Starting and stopping `ah server serve`, the foreground server process. There's no
 // LaunchAgent: commands that need the server call ensureServer, which starts
 // one detached if nothing answers, so it outlives the agent's Bash command and
-// the session. The server writes its pid to a file so `ah stop` can kill it
+// the session. The server writes its pid to a file so `ah server stop` can kill it
 // even when it's too hung to answer.
 
 import { spawn } from "node:child_process"
@@ -70,7 +70,7 @@ function readPidFile(files: ServerFiles): { pid: number; port: number } | null {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Start `ah serve` on the port unless something already answers there, by
+ * Start `ah server serve` on the port unless something already answers there, by
  * running this same script again with its output going to the log. Returns
  * the running server's pid if there was one, else null.
  */
@@ -84,7 +84,7 @@ export async function ensureServer(
   const log = openSync(files.log, "a")
   const child = spawn(
     process.execPath,
-    [...process.execArgv, process.argv[1], "serve", "--port", String(port)],
+    [...process.execArgv, process.argv[1], "server", "serve", "--port", String(port)],
     { stdio: ["ignore", log, log], detached: true },
   )
   child.unref()
@@ -99,7 +99,7 @@ export async function ensureServer(
   process.exit(1)
 }
 
-/** Whether the process is a running `ah serve`, so a stale pid file can't
+/** Whether the process is a running `ah server serve`, so a stale pid file can't
  * make us kill some unrelated process that reused the pid */
 async function isAhServe(pid: number): Promise<boolean> {
   const { success, stdout } = await run("ps", ["-p", String(pid), "-o", "command="])
@@ -117,13 +117,30 @@ function kill(pid: number, signal: NodeJS.Signals) {
 
 /** Stop the server: ask it for its pid, else read the pid file. Returns what
  * happened, for printing. */
+/** Wait for `count` dashboard pages to follow the server, as pages open
+ * before a restart reconnect. Returns a status line. */
+export async function waitForPages(
+  port: number,
+  count: number,
+  timeoutMs = 5000,
+): Promise<string> {
+  let pages = 0
+  for (let waited = 0; waited < timeoutMs; waited += 100) {
+    pages = (await status(port))?.pages ?? 0
+    if (pages >= count)
+      return `${pages} dashboard ${pages === 1 ? "page" : "pages"} reconnected`
+    await sleep(100)
+  }
+  return `${pages} of ${count} dashboard pages reconnected`
+}
+
 export async function stopServer(port: number, files = defaultFiles()): Promise<string> {
   const answering = await status(port)
   const fromFile = readPidFile(files)
   const pid = answering?.pid ?? (fromFile?.port === port ? fromFile.pid : undefined)
   if (pid === undefined) {
     return answering
-      ? `a server from before ah stop is on port ${port}; stop it by hand (lsof -i :${port})`
+      ? `a server from before ah server stop is on port ${port}; stop it by hand (lsof -i :${port})`
       : "not running"
   }
   if (!answering && !(await isAhServe(pid))) {
