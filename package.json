@@ -10,10 +10,8 @@
   },
   "files": [
     "dist",
-    "app/**/*.css",
-    "app/dashboard/page.html",
-    "host/github-markdown.min.css",
-    "host/chat/chat.css"
+    "views/**/*.css",
+    "views/dashboard/page.html"
   ],
   "type": "module",
   "scripts": {

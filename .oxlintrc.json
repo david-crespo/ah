@@ -1,0 +1,56 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "overrides": [
+    {
+      "files": ["platform/**/*.ts"],
+      "excludeFiles": ["**/*.test.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "**/core/**",
+                  "!**/core/model.ts",
+                  "**/subjects/**",
+                  "**/views/**"
+                ],
+                "message": "platform/ is the bottom layer: of the others, it can use only the model's types"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["subjects/**/*.ts"],
+      "excludeFiles": ["**/*.test.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/core/**", "!**/core/model.ts", "**/views/**"],
+                "message": "subjects/ is under core/ and views/: it can use the model's types, nothing else from them"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["core/**/*.ts"],
+      "excludeFiles": ["**/*.test.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [{ "group": ["**/views/**"], "message": "core/ is under views/" }]
+          }
+        ]
+      }
+    }
+  ]
+}

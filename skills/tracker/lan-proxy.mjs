@@ -5,7 +5,7 @@
 // rewrites those.
 //
 // Usage: node lan-proxy.mjs <lan-ip> <page-id>...
-// Page ids are the first column of `ah app page ls` (e.g. index-f000374f).
+// Page ids are the first column of `ah view ls` (e.g. index-f000374f).
 import http from "node:http"
 
 const [lanIp, ...pageIds] = process.argv.slice(2)
@@ -17,8 +17,8 @@ const upstream = { host: "127.0.0.1", port: 7421 }
 const listenPort = 7430
 
 const allowed = (path) =>
-  pageIds.some((id) => path.startsWith(`/app/html/${id}/`)) ||
-  /^\/app\/html\/[\w.-]+\.(js|css)$/.test(path) ||
+  pageIds.some((id) => path.startsWith(`/view/html/${id}/`)) ||
+  /^\/view\/html\/[\w.-]+\.(js|css)$/.test(path) ||
   /^\/[\w.-]+\.css$/.test(path)
 
 http
@@ -40,5 +40,5 @@ http
     up.end()
   })
   .listen(listenPort, lanIp, () => {
-    for (const id of pageIds) console.log(`http://${lanIp}:${listenPort}/app/html/${id}/`)
+    for (const id of pageIds) console.log(`http://${lanIp}:${listenPort}/view/html/${id}/`)
   })

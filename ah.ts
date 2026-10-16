@@ -1,60 +1,56 @@
 #!/usr/bin/env node
-// ah, the agent host: a local server and the apps it hosts for watching agent
-// sessions. The layout mirrors the CLI and the routes: app/<name>/ holds an
-// app's commands (cli.ts, `ah app <name>`) and its routes (routes.ts,
-// /app/<name>/), and host/ holds what isn't any one app's: starting and
-// stopping the server, the terminal theme, posting to sessions, and the
-// chat layer (host/chat/: a page's thread with its session). The page app's
-// commands serve files from two backends with routes of their own,
-// app/markdown/ and app/html/.
+// ah, the agent host: a local server for watching agent sessions and the
+// views of files they show the user. The CLI has one group per noun in the
+// model (`ah -h`). The code is in four layers, each using only the ones
+// under it, and all of them the model's types (core/model.ts):
 //
-//   ah server start             start the server on 127.0.0.1:7420 (and 7421
-//                               for html pages) in the background; commands
-//                               that need it start it too
-//   ah server stop, restart     stop it, or restart it to pick up edits to ah
-//                               (host/server.ts)
-//   ah server serve             the server itself, in the foreground: what
-//                               start runs, logging to a file
-//   ah server status            whether a dashboard page is open, for agents
-//                               deciding where to show things
-//   ah hook agent|shell         what agent hooks and zsh run to report
-//                               sessions and directories (app/sessions/hook.ts)
-//   ah app                      list the apps
-//   ah app <name> open --in     open an app's view in some place: the dashboard
-//                               in a Chrome app window, a page in a browser
-//                               tab, the dashboard, or glow
-//   ah app page open            a markdown or HTML file an agent wrote, live
-//                               reloaded, with a conversation back to the agent
-//   ah app sessions ls          agent sessions (Claude, Codex) and their terminals
-//   ah debug tabs               print what ah sees of Rex, once, with each
-//                               tab's title vs the one ah computes; the
-//                               server keeps them set (app/tabtitle/)
+// - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
+//   and the markdown and html subject types that serve a file's views. What
+//   more than one view uses is at the top of views/ (the terminal theme,
+//   GitHub's markdown styles) and in views/thread/ (the conversation panel
+//   and selection popover).
+// - core/: the agents, their registry, the tab titles they give Rex tabs,
+//   and the tracker role (routes under /core/).
+// - subjects/: the files open in views, the agent each is bound to
+//   (subjects/files/), and each one's thread of requests to it
+//   (subjects/thread/). Agents reach it through AgentDirectory, which core
+//   implements.
+// - platform/: starting and stopping the server, its ports, processes and
+//   paths, and the adapters for Rex (rex.ts) and the harnesses' sessions
+//   (session.ts).
+//
+// .oxlintrc.json enforces the order, tests aside.
 
 import { Command } from "@commander-js/extra-typings"
 import { serve as nodeServe } from "@hono/node-server"
 import { readFile } from "node:fs/promises"
 import type { Duplex } from "node:stream"
 import { WebSocketServer, type WebSocket } from "ws"
-import { dashboard } from "./app/dashboard/cli.ts"
-import { agentFile, dashboardStatus } from "./app/dashboard/api.ts"
-import { Dashboard } from "./app/dashboard/routes.ts"
-import { MarkdownApp } from "./app/markdown/routes.ts"
-import { HtmlApp } from "./app/html/routes.ts"
-import { page, pageBackends } from "./app/page/cli.ts"
-import { sessions } from "./app/sessions/cli.ts"
-import { hook } from "./app/sessions/hook.ts"
-import { watchOpencode } from "./app/sessions/opencode.ts"
-import { SessionsApp } from "./app/sessions/routes.ts"
-import { TabTitleApp } from "./app/tabtitle/routes.ts"
-import { assetPath } from "./host/assets.ts"
-import { boxCss } from "./host/box.ts"
-import { die, parseNumber, portOption } from "./host/cli.ts"
-import { handoff, takeHandoff } from "./host/files/cli.ts"
-import { currentAgent, scrubSessionEnv } from "./host/session.ts"
-import { debug } from "./host/debug.ts"
-import { frameAncestors, gateHeaders, requestGate } from "./host/origin.ts"
-import { themeCss } from "./host/theme.ts"
-import { type Snapshot, watchRex } from "./host/rex.ts"
+import { dashboard, debugTabs } from "./views/dashboard/cli.ts"
+import { Dashboard } from "./views/dashboard/routes.ts"
+import { MarkdownBackend } from "./views/markdown/routes.ts"
+import { HtmlBackend } from "./views/html/routes.ts"
+import { request, tracker, view } from "./views/cli.ts"
+import { debugAgents, workspace } from "./core/cli.ts"
+import { hook } from "./core/hook.ts"
+import { watchOpencode } from "./core/opencode.ts"
+import { Core } from "./core/core.ts"
+import { TitleSetter } from "./core/tabtitle/setter.ts"
+import { assetPath } from "./platform/assets.ts"
+import { boxCss } from "./views/dashboard/box.ts"
+import { die, parseNumber, portOption } from "./platform/cli.ts"
+import { handoff, takeHandoff } from "./subjects/files/cli.ts"
+import { scrubSessionEnv } from "./platform/session.ts"
+import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
+import { themeCss } from "./views/theme.ts"
+import { FILE_KINDS, type RexState } from "./core/model.ts"
+import {
+  onRexHealth,
+  type RexHealth,
+  rexHealth,
+  rexTrouble,
+  watchRex,
+} from "./platform/rex.ts"
 import {
   ensureServer,
   defaultFiles,
@@ -63,17 +59,35 @@ import {
   stopServer,
   waitForPages,
   writePidFile,
-} from "./host/server.ts"
+} from "./platform/server.ts"
 
-// Each app has its own verbs, and `open` shows one of its views in a place
-// given by --in. Each view decides how to draw itself there, so a place can
-// gain a view (a markdown file in the dashboard, the dashboard in a split)
-// without the command changing. Each view's --in only accepts the places it
-// supports so far.
-const apps = { dashboard, page, sessions }
+/** "3h12m", "5m", "40s" */
+function duration(ms: number): string {
+  const s = Math.floor(ms / 1000)
+  const [h, m] = [Math.floor(s / 3600), Math.floor((s % 3600) / 60)]
+  return h ? `${h}h${m}m` : m ? `${m}m` : `${s}s`
+}
 
-interface AppRoutes {
-  /** `rest` is the path after /app/<name>/ */
+/** `ah server status`'s lines on Rex */
+function rexLines(rex: RexHealth): string[] {
+  const ago = (at: number) => `${duration(Date.now() - at)} ago`
+  const { connected, lastEventAt, reconnects } = rex.events
+  const events = [connected ? "connected" : "not running"]
+  if (lastEventAt !== null) events.push(`last event ${ago(lastEventAt)}`)
+  if (reconnects)
+    events.push(`${reconnects} ${reconnects === 1 ? "reconnect" : "reconnects"}`)
+  const lines = [`rex events: ${events.join(", ")}`]
+  if (rex.lastCall) {
+    const { at, error } = rex.lastCall
+    lines.push(`last rex call: ${ago(at)}, ${error === null ? "ok" : `failed: ${error}`}`)
+  }
+  if (rex.unrunnable) lines.push(rex.unrunnable)
+  if (rex.binary !== "rex") lines.push(`rex: ${rex.binary} (the one on PATH was gone)`)
+  return lines
+}
+
+interface ViewRoutes {
+  /** `rest` is the path after /view/<name>/ */
   handle(req: Request, rest: string): Promise<Response>
   /** A WebSocket at `rest`: what to do with it once connected, or null if
    * there's nothing there */
@@ -82,94 +96,115 @@ interface AppRoutes {
 
 /** `snapshotDelayMs` null turns off snapshotting the focused workspace */
 async function serve(port: number, snapshotDelayMs: number | null) {
+  const startedAt = Date.now()
   scrubSessionEnv(process.env)
   const css = themeCss() + boxCss()
-  // The stylesheet follows the OS theme, as the markdown app's pages do. The
+  // The stylesheet follows the OS theme, as the markdown pages do. The
   // dashboard is always dark, like the terminal, so its copy drops the light
   // theme.
-  const markdownCss = await readFile(assetPath("host/github-markdown.min.css"), "utf8")
+  const markdownCss = await readFile(assetPath("views/github-markdown.min.css"), "utf8")
   const markdownDarkCss = markdownCss.replace(
     "@media (prefers-color-scheme:light)",
     "@media not all",
   )
 
-  const chatCss = await readFile(assetPath("host/chat/chat.css"), "utf8")
-  const trackerCss = await readFile(assetPath("app/html/tracker.css"), "utf8")
+  const chatCss = await readFile(assetPath("views/thread/chat.css"), "utf8")
+  const taskListCss = await readFile(assetPath("views/html/task_list.css"), "utf8")
 
   // Agents' HTML pages run whatever scripts they include, so they get an
-  // origin of their own, which this port refuses (app/html/routes.ts)
+  // origin of their own, which this port refuses (views/html/routes.ts)
   const pagesPort = port + 1
-  // The session registry is also where pages find the agents they're bound
-  // to
-  const sessionsApp = SessionsApp.load()
-  const markdownApp = new MarkdownApp(port, sessionsApp)
-  const htmlApp = new HtmlApp(port, pagesPort, sessionsApp)
-  const dashboardApp = new Dashboard({
+  // The core: the agents, and where pages find the ones they're bound to
+  const core = Core.load()
+  const markdownBackend = new MarkdownBackend(port, core)
+  const htmlBackend = new HtmlBackend(port, pagesPort, core, core.trackers)
+  const dashboardBackend = new Dashboard({
     snapshotDelayMs,
-    markdown: markdownApp,
-    html: htmlApp,
-    sessions: sessionsApp,
+    markdown: markdownBackend,
+    html: htmlBackend,
+    core,
   })
-  const tabtitleApp = new TabTitleApp()
+  const tabTitles = new TitleSetter()
   const routes = {
-    dashboard: dashboardApp,
-    markdown: markdownApp,
-    html: htmlApp,
-    sessions: sessionsApp,
-    tabtitle: tabtitleApp,
-  } satisfies Record<string, AppRoutes>
+    dashboard: dashboardBackend,
+    markdown: markdownBackend,
+    html: htmlBackend,
+  } satisfies Record<string, ViewRoutes>
 
-  // One watcher for every app that follows the terminal, and one session
-  // registry. An app
-  // that throws on a snapshot mustn't keep it from the others, or take down
-  // the watcher.
-  const onSnapshot = (snapshot: Snapshot) => {
-    for (const app of [dashboardApp, sessionsApp, tabtitleApp]) {
+  // One watcher for everything that follows the terminal, and one agent
+  // registry. The core goes first: the others ask it about tabs (whose
+  // workspace has which tracker). One that throws on a Rex update mustn't
+  // keep it from the others, or take down the watcher.
+  const onRex = (rex: RexState) => {
+    for (const watcher of [core, dashboardBackend, tabTitles]) {
       try {
-        app.onSnapshot(snapshot)
+        watcher.onRex(rex)
       } catch (e) {
-        console.error(`ah: ${app.constructor.name} failed on a snapshot:`, e)
+        console.error(`ah: ${watcher.constructor.name} failed on a Rex update:`, e)
       }
     }
   }
-  void watchRex(onSnapshot)
-  tabtitleApp.onRegistry(sessionsApp.registry)
-  sessionsApp.subscribe((registry) => tabtitleApp.onRegistry(registry))
+  void watchRex(onRex)
+  onRexHealth(() => dashboardBackend.setRexTrouble(rexTrouble(rexHealth())))
+  tabTitles.onRegistry(core.registry)
+  core.subscribe((registry) => tabTitles.onRegistry(registry))
+  // What windows show, so an agent hears when one it opened closes
+  core.watchShowing(() => ({
+    files: [...markdownBackend.files.list(), ...htmlBackend.files.list()].map((f) => ({
+      path: f.path,
+      agent: f.binding.agent,
+      open: f.pages.presence.open(),
+    })),
+    dashboard: dashboardBackend.presence.open(),
+  }))
   // An agent starting or going away: held comments go to whoever is there
   // now, and pages show whether anyone is
-  sessionsApp.subscribe(() => {
-    markdownApp.files.refresh()
-    htmlApp.files.refresh()
+  core.subscribe(() => {
+    markdownBackend.files.refresh()
+    htmlBackend.files.refresh()
   })
   // opencode has no hooks: its service streams its sessions' events
-  void watchOpencode(sessionsApp)
+  void watchOpencode(core)
 
-  // Routes mirror the CLI, but for the page app's backends: each lives under
-  // /app/<name>/, with relative URLs inside it so apps can embed each
-  // other's views, and the host keeps /status and assets any app may use at
-  // the root
-  const appRoute = (pathname: string) => {
-    const m = pathname.match(/^\/app\/([^/]+)(\/.*)?$/)
+  // Each view lives under /view/<name>/, with relative URLs inside it so
+  // views can embed each other, and the host keeps /status and assets any
+  // view may use at the root
+  const viewRoute = (pathname: string) => {
+    const m = pathname.match(/^\/view\/([^/]+)(\/.*)?$/)
     if (!m || !Object.hasOwn(routes, m[1])) return null
     const name = m[1] as keyof typeof routes
-    const app: AppRoutes = routes[name]
-    return { name, app, rest: m[2] }
+    const view: ViewRoutes = routes[name]
+    return { name, view, rest: m[2] }
   }
+  const pageRoute = (pathname: string) => pathname.match(/^\/view\/html\/(.*)$/)?.[1]
 
   const cssResponse = (text: string) =>
     new Response(text, { headers: { "content-type": "text/css; charset=utf-8" } })
 
   const handler = (req: Request) => {
     const { pathname } = new URL(req.url)
-    if (pathname === "/") return Response.redirect(new URL("/app/dashboard/", req.url), 302)
-    const inApp = appRoute(pathname)
-    if (inApp) {
-      const { name, app, rest } = inApp
-      if (!rest) return Response.redirect(new URL(`/app/${name}/`, req.url), 302)
-      return app.handle(req, rest.slice(1))
+    if (pathname === "/")
+      return Response.redirect(new URL("/view/dashboard/", req.url), 302)
+    const inView = viewRoute(pathname)
+    if (inView) {
+      const { name, view, rest } = inView
+      if (!rest) return Response.redirect(new URL(`/view/${name}/`, req.url), 302)
+      return view.handle(req, rest.slice(1))
     }
+    if (pathname.startsWith("/core/"))
+      return core.handle(req, pathname.slice("/core/".length))
+    if (pathname === "/tabtitles") return Response.json(tabTitles.tabs)
     if (pathname === "/status") {
-      return Response.json({ pid: process.pid, pages: dashboardApp.pages } satisfies Status)
+      return Response.json({
+        pid: process.pid,
+        pages: dashboardBackend.pages,
+        views: [...markdownBackend.files.list(), ...htmlBackend.files.list()].reduce(
+          (n, f) => n + f.pages.locations.length,
+          0,
+        ),
+        startedAt,
+        rex: rexHealth(),
+      } satisfies Status)
     }
     if (pathname === "/github-markdown.css") return cssResponse(markdownCss)
     if (pathname === "/github-markdown-dark.css") return cssResponse(markdownDarkCss)
@@ -181,10 +216,10 @@ async function serve(port: number, snapshotDelayMs: number | null) {
   // The pages port has only what html pages load
   const pagesRoutes = (req: Request) => {
     const { pathname } = new URL(req.url)
-    const m = pathname.match(/^\/app\/html\/(.*)$/)
-    if (m) return htmlApp.handlePage(req, m[1])
+    const rest = pageRoute(pathname)
+    if (rest !== undefined) return htmlBackend.handlePage(req, rest)
     if (pathname === "/chat.css") return cssResponse(chatCss)
-    if (pathname === "/tracker.css") return cssResponse(trackerCss)
+    if (pathname === "/task_list.css") return cssResponse(taskListCss)
     return new Response("not found", { status: 404 })
   }
   // The dashboard frames them (its gate takes those loads), and nothing else may
@@ -237,8 +272,8 @@ async function serve(port: number, snapshotDelayMs: number | null) {
     port,
     handler,
     (pathname, query) => {
-      const inApp = appRoute(pathname)
-      return (inApp?.rest && inApp.app.upgrade?.(inApp.rest.slice(1), query)) || null
+      const inView = viewRoute(pathname)
+      return (inView?.rest && inView.view.upgrade?.(inView.rest.slice(1), query)) || null
     },
     () => {
       writePidFile(defaultFiles(), port)
@@ -248,33 +283,28 @@ async function serve(port: number, snapshotDelayMs: number | null) {
   listen(
     pagesPort,
     pagesHandler,
-    (pathname) => {
-      const m = pathname.match(/^\/app\/html\/(.*)$/)
-      return m ? htmlApp.upgradePage(m[1]) : null
+    (pathname, query) => {
+      const rest = pageRoute(pathname)
+      return rest === undefined ? null : htmlBackend.upgradePage(rest, query)
     },
     () => console.error(`ah: serving html pages on http://127.0.0.1:${pagesPort}`),
     port,
   )
 }
 
-const app = new Command("app")
-  .description("Apps the server hosts, each with its own verbs; alone, lists them")
-  .action(function () {
-    for (const c of this.commands) console.log(`${c.name()}\t${c.description()}`)
-  })
-for (const command of Object.values(apps)) app.addCommand(command)
-
 const program = new Command("ah").description(
-  "Agent host: the server and the apps it hosts for watching agent sessions",
+  "Agent host: a lightweight coordination layer around coding agents and the Rex " +
+    "terminal. It lets agents spin up web UIs and message back and forth with them.",
 )
 
 const server = new Command("server").description(
-  "The local server the apps run in: start, stop, restart, or run it",
+  "Manage the local server that hosts pages and tracks agents",
 )
 
 server
   .command("start")
-  .description("Start the server in the background, unless it's running")
+  .summary("Start the server in the background")
+  .description("Start the server in the background. Does nothing if it's already running.")
   .addOption(portOption("Port to serve on"))
   .action(async ({ port }) => {
     const pid = await ensureServer(port)
@@ -283,7 +313,8 @@ server
 
 server
   .command("restart")
-  .description("Stop the server and start it again, e.g. after editing ah")
+  .summary("Restart the server")
+  .description("Stop the server and start it again, for example after editing ah.")
   .addOption(portOption("Port to serve on"))
   .action(async ({ port }) => {
     const pages = (await status(port))?.pages ?? 0
@@ -292,13 +323,13 @@ server
     // sessions' tokens mustn't go on disk, and before pages reconnect, so
     // they find their files open.
     const open = await Promise.all(
-      pageBackends.map(async (name) => ({ name, requests: await handoff(name, port) })),
+      FILE_KINDS.map(async (kind) => ({ kind, requests: await handoff(kind, port) })),
     )
     console.error(`ah: ${await stopServer(port)}`)
     await ensureServer(port)
     let reopened = 0
-    for (const { name, requests } of open)
-      reopened += await takeHandoff(name, port, requests)
+    for (const { kind, requests } of open)
+      reopened += await takeHandoff(kind, port, requests)
     if (reopened)
       console.error(`ah: reopened ${reopened} ${reopened === 1 ? "file" : "files"}`)
     // Until the pages open before reconnect, a command that shows something
@@ -308,7 +339,10 @@ server
 
 server
   .command("serve")
-  .description("Run the server in the foreground, logging to the terminal; start runs this")
+  .summary("Run the server in the foreground")
+  .description(
+    "Run the server in the foreground, logging to the terminal. `ah server start` runs this command in the background.",
+  )
   .addOption(portOption("Port to serve on"))
   .option(
     "--snapshot-delay <seconds>",
@@ -331,18 +365,36 @@ server
 
 server
   .command("status")
-  .description("Whether a dashboard page is open, and this session's file in it")
+  .summary("Show whether the server is running")
+  .description(
+    "Show whether the server is running, with its pid, port, uptime, and log; how many pages show files; and whether it can follow Rex: the `rex events` stream, the last `rex` call, and which `rex` it runs.",
+  )
   .addOption(portOption())
   .action(async ({ port }) => {
-    console.log(await dashboardStatus(port))
-    const agent = currentAgent()
-    const file = agent && (await agentFile(port, agent))
-    if (file) console.log(`in the dashboard: ${file}`)
+    const s = await status(port)
+    if (!s) return console.log(`not running on port ${port}`)
+    const up = s.startedAt === null ? "" : `, up ${duration(Date.now() - s.startedAt)}`
+    console.log(`running, pid ${s.pid}, port ${port}${up}`)
+    if (s.views !== null)
+      console.log(`${s.views} ${s.views === 1 ? "view" : "views"} connected`)
+    if (s.rex) for (const line of rexLines(s.rex)) console.log(line)
+    console.log(`log: ${defaultFiles().log}`)
   })
 
-program.addCommand(server)
-program.addCommand(hook)
-program.addCommand(app)
-program.addCommand(debug)
+const debug = new Command("debug").description(
+  "Inspect how ah sees Rex tabs and the agents in them",
+)
+debug.addCommand(debugTabs)
+debug.addCommand(debugAgents)
+for (const command of [view, request, tracker, workspace, dashboard, server, hook, debug])
+  program.addCommand(command)
+
+// `-h` is enough; no `help` subcommand, which isn't inherited, so at every
+// level
+const noHelpCommand = (c: Command) => {
+  c.helpCommand(false)
+  for (const sub of c.commands) noHelpCommand(sub as Command)
+}
+noHelpCommand(program)
 
 await program.parseAsync()

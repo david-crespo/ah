@@ -1,11 +1,20 @@
+# The project's formatter (.oxfmtrc.json), in place of a global prettier.
+# Helix looks the command up on PATH and runs it in the file's directory, so
+# npx finds the local install.
 [[language]]
 name = "typescript"
-scope = "source.ts"
-injection-regex = "^(ts|typescript)$"
-file-types = ["ts"]
-shebangs = ["deno", "node"]
-roots = ["deno.json", "package.json", "tsconfig.json"]
-language-servers = ["deno-lsp"]
-indent = { tab-width = 2, unit = "  " }
-formatter = { command = "deno", args = ["fmt", "-"] }
+formatter = { command = "npx", args = [
+  "--no-install",
+  "oxfmt",
+  "--stdin-filepath=%{buffer_name}",
+] }
+auto-format = true
+
+[[language]]
+name = "javascript"
+formatter = { command = "npx", args = [
+  "--no-install",
+  "oxfmt",
+  "--stdin-filepath=%{buffer_name}",
+] }
 auto-format = true

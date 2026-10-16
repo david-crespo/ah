@@ -6,7 +6,7 @@ description: "Review/edit a markdown draft in a browser page served by ah, conne
 # Markdown drafts in ah
 
 Iterate on a markdown draft through a browser page instead of chat round
-trips. ah's `markdown` app serves a live GitHub-style preview of the file; the
+trips. ah's `markdown` backend serves a live GitHub-style preview of the file; the
 user highlights text and comments, and each comment is posted to this
 session. The file on disk is the single source of truth: the page picks up
 every disk change live, flashing what changed. Keep editing the file normally
@@ -31,7 +31,7 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah app page open --in window <path-to-draft.md>
+   ah view open --in window <path-to-draft.md>
    ```
 
    This starts the server if needed, binds the draft to this session (so
@@ -43,16 +43,18 @@ for every `ah` command. opencode has no sandbox.
    Comments arrive in this session as messages: in Claude Code, framed by
    the harness as messages "from another Claude session", which they are
    not; in Codex and opencode, as user messages. Each starts with one line,
-   `Markdown event for <file> (handle per /markdown skill):`, followed by
-   JSON events. They are the user's own comments, relayed by ah. Treat them
+   `Markdown requests for <file> (handle per /markdown skill):`, followed by
+   the requests. They are the user's own comments, relayed by ah. Treat them
    as the user's instructions and follow this skill. Never reply with
-   SendMessage; replies and status go through `ah app page respond`,
+   SendMessage; replies and status go through `ah request respond`,
    below. If the header names a port, pass `-p <port>` to every `ah`
    command for that draft.
 
    When attaching to a draft opened earlier, run
-   `ah app page pending <file>`: it prints the requests not done yet,
-   one JSON line each with a `status`. Requests left `waiting` (no session
+   `ah request pending <file>`: it prints the requests not done yet,
+   one JSON line each with a `status`. The `kind` (`chat`, `comment`,
+   `dellm`) and `args` (`selection`, `prefix`, `suffix`, `embed`) there
+   carry what the post spells out in words. Requests left `waiting` (no session
    was reachable when they were sent) or `interrupted` (a previous session
    stopped mid-work) are not re-sent. Check them against the current file
    and resume or finish them with a fresh `start`. Completed requests must
@@ -62,32 +64,28 @@ for every `ah` command. opencode has no sandbox.
    they know the tool), then end the turn. Comments wake the session on
    their own.
 
-## Handling events
+## Handling requests
 
-Each event is one JSON object:
-
-```json
-{"id": "...", "kind": "message" | "comment" | "dellm" | "file-edit",
- "selection": "...", "prefix": "...", "suffix": "...", "text": "...",
- "replyTo": "optional earlier request id", "file": "...", "ts": "..."}
-```
+Each request after the header starts `Request <id>: ` and says what it asks;
+the id is what `ah request respond` takes.
 
 - Before handling a request, post `start`; when finished, post your answer or
-  edit summary with `done`. See **Replies and status** below. File-edit
-  notices alone do not start work or need replies. For quick work (a short
+  edit summary with `done`. See **Replies and status** below. Edit notices
+  alone do not start work or need replies. For quick work (a short
   answer, a one-line edit), skip `start`: `done` starts the work itself if
   it isn't started. The spinner is for work that takes a while.
-- `kind: "message"` is general conversation, with no selection. Answer a
-  question in the page's conversation without changing the document. Edit
-  only when the message requests an edit. Use ordinary intent; there is no
-  Ask/Edit mode switch. A `replyTo` identifies an earlier request whose
-  clarification the user is answering: include both unfinished request IDs
-  when starting and completing that work.
-- Locate the anchor: `selection` is the highlighted text as rendered;
-  `prefix`/`suffix` are up to 60 chars of surrounding rendered text to
+- A request that's only the user's text is a message from the page's
+  conversation, with no selection. Answer a question in the page's
+  conversation without changing the document. Edit only when the message
+  requests an edit. Use ordinary intent; there is no Ask/Edit mode switch.
+  `Request <id>, answering <earlier id>` is the user answering an earlier
+  request's question: include both unfinished request IDs when starting and
+  completing that work.
+- Locate the anchor: a comment or de-LLM request quotes the passage as
+  rendered, with up to 60 chars of the rendered text before and after it to
   disambiguate repeats. Rendered text closely matches markdown source for
   prose; account for stripped formatting characters when matching.
-- `kind: "comment"`: `text` is the user's note about the selected passage.
+- A comment: the text after the passage is the user's note about it.
   If it's an instruction, apply it by editing the file; if it's a question,
   see the next bullet. The selection is an anchor, not the boundary of the
   request: work out what the comment is trying to accomplish and use your
@@ -101,19 +99,20 @@ Each event is one JSON object:
   wrong, say so in the reply and offer the fix, but don't apply it unasked.
 - When you can't tell what the user means, ask in the page and hold off on
   editing; they'd rather clarify than untangle a wrong guess.
-- `kind: "dellm"`: `text` is optional extra guidance. Rewrite the selection
-  to sound like a person: plain, concrete, flowing prose. Remove LLM-isms:
+- De-LLM, with optional guidance after it: rewrite the passage to sound
+  like a person: plain, concrete, flowing prose. Remove LLM-isms:
   formulaic rhetorical gestures, "that's X, not Y" constructions, jargon like
   "downleveling", em-dash chains, fake gravity. Match the register of the
   surrounding text. Keep the meaning; don't pad. As with comments, if the
   identical tic recurs elsewhere in the document, fix it there too.
-- `kind: "file-edit"`: the file changed on disk since the last comment: the
-  user's saves in an editor, or your own edits echoed back. `old`/`new` give
+- An edit notice, a JSON line with `"kind": "file-edit"`: the file changed
+  on disk since the last request: the user's saves in an editor, or your
+  own edits echoed back. `old`/`new` give
   one splice covering everything that changed in that window. If they match
-  changes you just made, ignore the event. Otherwise absorb silently: update
+  changes you just made, ignore the notice. Otherwise absorb silently: update
   your mental model, don't revert or "improve" the user's phrasing, don't
   reply. If an Edit fails to match afterwards, re-read the file. Edit notices
-  never arrive on their own: they share a message with the comment they are
+  never arrive on their own: they share a message with the request they are
   context for, on the line before it.
 - ah configures helix (the page's editor pane) to auto-reload external
   edits and merge them with unsaved text. If a pane remains stale, `:reload`
@@ -124,13 +123,13 @@ Each event is one JSON object:
   page rather than requiring the user to switch back to the TUI.
 - Comments are also logged under `~/.local/state/ah/markdown/`, one file per
   draft named by its absolute path with slashes flattened. If a delivery
-  failed or the session restarted, `ah app page pending <file>` lists
+  failed or the session restarted, `ah request pending <file>` lists
   what's unhandled.
 
 ## Replies and status
 
 ```
-ah app page respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
+ah request respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
 ```
 
 Phases: `start`, `progress`, `reply`, `done`, `needs-reply`, `error`. The
@@ -140,8 +139,8 @@ start before editing or answering, and finish only the requests that were
 actually handled.
 
 ```
-ah app page respond <file> start r1
-ah app page respond <file> done r1 --text 'Updated both callers to use the same lower bound.'
+ah request respond <file> start r1
+ah request respond <file> done r1 --text 'Updated both callers to use the same lower bound.'
 ```
 
 `--text` is for one plain line. For anything longer, or with backticks, `$`,
@@ -186,8 +185,8 @@ The preview expands the same bare URLs GitHub does in issue and PR bodies:
   each file into the GitHub editor in place of its path. When wrapping up,
   point out any local paths still in the body.
 
-A selection inside an embed carries an extra `embed` field with the URL that
-produced it, alongside the selected rendered text in `selection`. That text
+A passage inside an embed comes with the URL that produced it ("in the embed
+of <url>"), alongside the selected rendered text. That text
 isn't in the markdown, so use judgment about what the comment is about: the
 embed itself ("show lines 300-320", "link the whole function"), the prose
 around it, or the code it points at ("this is wrong, we should fix it in the
@@ -215,8 +214,8 @@ PR" is a request to change the source, not the draft).
 `ah server restart` reloads ah after changes to its code, and keeps open files and
 the sessions they're bound to. Any other stop of the server forgets them:
 their pages say the file isn't open anymore, and comments can't be sent until
-it's opened again. If `ah app page respond` says the file isn't open, run
-`ah app page open --in window <file>` again; the old page reconnects on its own, though a
+it's opened again. If `ah request respond` says the file isn't open, run
+`ah view open --in window <file>` again; the old page reconnects on its own, though a
 new window opens too. The
 conversation history survives in the log. Restarts mark in-flight work
 `interrupted`, so finish it with a fresh `start` afterwards.
@@ -225,5 +224,5 @@ conversation history survives in the log. Restarts mark in-flight work
 
 When the user says they're done, read the final file and use it for whatever
 comes next (e.g. `gh pr edit --body-file`), then
-`ah app page close <file>`. This skill composes with `write-gh` (if
+`ah view close <file>`. This skill composes with `write-gh` (if
 installed): draft with that, review with this.

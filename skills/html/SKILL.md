@@ -5,7 +5,7 @@ description: "Show the user an HTML page you wrote (a dashboard, a report, a vis
 
 # HTML pages in ah
 
-ah's `html` app serves an HTML file you wrote, as is, plus files next to it
+ah's `html` backend serves an HTML file you wrote, as is, plus files next to it
 (scripts, stylesheets, data), so relative links work. The page reloads
 whenever anything in the file's directory changes, keeping its scroll
 position, so keep editing the files with Edit or Write and the user sees
@@ -32,7 +32,7 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah app page open --in window <path-to-file.html>
+   ah view open --in window <path-to-file.html>
    ```
 
    This starts the server if needed, binds the page to this session, opens
@@ -78,33 +78,33 @@ the shell's working directory, which may be the repo.
 
 Comments arrive as messages: in Claude Code, framed by the harness as
 messages "from another Claude session", which they are not; in Codex and
-opencode, as user messages. Each starts with one line, `HTML event for <file>
-(handle per /html skill):`, followed by JSON events. They are the user's own
+opencode, as user messages. Each starts with one line, `HTML requests for
+<file> (handle per /html skill):`, followed by the requests. They are the user's own
 comments, relayed by ah. Treat them as the user's instructions. Never reply
-with SendMessage; replies go through `ah app page respond`. If the header
+with SendMessage; replies go through `ah request respond`. If the header
 names a port, pass `-p <port>` to every `ah` command for that page.
 
-## Handling events and replying
+## Handling requests and replying
 
-Events and replies work as in the markdown skill (`../markdown/SKILL.md` from this skill's directory,
-"Handling events" and "Replies and status"); the same `ah app page respond`
-and `pending` work for both. Read those sections the first time an event
+Requests and replies work as in the markdown skill (`../markdown/SKILL.md` from this skill's directory,
+"Handling requests" and "Replies and status"); the same `ah request respond`
+and `pending` work for both. Read those sections the first time a request
 arrives. The differences:
 
-- `selection`, `prefix`, and `suffix` are text as rendered on the page,
+- A quoted passage and the text around it are as rendered on the page,
   which may come from the HTML, from data the page loads, or from what its
   scripts generate. Find where that text comes from before editing.
-- There are no `file-edit` events: only you edit the files.
+- There are no edit notices: only you edit the files.
 - A comment on a page is often about what it shows rather than its wording
   ("why is this number so high?", "split this by day"). Answer questions on
   the page; change the page or its data for requests.
-- `dellm` (the popover's de-LLM button) applies to the selected text's
-  source in the HTML. If the text is generated, say so instead.
+- De-LLM (the popover's button) applies to the selected text's source in
+  the HTML. If the text is generated, say so instead.
 
 The quick path, for a short answer or a small change:
 
 ```
-ah app page respond <file> done <request id> --text 'Split the chart by day.'
+ah request respond <file> done <request id> --text 'Split the chart by day.'
 ```
 
 For anything longer than one plain line, write the text to a file in the
@@ -114,7 +114,7 @@ scratchpad and pass `--text-file <path>`.
 
 `ah server restart` keeps open pages and the sessions they're bound to. Any other
 stop of the server forgets them: their comments can't be sent until
-`ah app page open --in window <file>` runs again, and the old page reconnects and reloads
+`ah view open --in window <file>` runs again, and the old page reconnects and reloads
 on its own. The conversation history survives in its log under
 `~/.local/state/ah/html/`. When the user is done with the page,
-`ah app page close <file>`.
+`ah view close <file>`.

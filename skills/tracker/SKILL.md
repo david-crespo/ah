@@ -17,23 +17,27 @@ fails.
 ## Starting or picking one up
 
 ```
-ah app page open --tracker --in dashboard .claude/notes/2026-10-15-post-rex-review-tracker/index.html --title 'Post-Rex review' --goal 'Clean up what the port left behind, then pick the next features.'
+ah tracker add .claude/notes/2026-10-15-post-rex-review-tracker/index.html --title 'Post-Rex review' --goal 'Clean up what the port left behind, then pick the next features.'
 ```
 
 A new tracker goes in `.claude/notes/<YYYY-MM-DD>-<slug>-tracker/index.html`,
-today's date and a kebab-case slug, in a directory of its own. `--tracker`
-writes it from the template if it isn't there, and `--in dashboard` shows it
-as this session's file in the dashboard, bound to the session. To show an
-existing tracker again, run `ah app page open --in dashboard <path>`: when
-picking work back up, and if the server stopped other than by `ah server restart`,
-which keeps the page bound to the session. If it fails, mention it in a line and move on.
+today's date and a kebab-case slug, in a directory of its own. `ah tracker
+add` writes it from the template if it isn't there, adds it to the
+workspace's active trackers (back from parked or done if it was), makes it
+the current one, which the dashboard shows in every tab on the
+workspace, and binds it to this session. To bind an existing tracker again,
+run `ah tracker add <path>`: when picking work back up, and if the server
+stopped other than by `ah server restart`, which keeps the page bound to the
+session. If it fails, mention it in a line and move on.
 
-Picking up: after a `/clear` the SessionStart hook names the session's
-tracker. In a fresh session, find it with `ls -td .claude/notes/*-tracker/`
-and take the newest one that fits the request (ask if it's unclear). If
-there's an existing tracker for the work, use it rather than starting
-another. Older trackers are markdown (`*-tracker.md`); keep working in one of
-those as it is unless the user asks to convert it.
+Picking up: the SessionStart hook names the workspace's current tracker.
+`ah tracker ls` lists the workspace's active ones, the current one marked
+`*`, then the parked ones; `ah tracker ls --done` lists the finished ones.
+Take the one that fits the request (ask if it's unclear). If there's an
+existing tracker for the work, use it rather than starting another, even a
+parked or finished one: adding it puts it back in the list. Older trackers
+are markdown (`*-tracker.md`); keep working in one of those as it is unless
+the user asks to convert it.
 
 When starting mid-work, record the existing revs as done items.
 
@@ -51,7 +55,7 @@ item in the one that fits:
   <h3>Tracker skill and the CLAUDE.md pointer</h3>
   <p>
     What's wrong or wanted, what to change, with file references
-    (<code>app/html/cli.ts:42</code>), and what was decided.
+    (<code>views/cli.ts:42</code>), and what was decided.
   </p>
   <ul>
     <li>Lists for several parts.</li>
@@ -97,7 +101,7 @@ item in the one that fits:
 ```
 
 Don't add `<style>`, scripts, other elements or groups, or change the page
-around the items; the stylesheet and `tracker.js` own all of that.
+around the items; the stylesheet and `task_list.js` own all of that.
 
 ## Keeping it current
 
@@ -113,17 +117,17 @@ around the items; the stylesheet and `tracker.js` own all of that.
 ## The Go button
 
 Each `todo` and `hold` item has a Go button. A click wakes the session with an
-HTML event (the html skill's format; in Claude Code it's framed as a message
-"from another Claude session", which it isn't). The event's text is
-`Go ahead with <id>: <title>`: the user's instruction to start that item,
-like typing "do 4". The page shows a spinner on the button until you answer
+HTML request (the html skill's format; in Claude Code it's framed as a message
+"from another Claude session", which it isn't) that reads
+`Go ahead with item <id>: <title>`: the user's instruction to start that
+item, like typing "do 4". The page shows a spinner on the button until you answer
 the request:
 
-1. `ah app page respond <file> start <request id>`, and set the item to
+1. `ah request respond <file> start <request id>`, and set the item to
    `status="doing"`.
 2. Do the work and answer in the terminal, as for any request. The dashboard
    is a companion to the terminal, and its conversation panel is hidden.
-3. `ah app page respond <file> done <request id>`, with no text, and update
+3. `ah request respond <file> done <request id>`, with no text, and update
    the item (`done`, `rev`). The spinner clears.
 
 If you need to ask before going ahead, ask in the terminal and post
@@ -134,7 +138,7 @@ shows a warning sign.
 
 Each item also has a comment button, left of Go, that opens a box for a note
 about that item. It arrives the same way, as
-`Comment on <id>: <title>`, a blank line, then the user's text. Treat it like
+`a comment on item <id>: <title>`, a blank line, then the user's text. Treat it like
 a message typed in the terminal about that item: answer a question in the
 terminal, make a requested change to the item or the work, and post `done`
 for the request (no text) when finished. The comment button shows the same
@@ -144,9 +148,11 @@ text work the same way.
 
 ## Finishing
 
-When the goal is done or the work moves elsewhere,
-`ah app page close <file>` stops serving it and takes it out of the
-dashboard.
+The user usually parks or finishes a tracker with the buttons by its title.
+When the goal is done, `ah tracker finish <path>` marks the tracker done and
+takes it out of the list; `ah tracker park <path>` sets it aside with work
+left, until it's added again. If it was current, the tracker used before it
+becomes current.
 
 ## On the phone
 
@@ -161,7 +167,7 @@ node ~/.claude/skills/tracker/lan-proxy.mjs <lan-ip> <page-id>...
 
 The LAN IP is the `inet` address on the local network in `ifconfig` output
 (`192.168.…`); `ipconfig getifaddr en0` fails in the sandbox. Page ids are the
-first column of `ah app page ls`, and an html page can go alongside the
+first column of `ah view ls`, and an html page can go alongside the
 tracker. It prints a URL per page to give the user. The page doesn't reload
 live (pull to refresh) and comments and Go don't work from it: the proxy
 passes only GETs and no socket. Stop it when the user is back.

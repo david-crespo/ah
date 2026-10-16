@@ -4,7 +4,7 @@
   "ignorePatterns": [
     "dist/**",
     ".claude/**",
-    "host/github-markdown.min.css",
-    "app/markdown/xterm.css"
+    "views/github-markdown.min.css",
+    "views/markdown/xterm.css"
   ]
 }

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- As the markdown file page's: the jj log and the file's preview are
+         set as HTML, and a markdown file can hold any. Frames are the html
+         app's pages, on the server's port + 1. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src http://127.0.0.1:*; object-src 'none'"
+    />
+    <title>Workspace</title>
+    <!-- The terminal theme's vars (views/theme.ts) and the box-drawing rules -->
+    <link rel="stylesheet" href="/theme.css" />
+    <link rel="stylesheet" href="/github-markdown-dark.css" />
+    <link rel="stylesheet" href="../markdown/markdown.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: var(--term-bg);
+        --text: var(--term-fg);
+        --muted: color-mix(in srgb, var(--term-fg) 65%, var(--term-bg));
+        --surface: color-mix(in srgb, var(--term-fg) 4%, var(--term-bg));
+        --border: color-mix(in srgb, var(--term-fg) 14%, var(--term-bg));
+        --accent: var(--ansi-12);
+        --accent-bg: color-mix(in srgb, var(--ansi-12) 16%, var(--term-bg));
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--bg);
+        color: var(--text);
+        font: calc(var(--term-size) + 2px)/1.4 var(--term-font);
+      }
+      #top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      #strip {
+        flex: 1;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+      .chip {
+        padding: 2px 9px;
+        font-size: 1.1em;
+        border-radius: 5px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+        cursor: pointer;
+        transition:
+          background-color 150ms,
+          color 150ms,
+          border-color 150ms;
+      }
+      .chip.focused {
+        color: var(--accent);
+        font-weight: bold;
+        background: var(--accent-bg);
+        border-color: transparent;
+      }
+      main {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+      }
+      #log-pane {
+        flex: 1 1 0;
+        overflow: auto;
+        padding: 16px 20px 20px;
+      }
+      /* Only shown when the focused workspace has a file to show; otherwise
+       the log takes the full width */
+      #doc-pane {
+        display: none;
+        flex: 1 1 0;
+        overflow: auto;
+        padding: 10px 24px 24px;
+        border-left: 1px solid var(--border);
+      }
+      body.has-doc #doc-pane {
+        display: block;
+      }
+      /* A frame has the pane to itself, with no file name */
+      body.has-doc.doc-frame #doc-pane {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding: 0;
+      }
+      body.doc-frame .doc-name {
+        display: none;
+      }
+      #doc-pane iframe {
+        flex: 1;
+        width: 100%;
+        border: none;
+      }
+      #doc-pane iframe[hidden] {
+        display: none;
+      }
+      @media (max-width: 900px) {
+        main {
+          flex-direction: column;
+        }
+        #doc-pane {
+          border-left: none;
+          border-top: 1px solid var(--border);
+        }
+      }
+      .doc-name {
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+      /* The workspace's active trackers: flat like an editor's tabs, unlike
+         the chips for Rex tabs */
+      #trackers {
+        display: flex;
+        margin: -10px -24px 8px;
+        border-bottom: 1px solid var(--border);
+      }
+      #trackers:empty,
+      #parked:empty {
+        display: none;
+      }
+      body.doc-frame #trackers,
+      body.doc-frame #parked {
+        margin: 0;
+      }
+      /* Under the active ones, when opened: a wrapping row, dimmer */
+      #parked {
+        display: flex;
+        flex-wrap: wrap;
+        margin: -8px -24px 8px;
+        border-bottom: 1px solid var(--border);
+        opacity: 0.75;
+      }
+      .tracker-tab.parked-toggle {
+        margin-left: auto;
+        border-right: none;
+        border-left: 1px solid var(--border);
+        font-style: italic;
+      }
+      .tracker-tab.parked-toggle.open {
+        color: inherit;
+      }
+      /* Narrowed to fit, like an editor's */
+      .tracker-tab {
+        flex: 0 1 auto;
+        min-width: 3em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 6px 14px;
+        font-size: 0.9em;
+        color: var(--muted);
+        white-space: nowrap;
+        cursor: pointer;
+        border-right: 1px solid var(--border);
+      }
+      .tracker-tab:hover {
+        color: inherit;
+      }
+      .tracker-tab.current {
+        color: var(--accent);
+        background: var(--accent-bg);
+      }
+      .markdown-body {
+        background: transparent;
+        font-size: 16px;
+      }
+      .markdown-body > :first-child {
+        margin-top: 0;
+      }
+      ah-markdown {
+        --ah-markdown-flash: var(--accent-bg);
+      }
+      /* Graph lines fill the whole line height (see box.ts), so this can be roomy */
+      pre.log {
+        margin: 0;
+        font: inherit;
+        line-height: 1.35;
+      }
+      .empty {
+        color: var(--muted);
+        padding: 20px;
+      }
+      #status {
+        flex: none;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+      #status.live {
+        background: #3fb950;
+      }
+      #status.trouble {
+        background: #d29922;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="top">
+      <nav id="strip"></nav>
+      <div id="status" title="disconnected"></div>
+    </div>
+    <main>
+      <div id="log-pane">
+        <p class="empty">Waiting for Rex…</p>
+      </div>
+      <div id="doc-pane">
+        <nav id="trackers"></nav>
+        <nav id="parked"></nav>
+        <div class="doc-name" id="doc-name"></div>
+      </div>
+    </main>
+    <script type="module" src="../markdown/preview.js"></script>
+    <script type="module" src="client.js"></script>
+  </body>
+</html>

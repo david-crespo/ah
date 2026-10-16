@@ -1,0 +1,540 @@
+/* A task list's look (task_list.ts has the items). Served at /task_list.css,
+   and /tracker.css for older ones, on the pages port; the page links it. The palette follows chat.css. */
+
+:root {
+  color-scheme: light dark;
+  --t-page: light-dark(#fff, #0d1117);
+  --t-ink: light-dark(#1f2328, #e6edf3);
+  --t-muted: light-dark(#59636e, #9198a1);
+  --t-line: light-dark(#d1d9e0, #3d444d);
+  --t-hover: light-dark(#f6f8fa, #151b23);
+  --t-blue: light-dark(#0969da, #58a6ff);
+  --t-green: light-dark(#1a7f37, #3fb950);
+  --t-yellow: light-dark(#9a6700, #d29922);
+  --t-red: light-dark(#d1242f, #f85149);
+  --t-button: light-dark(#1f883d, #238636);
+}
+
+body {
+  margin: 0;
+  background: var(--t-page);
+  color: var(--t-ink);
+  font:
+    14px/1.5 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+/* The top matches the dashboard log pane's, so the title lines up with the
+   log's first line */
+main {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 16px 20px 96px;
+}
+
+main > h1 {
+  margin: 0 0 4px;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+/* Park and Done, or the status and Resume, by the title (task_list.ts) */
+.ah-tracker-status {
+  float: right;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--t-muted);
+}
+.ah-tracker-status button {
+  padding: 2px 10px;
+  font: inherit;
+  color: var(--t-muted);
+  background: none;
+  border: 1px solid var(--t-line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.ah-tracker-status button:hover:not(:disabled) {
+  color: var(--t-ink);
+  border-color: var(--t-muted);
+}
+.ah-tracker-status button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* A group's heading is its name; a group with no items yet is hidden, so a
+   new task list can start with every group */
+ah-group {
+  display: block;
+}
+
+ah-group:not(:has(ah-item)) {
+  display: none;
+}
+
+ah-group::before {
+  content: attr(name);
+  display: block;
+}
+
+ah-group::before,
+main > h2 {
+  margin: 28px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--t-muted);
+}
+
+a {
+  color: var(--t-blue);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+
+ah-item {
+  display: block;
+  border-radius: 6px;
+}
+
+ah-item > details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+ah-item > details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ah-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+ah-item:hover .ah-item-head {
+  background: var(--t-hover);
+}
+
+.ah-item-status,
+.ah-item-action {
+  flex: none;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+/* Icons sit on the title's first line when it wraps */
+.ah-item-status {
+  align-self: flex-start;
+  align-items: center;
+  height: 1lh;
+}
+
+ah-item svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+ah-item svg .fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+.ah-item-status {
+  color: var(--t-muted);
+}
+
+ah-item[status="doing"] .ah-item-status {
+  color: var(--t-blue);
+}
+
+ah-item[status="done"] .ah-item-status {
+  color: var(--t-green);
+}
+
+ah-item[status="hold"] .ah-item-status {
+  color: var(--t-yellow);
+}
+
+.ah-item-id {
+  flex: none;
+  width: 2em;
+  color: var(--t-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ah-item-title {
+  min-width: 0;
+  margin: 0;
+  font-size: inherit;
+  font-weight: 500;
+}
+
+ah-item[status="doing"] .ah-item-title {
+  font-weight: 600;
+}
+
+ah-item[status="done"] .ah-item-title,
+ah-item[status="dropped"] .ah-item-title {
+  color: var(--t-muted);
+  font-weight: 400;
+}
+
+ah-item[status="dropped"] .ah-item-title {
+  text-decoration: line-through;
+}
+
+.ah-item-chevron {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  height: 1lh;
+  margin-left: -4px;
+  color: var(--t-muted);
+  transition: transform 0.12s;
+}
+
+ah-item > details[open] .ah-item-chevron {
+  transform: rotate(90deg);
+}
+
+.ah-item-rev {
+  flex: none;
+  margin-left: auto;
+  padding: 0 5px;
+  border: 1px solid var(--t-line);
+  border-radius: 4px;
+  color: var(--t-muted);
+  font-size: 12px;
+}
+
+/* The comment and Go buttons, shown on hover or while their request is open */
+.ah-item-action {
+  box-sizing: content-box;
+  align-self: flex-start;
+  padding: 3px;
+  /* Centered on the first line: half the line's slack, less padding and border */
+  margin: calc((1lh - 16px) / 2 - 4px) 0 -4px;
+  font: inherit;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--t-blue);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.ah-item-chat {
+  margin-left: auto;
+  color: var(--t-muted);
+}
+
+.ah-item-action[hidden] {
+  display: none;
+}
+
+ah-item:hover .ah-item-action,
+.ah-item-action:focus-visible,
+.ah-item-action:not([data-state="ready"]) {
+  opacity: 1;
+}
+
+.ah-item-action:hover:not(:disabled) {
+  border-color: var(--t-line);
+  background: var(--t-page);
+}
+
+.ah-item-chat:hover {
+  color: var(--t-ink);
+}
+
+.ah-item-action:disabled {
+  cursor: default;
+}
+
+.ah-item-action[data-state="question"] {
+  color: var(--t-yellow);
+}
+
+.ah-item-action[data-state="error"] {
+  color: var(--t-red);
+}
+
+.ah-item-action[data-state="pending"] {
+  color: var(--t-blue);
+}
+
+.ah-item-action .spin {
+  stroke-dasharray: 70 30;
+  transform-origin: 8px 8px;
+  animation: ah-item-spin 0.9s linear infinite;
+}
+
+@keyframes ah-item-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (hover: none) {
+  .ah-item-action {
+    opacity: 1;
+  }
+}
+
+/* Steps done of the item's steps, right-aligned like the rev */
+.ah-item-progress {
+  flex: none;
+  margin-left: auto;
+  color: var(--t-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ah-item-progress[hidden] {
+  display: none;
+}
+
+.ah-item-progress:not([hidden]) + .ah-item-rev {
+  margin-left: 0;
+}
+
+.ah-item-progress:not([hidden]) ~ .ah-item-chat {
+  margin-left: 0;
+}
+
+.ah-item-rev:not([hidden]) + .ah-item-chat {
+  margin-left: 0;
+}
+
+/* The comment box (task_list.ts), under the comment button of its item */
+.ah-item-comment {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+  width: 340px;
+  max-width: calc(100vw - 16px);
+  padding: 10px;
+  border: 1px solid var(--t-line);
+  border-radius: 10px;
+  background: var(--t-page);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+
+.ah-item-comment[hidden] {
+  display: none;
+}
+
+.ah-item-comment textarea {
+  resize: vertical;
+  min-height: 64px;
+  padding: 6px 8px;
+  border: 1px solid var(--t-line);
+  border-radius: 6px;
+  background: var(--t-hover);
+  color: var(--t-ink);
+  font: inherit;
+  outline: none;
+}
+
+.ah-item-comment textarea:focus {
+  border-color: var(--t-blue);
+}
+
+.ah-item-comment-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  color: var(--t-muted);
+  font-size: 11px;
+}
+
+.ah-item-comment button {
+  padding: 5px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--t-button);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ah-item-body {
+  /* Under the title: the head's padding, the icon, the id and two gaps */
+  padding: 2px 6px 10px calc(6px + 16px + 2em + 16px);
+  color: var(--t-ink);
+}
+
+.ah-item-body > :first-child {
+  margin-top: 0;
+}
+
+.ah-item-body > :last-child {
+  margin-bottom: 0;
+}
+
+.ah-item-body p,
+.ah-item-body ul,
+.ah-item-body ol {
+  margin: 6px 0;
+}
+
+.ah-item-body ul,
+.ah-item-body ol {
+  padding-left: 1.2em;
+}
+
+/* Sections of a long detail, labeled lists (a rev's change ID or a
+   decision's name beside what it says), and background folded away under a
+   <details> */
+.ah-item-body h4 {
+  margin: 14px 0 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--t-muted);
+}
+
+.ah-item-body dl {
+  display: grid;
+  grid-template-columns: fit-content(35%) 1fr;
+  gap: 6px 12px;
+  margin: 6px 0;
+}
+
+.ah-item-body dt {
+  grid-column: 1;
+  color: var(--t-muted);
+}
+
+.ah-item-body dd {
+  grid-column: 2;
+  margin: 0;
+}
+
+.ah-item-body dt code {
+  padding: 0 5px;
+  border: 1px solid var(--t-line);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.ah-item-body details {
+  margin: 6px 0;
+}
+
+.ah-item-body details > summary {
+  width: fit-content;
+  color: var(--t-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ah-item-body details > summary:hover {
+  color: var(--t-ink);
+}
+
+.ah-item-body details[open] > summary {
+  margin-bottom: 4px;
+}
+
+/* An item's steps: the item's status icons, smaller, in a column, with the
+   one in progress bold so it reads as where things are */
+ah-step {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 2px 0;
+}
+
+ah-step:first-of-type {
+  margin-top: 6px;
+}
+
+.ah-step-status {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  margin-top: 3px;
+  color: var(--t-muted);
+}
+
+ah-step .ah-step-status svg {
+  width: 14px;
+  height: 14px;
+}
+
+ah-step[status="doing"] .ah-step-status {
+  color: var(--t-blue);
+}
+
+ah-step[status="done"] .ah-step-status {
+  color: var(--t-green);
+}
+
+ah-step[status="hold"] .ah-step-status {
+  color: var(--t-yellow);
+}
+
+.ah-step-letter {
+  flex: none;
+  width: 1.1em;
+}
+
+.ah-step-text {
+  min-width: 0;
+}
+
+ah-step[status="doing"] .ah-step-text {
+  font-weight: 600;
+}
+
+ah-step[status="done"] .ah-step-text,
+ah-step[status="dropped"] .ah-step-text {
+  color: var(--t-muted);
+}
+
+ah-step[status="dropped"] .ah-step-text {
+  text-decoration: line-through;
+}
+
+ah-step .ah-item-rev {
+  margin-left: auto;
+}
+
+@media (max-width: 480px) {
+  .ah-item-body dl {
+    display: block;
+  }
+
+  .ah-item-body dd {
+    margin: 0 0 6px;
+  }
+}
