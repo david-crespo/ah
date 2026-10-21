@@ -1,10 +1,10 @@
 /// <reference lib="dom" />
 
 // The editor pane when the editor runs in the page (editor.ts): CodeMirror,
-// with codemirror_backend.ts on the server to save. It's an example the user
-// is trying out in place of Helix's terminal. It starts on the pane's first
-// show, with the file's text as the preview element has it, and stays while
-// the pane is hidden.
+// with codemirror_backend.ts on the server to save, as an example of an
+// editor in place of Helix's terminal. It starts on the pane's first show,
+// with the file's text as the preview element has it, and stays while the
+// pane is hidden.
 //
 // Nothing uses it, and its packages aren't ah's dependencies. To try it,
 // install them without saving them to package.json, and swap it in in

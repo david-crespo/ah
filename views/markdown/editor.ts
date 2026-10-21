@@ -6,9 +6,10 @@
 //   pane opens, at <id>/editor, and the two speak whatever protocol they
 //   like on it. One pair is a terminal (pty.ts and terminal_pane.ts). The
 //   other is CodeMirror, running in the page (codemirror_backend.ts and
-//   codemirror_pane.ts), an example the user is trying out.
+//   codemirror_pane.ts), an example that nothing uses.
 // - Which editor runs in that terminal: terminal_editor.ts, with Helix
-//   (helix.ts and helix_command.ts) as the one in use.
+//   (helix.ts and helix_command.ts) as the one in use and Neovim as an
+//   example.
 //
 // Both are chosen in files.ts (the backend) and client.ts (the pane).
 //

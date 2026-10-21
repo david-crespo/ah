@@ -9,9 +9,9 @@
 //   JSON line to it wakes an idle session or is read between tool calls in a
 //   busy one. Docs: code.claude.com/docs/en/cross-session-messaging ("The
 //   session's inbox socket").
-// - Codex exports CODEX_THREAD_ID, and `codex queue --thread <id>` hands a
-//   message to the TUI running that thread (found through
-//   ~/.codex/ipc/ipc.sock). A busy session runs it as the next turn.
+// - Codex exports CODEX_THREAD_ID, and `codex queue --thread <id>` queues a
+//   message on that thread through the shared app-server daemon, which owns
+//   it (`thread/queue/add`). A busy session runs it as the next turn.
 // - opencode 2 exports OPENCODE_SESSION_ID. Its sessions live in one
 //   background service that every TUI is a client of; posting to the
 //   service's /api/session/<id>/prompt steers a busy session mid-turn.
@@ -264,7 +264,8 @@ export async function postTo(address: Address, text: string): Promise<void> {
     case "claude":
       return await postToClaude(address, text)
     case "codex": {
-      // Exits nonzero when no running TUI has the thread
+      // Exits nonzero when it can't queue the message, as when the shared
+      // app-server daemon isn't running
       const queued = await run(
         "codex",
         ["queue", "--thread", address.thread, "--message", text],
