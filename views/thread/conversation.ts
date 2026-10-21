@@ -49,6 +49,7 @@ export class Conversation {
   private empty: HTMLElement
   private newMessages: HTMLButtonElement
   private badge: HTMLElement
+  private offline: HTMLElement
   private snapshot: ThreadSnapshot | null = null
   private rows = new Map<string, HTMLElement>()
   private read = new Set<string>()
@@ -77,6 +78,7 @@ export class Conversation {
       <p class="conversation-error" role="alert" hidden></p>
       <div class="conversation-status" role="status"><span class="conversation-status-spinner" aria-hidden="true"></span><span class="conversation-status-text"></span></div>
       <div class="conversation-controls">
+        <span class="conversation-offline" hidden></span>
         <form class="conversation-compose" hidden>
           <textarea rows="1" aria-label="Message the agent" placeholder="Message the agent…"></textarea>
           <button class="conversation-send" type="submit">Send</button>
@@ -85,6 +87,7 @@ export class Conversation {
           <span class="conversation-spinner" aria-hidden="true"></span>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg>
           <span class="conversation-unread" hidden></span>
+          <span class="conversation-agent" aria-hidden="true"></span>
         </button>
       </div>`
     document.body.append(this.element)
@@ -97,6 +100,7 @@ export class Conversation {
     this.empty = this.element.querySelector(".conversation-empty")!
     this.newMessages = this.element.querySelector(".conversation-new")!
     this.badge = this.element.querySelector(".conversation-unread")!
+    this.offline = this.element.querySelector(".conversation-offline")!
     this.toggle.addEventListener("click", () => this.setOpen(!this.open, true))
     this.form.addEventListener("submit", (event) => {
       event.preventDefault()
@@ -434,11 +438,25 @@ export class Conversation {
       text = "Waiting for the agent"
     }
     if (pending) text += ` · ${pending} waiting`
-    const unread =
+    const unreadEntries =
       this.snapshot?.entries.filter(
         (entry) => entry.type === "activity" && entry.text && !this.read.has(entry.id),
-      ).length ?? 0
+      ) ?? []
+    const unread = unreadEntries.length
+    // The badge is for messages nothing shows: not one a toast has up
+    const unseen = unreadEntries.some(
+      (entry) => this.open || this.rows.get(entry.id)?.hidden !== false,
+    )
     this.element.dataset.status = status
+    // Whether comments reach an agent: the toggle's dot when they do, and
+    // beside the collapsed toggle, the pill saying why they don't
+    this.element.dataset.agent = !this.connected
+      ? "unknown"
+      : this.snapshot?.agentConnected
+        ? "connected"
+        : "none"
+    this.offline.textContent = text
+    this.offline.hidden = this.open || status !== "disconnected"
     this.status.querySelector(".conversation-status-text")!.textContent = text
     this.status.hidden = !this.open || status === "ready"
     this.toggle.setAttribute("aria-expanded", String(this.open))
@@ -447,7 +465,7 @@ export class Conversation {
     }`
     this.toggle.setAttribute("aria-label", label)
     this.toggle.title = label
-    this.badge.hidden = !unread && !["needs-reply", "error"].includes(status)
+    this.badge.hidden = !unseen && !["needs-reply", "error"].includes(status)
   }
 
   async send(input: RequestInput): Promise<RequestResult> {

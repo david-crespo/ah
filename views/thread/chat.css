@@ -249,8 +249,8 @@
   box-shadow: 0 4px 12px #0002;
 }
 #conversation .conversation-toggle svg {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   stroke: currentColor;
   fill: none;
   stroke-width: 1.7;
@@ -315,6 +315,64 @@
 #conversation[data-status="needs-reply"] .conversation-unread,
 #conversation[data-status="error"] .conversation-unread {
   background: light-dark(#9a6700, #d29922);
+}
+/* Whether comments reach an agent: a green dot on the toggle when one is
+   connected. When they wouldn't reach one, the dot moves to the pill beside
+   the collapsed toggle (or the open status line): amber when no agent is
+   connected, grey while the page can't reach the server. */
+#conversation {
+  --chat-agent: var(--chat-muted);
+}
+#conversation[data-agent="connected"] {
+  --chat-agent: light-dark(#1a7f37, #3fb950);
+}
+#conversation[data-agent="none"] {
+  --chat-agent: light-dark(#9a6700, #d29922);
+}
+#conversation:not([data-agent="connected"]) .conversation-agent {
+  display: none;
+}
+#conversation .conversation-agent {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--chat-page);
+  border-radius: 50%;
+  background: var(--chat-agent);
+}
+#conversation .conversation-offline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+  margin-left: auto;
+  padding: 3px 10px;
+  border: 1px solid var(--chat-line);
+  border-radius: 999px;
+  background: var(--chat-panel);
+  box-shadow: 0 4px 12px #0002;
+  font-size: 12px;
+  white-space: nowrap;
+}
+#conversation .conversation-offline::before,
+#conversation[data-status="disconnected"] .conversation-status::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--chat-agent);
+}
+#conversation[data-status="disconnected"] .conversation-status {
+  color: var(--chat-ink);
+}
+#conversation
+  .conversation-offline:not([hidden])
+  + .conversation-compose[hidden]
+  + .conversation-toggle {
+  margin-left: 0;
 }
 #conversation .conversation-status,
 #conversation .conversation-error,
