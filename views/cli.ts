@@ -25,7 +25,7 @@ import { fileId } from "../subjects/id.ts"
 import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
-import { rootFinder } from "../core/workspace.ts"
+import { openable, rootFinder } from "../core/workspace.ts"
 import {
   setCurrentTracker,
   setTrackerStatus,
@@ -40,6 +40,15 @@ const threadUrl = (path: string, port: number) =>
     : `http://127.0.0.1:${port}/view/markdown/${fileId(path)}/activity`
 
 /** The file's real path, or exit with a hint if it's only in the notes dir */
+/** `realPathOrDie`, for a file to serve: under the cwd or its workspace */
+function openablePathOrDie(file: string): string {
+  const path = realPathOrDie(file)
+  if (!openable(path, process.cwd())) {
+    die(`ah: ${path} is outside this directory and its jj workspace, so ah won't serve it`)
+  }
+  return path
+}
+
 function realPathOrDie(file: string): string {
   try {
     return realpathSync(file)
@@ -107,7 +116,7 @@ view
   .option("--no-chat", "Without the conversation")
   .addOption(portOption())
   .action(async (file, { in: place, editor, chat, port }) => {
-    const path = realPathOrDie(file)
+    const path = openablePathOrDie(file)
     const kind = fileKind(path)
     if ((place === "split" || place === "here") && kind === "html") {
       die(`ah view open --in ${place}: glow only shows markdown`)
@@ -203,7 +212,7 @@ tracker
   .addOption(portOption())
   .action(async (file, { title, goal, port }) => {
     ensureTaskList(file, title, goal)
-    const path = realPathOrDie(file)
+    const path = openablePathOrDie(file)
     const agent = currentAgent() ?? die("ah tracker add: not running in an agent session")
     // Bound by opening the file, since bindings live on open files. The
     // dashboard's view of the file leaves the binding alone; `ah server

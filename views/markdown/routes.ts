@@ -14,6 +14,7 @@ import { Readable } from "node:stream"
 import type { WebSocket } from "ws"
 import { assetPath } from "../../platform/assets.ts"
 import { ClientBundles } from "../../platform/bundle.ts"
+import { plainlyUnder } from "../../platform/paths.ts"
 import { threadRoute } from "../../subjects/thread/routes.ts"
 import {
   type AgentDirectory,
@@ -136,24 +137,23 @@ async function ghBlob(q: URLSearchParams): Promise<Response> {
   }
 }
 
-/** Images and videos the file references by local path, relative to it */
-async function localMedia(filePath: string, p: string): Promise<Response> {
+/** Images and videos the file references by local path, relative to it:
+ * under $HOME or next to the file, and outside dot directories */
+export async function localMedia(filePath: string, p: string): Promise<Response> {
   const resolved = p.startsWith("/") ? p : join(dirname(filePath), p)
+  const notFound = new Response("not found", { status: 404 })
   let real: string
+  let allowed: string[]
   try {
     real = await realpath(resolved)
+    allowed = await Promise.all([homedir(), dirname(filePath)].map((d) => realpath(d)))
   } catch {
-    return new Response("not found", { status: 404 })
+    return notFound
   }
-  // Anything under $HOME or next to the file; nothing else is a plausible
-  // screenshot location.
-  const allowed = [homedir(), dirname(filePath)]
-  if (!allowed.some((dir) => real.startsWith(dir + "/"))) {
-    return new Response("forbidden", { status: 403 })
-  }
-  const ext = real.split(".").pop()?.toLowerCase() ?? ""
+  // Nothing else is a plausible screenshot location
+  if (!allowed.some((dir) => plainlyUnder(dir, real))) return notFound
+  const type = mimeTypes[real.split(".").pop()?.toLowerCase() ?? ""]
+  if (!type) return notFound
   const body = Readable.toWeb(createReadStream(real)) as ReadableStream<Uint8Array>
-  return new Response(body, {
-    headers: { "content-type": mimeTypes[ext] ?? "application/octet-stream" },
-  })
+  return new Response(body, { headers: { "content-type": type } })
 }

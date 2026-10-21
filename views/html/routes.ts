@@ -26,6 +26,7 @@ import type { WebSocket } from "ws"
 import type { TrackerStatus } from "../../core/model.ts"
 import type { Trackers } from "../../core/trackers.ts"
 import { ClientBundles } from "../../platform/bundle.ts"
+import { plainlyUnder } from "../../platform/paths.ts"
 import { chatStylesheet, selectionPopover } from "../thread/page.ts"
 import { threadRoute } from "../../subjects/thread/routes.ts"
 import {
@@ -201,21 +202,23 @@ export class HtmlBackend {
 
 const notFound = () => new Response("not found", { status: 404 })
 
-/** A file next to the page, or under its directory */
+/** A file next to the page, or under its directory, of a type a web page
+ * loads (`types`) and outside dot directories, so a page can't read a
+ * repo's `.git/config` or a key */
 async function sibling(pagePath: string, sub: string): Promise<Response> {
   const dir = dirname(pagePath)
   let real: string
   try {
     real = await realpath(join(dir, decodeURIComponent(sub)))
-    if (!real.startsWith((await realpath(dir)) + "/")) {
-      return new Response("forbidden", { status: 403 })
+    if (!plainlyUnder(await realpath(dir), real) || !(await stat(real)).isFile()) {
+      return notFound()
     }
-    if (!(await stat(real)).isFile()) return new Response("not found", { status: 404 })
   } catch {
-    return new Response("not found", { status: 404 })
+    return notFound()
   }
+  const type = types[extname(real).toLowerCase()]
+  if (!type) return notFound()
   const body = Readable.toWeb(createReadStream(real)) as ReadableStream<Uint8Array>
-  const type = types[extname(real).toLowerCase()] ?? "application/octet-stream"
   return new Response(body, { headers: { "content-type": type, ...noStore } })
 }
 

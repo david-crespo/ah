@@ -1,7 +1,7 @@
 // Which jj workspace a directory or a tab is in. A workspace is known by
 // its root, the directory holding `.jj`.
 
-import { statSync } from "node:fs"
+import { realpathSync, statSync } from "node:fs"
 import { dirname, join } from "node:path"
 import type { Tab, WorkspaceRoot } from "./model.ts"
 
@@ -28,6 +28,15 @@ export function rootFinder(): RootOf {
     return root
   }
   return find
+}
+
+/** Whether `path` (real) is one `ah view open` may serve from `cwd`: under
+ * cwd or the jj workspace it's in. ah runs outside the agent's sandbox, so
+ * without this an agent talked into opening ~/.ssh/id_ed25519 would serve
+ * it to the pages. */
+export function openable(path: string, cwd: string): boolean {
+  const real = realpathSync(cwd)
+  return [real, rootFinder()(real)].some((dir) => dir && path.startsWith(dir + "/"))
 }
 
 /**

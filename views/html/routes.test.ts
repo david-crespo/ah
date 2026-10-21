@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, test } from "vitest"
@@ -75,6 +75,22 @@ describe("the API and pages ports", () => {
     expect(redirect.headers.get("location")).toEqual(
       `http://127.0.0.1:7421/view/html/${id}/data.json?x=1`,
     )
+  })
+
+  test("next to a page, only web files outside dot directories", async () => {
+    const { id } = await open("report.html")
+    await mkdir(join(dir, ".git"))
+    await writeFile(join(dir, ".git", "config"), "secret")
+    await writeFile(join(dir, ".env"), "secret")
+    await writeFile(join(dir, "key.pem"), "secret")
+    await mkdir(join(dir, "assets"))
+    await writeFile(join(dir, "assets", "app.js"), "")
+    const js = await pages(`${id}/assets/app.js`)
+    expect(js.status).toEqual(200)
+    expect(js.headers.get("content-type")).toContain("text/javascript")
+    for (const path of [".git/config", ".env", "key.pem", "assets/../.env", "..%2Fstate"]) {
+      expect((await pages(`${id}/${path}`)).status, path).toEqual(404)
+    }
   })
 
   test("the pages port has no files API, and the agent's activity stays on the API port", async () => {

@@ -3,7 +3,7 @@
 
 import { homedir } from "node:os"
 import { readdirSync } from "node:fs"
-import { join } from "node:path"
+import { isAbsolute, join, relative, sep } from "node:path"
 
 export const stateHome = () =>
   process.env.XDG_STATE_HOME || join(homedir(), ".local", "state")
@@ -26,3 +26,11 @@ export const claudeConfigDirs = () =>
   readdirSync(homedir())
     .filter((f) => /^\.claude(-.+)?$/.test(f))
     .map((f) => join(homedir(), f))
+
+/** Whether `path` is under `dir` without going through a dot directory
+ * (`.git`, `.ssh`) or being a dotfile (`.env`): what pages may load from
+ * around them. Both real paths. */
+export function plainlyUnder(dir: string, path: string): boolean {
+  const rel = relative(dir, path)
+  return rel !== "" && !isAbsolute(rel) && rel.split(sep).every((s) => !s.startsWith("."))
+}
