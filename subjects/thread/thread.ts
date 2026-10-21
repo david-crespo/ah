@@ -77,10 +77,6 @@ export class Thread {
   #log: ThreadLog
   #options: ThreadOptions
   #queue: Promise<unknown> = Promise.resolve()
-  /** Requests no agent took, each with the lines its post had, to send to
-   * the next one that turns up. In memory: after a restart, an agent catches
-   * up on them with `pending`. */
-  #held: { id: string; lines: string[] }[] = []
   /** Whether the pages were last told an agent is there */
   #told: boolean | null = null
 
@@ -126,33 +122,27 @@ export class Thread {
   }
 
   /** Log a request and post it to the session, with the context ahead of
-   * it. A failed post leaves it waiting in the log, and held for the next
-   * agent to turn up, so it never fails the user's send. */
+   * it. A failed post leaves it waiting in the log, held for the next agent
+   * to turn up, so it never fails the user's send. */
   request(input: RequestInput): Promise<RequestResult> {
     return this.#serially(async () => {
       const context = (await this.#options.context?.()) ?? null
       const request = await this.#log.request(input)
-      const lines = [context, render(request, this.#options.kinds)].filter(
-        (line) => line !== null,
-      )
-      const agentConnected = await this.#deliver(lines)
-      if (!agentConnected) this.#held.push({ id: request.id, lines })
+      const agentConnected = await this.#deliver(context, [request])
       this.#broadcast()
       return { request, agentConnected }
     })
   }
 
-  /** For when agents come and go: send the held requests that are still
-   * waiting, if an agent is there now, and tell the pages if that changed */
+  /** For when agents come and go, or the file is bound to another: send the
+   * held requests that are still waiting, if an agent is there now, and
+   * tell the pages if that changed. The log says which are held, so they
+   * outlive the server. */
   refresh(): Promise<void> {
     return this.#serially(async () => {
       const alive = addressAlive(this.#file.address())
-      if (alive && this.#held.length) {
-        const requests = new Map(this.#log.snapshot(true).requests.map((r) => [r.id, r]))
-        const waiting = this.#held.filter((h) => requests.get(h.id)?.status === "waiting")
-        if (!waiting.length || (await this.#deliver(waiting.flatMap((h) => h.lines))))
-          this.#held = []
-      }
+      const held = alive ? this.#log.undelivered() : []
+      if (held.length) await this.#deliver((await this.#options.context?.()) ?? null, held)
       if (alive !== this.#told) this.#broadcast()
     })
   }
@@ -166,16 +156,23 @@ export class Thread {
     })
   }
 
-  async #deliver(lines: string[]): Promise<boolean> {
+  /** Post the requests, with the context ahead of them, and log that they
+   * went */
+  async #deliver(context: string | null, requests: Request[]): Promise<boolean> {
     const address = this.#file.address()
     if (!address) return false
+    const lines = [
+      header(this.#options, this.#file.path, this.#options.port),
+      ...(context === null ? [] : [context]),
+      ...requests.map((request) => render(request, this.#options.kinds)),
+    ]
     try {
-      const first = header(this.#options, this.#file.path, this.#options.port)
-      await postTo(address, [first, ...lines].join("\n"))
-      return true
+      await postTo(address, lines.join("\n"))
     } catch (error) {
       console.error(`ah: could not reach ${describeAddress(address)}:`, error)
       return false
     }
+    await this.#log.deliver(requests.map((request) => request.id))
+    return true
   }
 }

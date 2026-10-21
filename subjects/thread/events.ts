@@ -42,6 +42,13 @@ export type ThreadSnapshot = {
   agentConnected: boolean
 }
 
+/** A line of the log that isn't in the conversation: the requests a post
+ * to an agent carried */
+type Delivery = { type: "delivered"; requests: string[]; at: string }
+
+const isDelivery = (value: unknown): value is Delivery =>
+  isRecord(value) && value.type === "delivered" && Array.isArray(value.requests)
+
 /** Enough of an entry's shape for `apply` to read it */
 function isEntry(value: unknown): value is ThreadEntry {
   if (!isRecord(value) || typeof value.id !== "string") return false
@@ -122,6 +129,8 @@ export function parseActivity(value: unknown): ActivityInput {
 export class ThreadLog {
   entries: ThreadEntry[] = []
   requests = new Map<string, RequestState>()
+  /** The requests a post has carried to an agent */
+  private delivered = new Set<string>()
   private path: string
   file: string
   private constructor(path: string, file: string) {
@@ -148,7 +157,8 @@ export class ThreadLog {
       } catch {
         entry = null
       }
-      if (isEntry(entry)) log.apply(entry)
+      if (isDelivery(entry)) for (const id of entry.requests) log.delivered.add(id)
+      else if (isEntry(entry)) log.apply(entry)
       else console.error(`ah: skipping an unreadable line in ${path}`)
     }
     // Start the next append on a line of its own
@@ -201,6 +211,24 @@ export class ThreadLog {
       }
     }
     return this.append({ type: "activity", ...input })
+  }
+
+  /** Note that a post carried these requests to an agent */
+  async deliver(requests: string[]) {
+    const line: Delivery = { type: "delivered", requests, at: new Date().toISOString() }
+    await appendFile(this.path, JSON.stringify(line) + "\n")
+    for (const id of requests) this.delivered.add(id)
+  }
+
+  /** The requests still waiting that no post has carried to an agent,
+   * oldest first */
+  undelivered(): (ThreadEntry & Request)[] {
+    return this.entries.filter(
+      (e): e is ThreadEntry & Request =>
+        e.type === "request" &&
+        !this.delivered.has(e.id) &&
+        this.requests.get(e.id)?.status === "waiting",
+    )
   }
 
   private async append<T extends Omit<Request, "id" | "at"> | Omit<Activity, "id" | "at">>(

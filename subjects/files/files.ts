@@ -198,7 +198,8 @@ export class OpenFiles<L extends Live> {
     file.binding = { agent: this.#directory ? agent : null, openedFrom: from }
     // Its window may be opening now
     file.pages.presence.expect()
-    file.pages.broadcast(file.thread.snapshot(false))
+    // Send this agent what no agent took, and tell the pages if it's there
+    await file.thread.refresh()
     return file
   }
 

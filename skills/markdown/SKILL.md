@@ -53,9 +53,10 @@ for every `ah` command. opencode has no sandbox.
    `ah request pending <file>`: it prints the requests not done yet,
    one JSON line each with a `status`. The `kind` (`chat`, `comment`,
    `dellm`) and `args` (`selection`, `prefix`, `suffix`, `embed`) there
-   carry what the post spells out in words. Requests left `waiting` (no session
-   was reachable when they were sent) or `interrupted` (a previous session
-   stopped mid-work) are not re-sent. Check them against the current file
+   carry what the post spells out in words. Requests no session was there
+   to take arrive on their own once you open the file. Those left `waiting`
+   by a previous session that never started them, or `interrupted` (it
+   stopped mid-work), are not re-sent. Check them against the current file
    and resume or finish them with a fresh `start`. Completed requests must
    not be processed again.
 

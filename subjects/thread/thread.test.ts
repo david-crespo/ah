@@ -156,6 +156,33 @@ test("requests no agent took go to the next one, unless handled by then", async 
   }
 })
 
+test("a request no agent took is still held after a restart", async () => {
+  const agent = await inbox()
+  try {
+    const { path, doc } = await markdownFile("text\n")
+    let address: { harness: "claude"; socket: string } | null = null
+    const file = { path, address: () => address }
+    const before = await markdownThread(file, doc)
+    const held = await before.request(
+      parseRequest({ kind: "chat", text: "one" }, threadKinds),
+    )
+    address = { harness: "claude", socket: agent.socket }
+    const sent = await before.request(
+      parseRequest({ kind: "chat", text: "two" }, threadKinds),
+    )
+    expect([held.agentConnected, sent.agentConnected]).toEqual([false, true])
+    const after = await markdownThread(file, doc)
+    await after.refresh()
+    expect(agent.posts.length).toEqual(2)
+    expect(agent.posts[1]).toContain(held.request.id)
+    expect(agent.posts[1]).not.toContain(sent.request.id)
+    await after.refresh()
+    expect(agent.posts.length).toEqual(2)
+  } finally {
+    agent.close()
+  }
+})
+
 test("the header names the port only when it isn't the default", () => {
   expect(header({ kind: "markdown" }, "/d.md", 7420)).toEqual(
     "Markdown requests for /d.md (handle per /markdown skill):",
