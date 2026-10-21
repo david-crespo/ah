@@ -85,6 +85,17 @@ export interface AgentRef {
   process: string | null
 }
 
+/** A live agent in a shell's tab, as `/core/agents-near` lists it for the
+ * shell to pick from */
+export interface NearbyAgent {
+  id: AgentId
+  harness: Harness
+  /** Its part of the tab title: the label, then the summary */
+  label: string
+  summary: string | null
+  busy: boolean
+}
+
 // Trackers
 
 /** Where a tracker is. Active ones are listed and can be current; parked

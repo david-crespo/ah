@@ -33,7 +33,9 @@ import {
   type Address,
   type AgentId,
   type AgentRef,
+  type BlockId,
   HARNESSES,
+  type NearbyAgent,
   type RexState,
 } from "./model.ts"
 import { Notices, type Showing, startContext } from "./notices.ts"
@@ -60,7 +62,6 @@ import { buildSummaryPayload, generateSummary } from "./summary.ts"
 
 /** In a block that still exists, or running */
 export const isCurrent = (a: AgentView) => a.tab !== null || a.process !== null
-
 const str = (v: unknown) => (typeof v === "string" && v ? v : null)
 
 /** A posted event, checked, or null if it isn't one */
@@ -238,19 +239,35 @@ export class Core implements AgentDirectory {
   standIn(agent: string): Address | null {
     // In Rex an agent's id is its pane's, which may have closed
     const record = this.registry.agents.get(agent)
-    const block = (record && blockOf(record)) ?? agent
+    const live = this.#liveInTab((record && blockOf(record)) ?? agent, agent)
+    const updated = (id: AgentId) => this.registry.agents.get(id)!.updatedAt
+    const standIn = live.reduce<AgentId | null>(
+      (best, id) => (best && updated(best) >= updated(id) ? best : id),
+      null,
+    )
+    return standIn ? this.address(standIn) : null
+  }
+
+  /** The live agents in `block`'s tab, in its layout order, for a file
+   * opened from a shell there to pick from */
+  agentsNear(block: BlockId): AgentId[] {
+    return this.#liveInTab(block, block)
+  }
+
+  /** The live agents in `block`'s tab other than `except`, in its layout
+   * order */
+  #liveInTab(block: BlockId, except: AgentId): AgentId[] {
     const tabId = this.#tabs.get(block)
     const tab = this.#rex?.sessions.flatMap((s) => s.tabs).find((t) => t.id === tabId)
-    if (!tab) return null
-    let best: { at: number; address: Address } | null = null
-    for (const { id } of tab.blocks) {
-      const other = this.registry.agents.get(id)
-      if (id === agent || !other?.shown) continue
-      const address = this.address(id)
-      if (addressAlive(address) && (!best || other.updatedAt > best.at))
-        best = { at: other.updatedAt, address: address! }
-    }
-    return best?.address ?? null
+    if (!tab) return []
+    return tab.blocks
+      .map((b) => b.id)
+      .filter(
+        (id) =>
+          id !== except &&
+          this.registry.agents.get(id)?.shown &&
+          addressAlive(this.address(id)),
+      )
   }
 
   /** Where the agent `ref` names is, for finding its workspace: the tab
@@ -444,6 +461,19 @@ export class Core implements AgentDirectory {
         ...this.trackers.get(root),
         done: this.trackers.done(root),
       })
+    }
+    if (rest === "agents-near" && req.method === "GET") {
+      // ?block=: the live agents in its tab, in its layout order
+      const block = new URL(req.url).searchParams.get("block")
+      if (!block) return new Response("bad block", { status: 400 })
+      // As in homeOf: right after a start, Rex's first RexState may be on its way
+      await Promise.race([this.#firstRex, new Promise((r) => setTimeout(r, 500))])
+      return Response.json(
+        this.agentsNear(block).map((id): NearbyAgent => {
+          const { harness, label, summary, busy } = this.registry.agents.get(id)!
+          return { id, harness, label, summary, busy }
+        }),
+      )
     }
     if (rest !== "") return new Response("not found", { status: 404 })
     const all = new URL(req.url).searchParams.has("all")

@@ -158,6 +158,15 @@ export interface BlockInfo {
   pid: number | null
 }
 
+/** The blocks in a layer's split tree, before each split's after: top to
+ * bottom and left to right */
+function layoutOrder(node: unknown): string[] {
+  if (!isRecord(node)) return []
+  if (isString(node.block_id)) return [node.block_id]
+  const split = node.split
+  return isRecord(split) ? [...layoutOrder(split.before), ...layoutOrder(split.after)] : []
+}
+
 /** The parts of `session.view` a RexState needs, or null if it isn't one */
 export function parseView(v: unknown): RexView | null {
   if (!isRecord(v) || !isStringOrNull(v.active_window_id) || !Array.isArray(v.windows)) {
@@ -169,8 +178,16 @@ export function parseView(v: unknown): RexView | null {
     const blocks: string[] = []
     for (const layer of Array.isArray(w.layers) ? w.layers : []) {
       if (!isRecord(layer) || !Array.isArray(layer.blocks)) continue
-      for (const b of layer.blocks)
-        if (isRecord(b) && isString(b.block_id)) blocks.push(b.block_id)
+      // A tiled layer's in the order its split tree lays them out, then any
+      // the tree doesn't have
+      const laidOut = layoutOrder(layer.layout)
+      const listed = layer.blocks.flatMap((b) =>
+        isRecord(b) && isString(b.block_id) ? [b.block_id] : [],
+      )
+      blocks.push(
+        ...laidOut.filter((b) => listed.includes(b)),
+        ...listed.filter((b) => !laidOut.includes(b)),
+      )
     }
     windows.push({
       id: w.window_id,

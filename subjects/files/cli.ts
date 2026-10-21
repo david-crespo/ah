@@ -3,12 +3,14 @@
 
 import { realpathSync } from "node:fs"
 import { resolve as resolvePath } from "node:path"
+import { styleText } from "node:util"
+import select from "@inquirer/select"
 import { die, ensureStarted, serverJson } from "../../platform/cli.ts"
 import { fileId } from "../id.ts"
 import { run } from "../../platform/proc.ts"
 import { currentAgent, currentAddress } from "../../platform/session.ts"
 import { status } from "../../platform/server.ts"
-import type { FileKind } from "../../core/model.ts"
+import type { AgentId, FileKind, NearbyAgent } from "../../core/model.ts"
 import type { FileInfo } from "./files.ts"
 import type { OpenRequest } from "./routes.ts"
 
@@ -28,23 +30,84 @@ async function filesApi<T>(kind: FileKind, port: number, init?: RequestInit) {
   return await serverJson<T>(res)
 }
 
-/** Open `path` bound to the agent this runs in; the URL of its page */
+/** Open `path` bound to the agent this runs in, or from a shell in Rex, an
+ * agent in its tab; the URL of its page */
 export async function openInServer(
   kind: FileKind,
   port: number,
   path: string,
 ): Promise<URL> {
   const address = currentAddress()
-  const request: OpenRequest = { path, address, agent: currentAgent(address) }
-  if (!address) {
-    console.error("ah: not in an agent session; comments won't go anywhere")
-  }
   await ensureStarted(port)
+  const request: OpenRequest = address
+    ? { path, address, agent: currentAgent(address) }
+    : { path, address, agentId: await pickAgentNear(port) }
   const opened = await filesApi<FileInfo>(kind, port, {
     method: "POST",
     body: JSON.stringify(request),
   })
   return new URL(opened.url, `http://127.0.0.1:${port}`)
+}
+
+/** A nearby agent as its tab's title has it */
+const agentLine = (a: NearbyAgent) =>
+  [a.label, a.summary].filter(Boolean).join(" | ") +
+  ` (${a.harness}${a.busy ? ", working" : ""})`
+
+/** From a shell in no agent session: the agent in its Rex tab, or if
+ * there are several, the one the user picks. Picking takes a terminal, so
+ * without one, several is an error. */
+async function pickAgentNear(port: number): Promise<AgentId | null> {
+  const block = process.env.REX_BLOCK
+  const none = "ah: not in an agent session or a tab with one; comments won't go anywhere"
+  if (!block) return (console.error(none), null)
+  const res = await fetch(
+    `http://127.0.0.1:${port}/core/agents-near?block=${encodeURIComponent(block)}`,
+  )
+  if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
+  const agents = await serverJson<NearbyAgent[]>(res)
+  if (agents.length <= 1) {
+    console.error(agents[0] ? `ah: comments go to ${agentLine(agents[0])}` : none)
+    return agents[0]?.id ?? null
+  }
+  if (!process.stdin.isTTY) {
+    const list = agents.map((a) => `  ${agentLine(a)}`).join("\n")
+    die(`ah: this tab has ${agents.length} agents; run in a terminal to pick one:\n${list}`)
+  }
+  // q quits, which select has no key for
+  const quit = new AbortController()
+  const onKey = (_: string, key?: { name?: string }) => {
+    if (key?.name === "q") quit.abort()
+  }
+  process.stdin.on("keypress", onKey)
+  try {
+    return await select(
+      {
+        message: "Which agent gets comments?",
+        choices: agents.map((a) => ({ name: agentLine(a), value: a.id })),
+        theme: {
+          // j and k move too
+          keybindings: ["vim"],
+          style: {
+            keysHelpTip: (keys: [string, string][]) =>
+              [...keys, ["q", "quit"]]
+                .map(([k, action]) => `${styleText("bold", k)} ${styleText("dim", action)}`)
+                .join(styleText("dim", " • ")),
+          },
+        },
+      },
+      // stdout is for the page's URL
+      { output: process.stderr, signal: quit.signal },
+    )
+  } catch (e) {
+    // q, Ctrl+C, or Ctrl+D
+    if (e instanceof Error && ["AbortPromptError", "ExitPromptError"].includes(e.name)) {
+      die("ah: no agent picked, nothing opened")
+    }
+    throw e
+  } finally {
+    process.stdin.off("keypress", onKey)
+  }
 }
 
 /** What the backend has open and which agent each file is bound to, for

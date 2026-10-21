@@ -90,6 +90,45 @@ test("front is null for a session that's gone", () => {
   expect(toRexState(new Map(), blocks, "session:s").front).toBeNull()
 })
 
+test("a tab's blocks are in layout order, top to bottom and left to right", () => {
+  const leaf = (id: string) => ({ rect: [0, 0, 1, 1], block_id: id })
+  const parsed = parseView({
+    active_window_id: null,
+    windows: [
+      {
+        window_id: "window:w",
+        layers: [
+          {
+            layer_id: "layer:1",
+            kind: "tiled",
+            layout: {
+              split: {
+                direction: "horizontal",
+                before: {
+                  split: {
+                    direction: "vertical",
+                    before: leaf("block:a"),
+                    after: leaf("block:b"),
+                  },
+                },
+                after: leaf("block:c"),
+              },
+            },
+            // Not the order they're laid out in
+            blocks: [
+              { block_id: "block:c" },
+              { block_id: "block:b" },
+              { block_id: "block:a" },
+            ],
+          },
+          { layer_id: "layer:2", kind: "floating", blocks: [{ block_id: "block:d" }] },
+        ],
+      },
+    ],
+  })
+  expect(parsed?.windows[0].blocks).toEqual(["block:a", "block:b", "block:c", "block:d"])
+})
+
 test("parseView rejects what isn't a view", () => {
   expect(parseView({ windows: "nope", active_window_id: null })).toBeNull()
   expect(parseView(null)).toBeNull()

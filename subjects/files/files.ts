@@ -11,6 +11,8 @@
 // when a comment is posted. The session that opened it is kept too, for an
 // agent the directory can't place. If the agent is gone, comments go to
 // another live agent in its tab, which is working from the same tracker.
+// A file opened from a shell in Rex, in no agent session, is bound to an
+// agent in the shell's tab, picked by the user if there are several.
 //
 // All of it is in memory. `ah server restart` asks the old server for the open files
 // and their agents' addresses and opens them again in the new one, so the

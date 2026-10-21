@@ -131,6 +131,35 @@ test("a gone agent's stand-in is the live one in its tab that last did something
   expect(core.standIn("block:1")).toEqual(null)
 })
 
+test("a shell's agents are the live ones in its tab, in its layout order", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:2", "block:3", "block:9"], t2: ["block:4"] }))
+  await report(start("codex", "th1", undefined, "block:1"))
+  vi.advanceTimersByTime(1000)
+  await report(start("codex", "th2", undefined, "block:2"))
+  vi.advanceTimersByTime(1000)
+  // No ~/.claude/sessions/3.json, so not running
+  await report(start("claude", "s3", claude(3), "block:3"))
+  vi.advanceTimersByTime(1000)
+  await report(start("codex", "th4", undefined, "block:4"))
+  const near = async (block: string) =>
+    await (
+      await core.handle(
+        new Request(`http://ah/core/agents-near?block=${block}`),
+        "agents-near",
+      )
+    ).json()
+  const agent = (id: string) => ({
+    id,
+    harness: "codex",
+    label: "ah",
+    summary: null,
+    busy: false,
+  })
+  expect(await near("block:9")).toEqual([agent("block:1"), agent("block:2")])
+  // A pane Rex doesn't know
+  expect(await near("block:5")).toEqual([])
+})
+
 test("hooks tell the agent its trackers, then what changed", async () => {
   const root = join(dir, "w")
   mkdirSync(join(root, ".jj"), { recursive: true })

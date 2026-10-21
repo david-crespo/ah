@@ -88,7 +88,7 @@ view
   .command("open")
   .summary("Open a file in a page you can comment on")
   .description(
-    "Open a file in a page you can comment on. Comments go to the agent session this command runs in. HTML files are served as they are, and any other file is shown as markdown.",
+    "Open a file in a page you can comment on. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several. HTML files are served as they are, and any other file is shown as markdown.",
   )
   .argument("<file>")
   .addOption(

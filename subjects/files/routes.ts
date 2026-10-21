@@ -14,8 +14,8 @@ import type { Address, AgentId, AgentRef } from "../../core/model.ts"
 import type { Live, OpenFile, OpenFiles } from "./files.ts"
 
 /** What the CLI sends to open a file: the agent it runs in (`agent`), or
- * for `ah server restart`'s handoff the agent's id (`agentId`), and where
- * that agent can be reached */
+ * the agent's id (`agentId`) for `ah server restart`'s handoff or one picked
+ * from a shell's tab, and where that agent can be reached */
 export interface OpenRequest {
   path: string
   address: Address | null
