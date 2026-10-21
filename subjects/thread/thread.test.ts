@@ -67,7 +67,7 @@ test("a request goes to the bound session, rendered, after the edits it follows"
     const { path, doc } = await markdownFile("hello world\n")
     const file = {
       path,
-      address: () => ({ harness: "claude" as const, socket: session.socket, token: "t" }),
+      address: () => ({ harness: "claude" as const, socket: session.socket }),
     }
     const thread = await markdownThread(file, doc)
     await writeFile(path, "hello there\n")
@@ -82,8 +82,8 @@ test("a request goes to the bound session, rendered, after the edits it follows"
       .trim()
       .split("\n")
       .map((l) => JSON.parse(l))
-    expect(lines[0]).toEqual({ type: "auth", token: "t" })
-    const content: string[] = lines[1].message.content.split("\n")
+    expect(lines).toHaveLength(1)
+    const content: string[] = lines[0].message.content.split("\n")
     expect(content[0]).toEqual(header({ kind: "markdown" }, path, 7420))
     expect(JSON.parse(content[1])).toMatchObject({ kind: "file-edit", new: "there" })
     expect(content.slice(2)).toEqual([

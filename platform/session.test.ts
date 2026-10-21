@@ -48,8 +48,7 @@ test("the session comes from whichever harness's variables are set", () => {
   expect(currentAddress()).toEqual({ harness: "codex", thread: "019a", pid: null })
   delete process.env.CODEX_THREAD_ID
   process.env.CLAUDE_CODE_MESSAGING_SOCKET = "/s/1.sock"
-  process.env.CLAUDE_CODE_MESSAGING_TOKEN = "t"
-  expect(currentAddress()).toEqual({ harness: "claude", socket: "/s/1.sock", token: "t" })
+  expect(currentAddress()).toEqual({ harness: "claude", socket: "/s/1.sock" })
 })
 
 test("a Claude session under another config dir is found there", async () => {

@@ -47,11 +47,7 @@ const report = (event: object) =>
     "event",
   )
 
-const claude = (pid: number) => ({
-  harness: "claude" as const,
-  socket: `/s/${pid}.sock`,
-  token: `t${pid}`,
-})
+const claude = (pid: number) => ({ harness: "claude" as const, socket: `/s/${pid}.sock` })
 
 test("a Claude agent's address is the one its latest process reported", async () => {
   await report(start("claude", "s1"))

@@ -11,7 +11,7 @@
 //
 // It's also where pages find the agents they're bound to
 // (subjects/files/files.ts): `open` and Claude's hooks say where an agent can be
-// reached, which is kept in memory only, since Claude's has its token.
+// reached.
 //
 // The core owns the registry. Each event is applied synchronously, then the
 // registry is saved (debounced) and listeners hear which blocks changed;
@@ -120,7 +120,7 @@ export class Core implements AgentDirectory {
   readonly registry: Registry
   readonly trackers: Trackers
   /** By agent id: where it can be reached, from the last `open` or hook
-   * that said. In memory only, since Claude's has its token. */
+   * that said */
   #addresses = new Map<string, Address>()
   /** Each block's tab, kept after the block closes for as long as the
    * tab is open, so a closed pane's comments find the rest of its tab */
@@ -418,7 +418,7 @@ export class Core implements AgentDirectory {
       const body: unknown = await req.json().catch(() => null)
       const event = parseEvent(body)
       if (!event) return new Response("bad event", { status: 400 })
-      // Apart from the event, which is logged, since it has Claude's token
+      // Apart from the event, which is logged
       const address = isRecord(body) ? parseAddress(body.address) : null
       const agent = this.receive(event, address)
       return Response.json({ context: agent && (await this.#context(agent, event)) })

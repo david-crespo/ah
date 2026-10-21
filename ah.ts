@@ -319,8 +319,7 @@ server
   .action(async ({ port }) => {
     const pages = (await status(port))?.pages ?? 0
     // The new server would forget the open files and which sessions their
-    // comments go to. They're carried over here, in memory, since the
-    // sessions' tokens mustn't go on disk, and before pages reconnect, so
+    // comments go to. They're carried over here, before pages reconnect, so
     // they find their files open.
     const open = await Promise.all(
       FILE_KINDS.map(async (kind) => ({ kind, requests: await handoff(kind, port) })),

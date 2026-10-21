@@ -91,18 +91,14 @@ describe("the API and pages ports", () => {
     expect(request.status).toEqual(200)
   })
 
-  test("the handoff gives the CLI each open file with its address, and pages nothing", async () => {
+  test("the handoff gives each open file with its address, and the pages port nothing", async () => {
     await writeFile(join(dir, "report.html"), "<body></body>")
     const path = join(dir, "report.html")
-    const address = { harness: "claude", socket: "/tmp/1.sock", token: "secret" }
+    const address = { harness: "claude", socket: "/tmp/1.sock" }
     await api("files", { method: "POST", body: JSON.stringify({ path, address }) })
     expect(await (await api("files/handoff")).json()).toEqual([
       { path, address, agentId: null },
     ])
-    const fromPage = { headers: { "sec-fetch-site": "same-origin" } }
-    expect((await api("files/handoff", fromPage)).status).toEqual(403)
-    const withOrigin = { headers: { origin: "http://127.0.0.1:7420" } }
-    expect((await api("files/handoff", withOrigin)).status).toEqual(403)
     expect((await pages("files/handoff")).status).toEqual(404)
   })
 })

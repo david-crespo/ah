@@ -33,7 +33,7 @@ async function md(name: string) {
 test("opening a file again rebinds it instead of adding a second", async () => {
   const a = await md("a.md")
   const b = await md("b.md")
-  const first = await files.open(a, { harness: "claude", socket: "/s/1.sock", token: "t1" })
+  const first = await files.open(a, { harness: "claude", socket: "/s/1.sock" })
   const sent: string[] = []
   first.pages.connect(
     { send: (m: string) => sent.push(m), on() {}, close() {} } as never,

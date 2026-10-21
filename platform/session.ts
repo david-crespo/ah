@@ -32,14 +32,8 @@ export function parseAddress(value: unknown): Address | null {
   if (!isRecord(value)) return null
   switch (value.harness) {
     case "claude": {
-      const { socket, token } = value
-      if (
-        typeof socket !== "string" ||
-        !(token === undefined || typeof token === "string")
-      ) {
-        return null
-      }
-      return { harness: "claude", socket, token }
+      const { socket } = value
+      return typeof socket === "string" ? { harness: "claude", socket } : null
     }
     case "codex": {
       const { thread, pid } = value
@@ -99,11 +93,7 @@ export function currentAddress(): Address | null {
     case undefined:
       return null
     case "claude":
-      return {
-        harness: "claude",
-        socket: env.CLAUDE_CODE_MESSAGING_SOCKET!,
-        token: env.CLAUDE_CODE_MESSAGING_TOKEN,
-      }
+      return { harness: "claude", socket: env.CLAUDE_CODE_MESSAGING_SOCKET! }
     case "codex": {
       const pid = found.procs.find((p) => p.harness === "codex")?.pid ?? null
       return { harness: "codex", thread: env.CODEX_THREAD_ID!, pid }
@@ -186,7 +176,7 @@ function harnessesAbove(): Ancestor[] {
   })
 }
 
-/** For `ls` and logs: the harness and where posts go, never the token */
+/** For `ls` and logs: the harness and where posts go */
 export function describeAddress(address: Address): string {
   switch (address.harness) {
     case "claude":
@@ -224,9 +214,7 @@ export function addressAlive(address: Address | null): boolean {
 
 /** The inbox socket of the running Claude process in `session`, from its
  * <config dir>/sessions/<pid>.json, for an agent the server has no address
- * for, like every agent right after it starts. It comes without the token
- * an address from the session's own shell has; in auto mode a post lands
- * without one (tested 2026-10-20). */
+ * for, like every agent right after it starts */
 export function claudeSocket(session: string): string | null {
   for (const dir of claudeConfigDirs().map(claudeSessionsDir)) {
     let names: string[]
@@ -296,9 +284,12 @@ async function postToClaude(
   address: Extract<Address, { harness: "claude" }>,
   text: string,
 ): Promise<void> {
-  const lines: string[] = []
-  if (address.token) lines.push(JSON.stringify({ type: "auth", token: address.token }))
-  lines.push(JSON.stringify({ type: "user", message: { role: "user", content: text } }))
+  // No auth line: on macOS it only proves a post came from the session's own
+  // child, which ah's server isn't, and only a session that bypasses
+  // permission prompts holds posts it can't verify
+  // (code.claude.com/docs/en/cross-session-messaging, "The session's inbox
+  // socket"). Run that way, ah needs `crossSessionInbound: "accept"`.
+  const line = JSON.stringify({ type: "user", message: { role: "user", content: text } })
   // Open only once the message is ready: the address drops connections that
   // go 30s without a complete line. The address closes right after reading
   // the line, but the timeout bounds the wait in case it ever doesn't, since
@@ -311,7 +302,7 @@ async function postToClaude(
     )
     conn.on("error", reject)
     conn.on("close", () => resolve())
-    conn.end(lines.join("\n") + "\n")
+    conn.end(line + "\n")
   })
 }
 

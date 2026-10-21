@@ -15,9 +15,9 @@
 // agent in the shell's tab, picked by the user if there are several.
 //
 // All of it is in memory. `ah server restart` asks the old server for the open files
-// and their agents' addresses and opens them again in the new one, so the
-// tokens never go on disk (saving the open files was considered and dropped on
-// 2026-10-01 for that reason). Any other stop forgets every open file, so its
+// and their agents' addresses and opens them again in the new one (saving
+// the open files was considered and dropped on 2026-10-01). Any other stop
+// forgets every open file, so its
 // pages say it isn't open anymore until an agent opens it again; the
 // conversation log, on disk, is still there when it does.
 
@@ -136,7 +136,7 @@ export interface OpenFile<L extends Live> {
   live: L
 }
 
-/** An open file as the API shows it: never the token */
+/** An open file as the API shows it */
 export interface FileInfo {
   id: string
   path: string

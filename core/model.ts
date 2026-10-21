@@ -50,17 +50,13 @@ export const HARNESSES = ["claude", "codex", "opencode", "pi"] as const
 /** A coding agent CLI ah works with */
 export type Harness = (typeof HARNESSES)[number]
 
-/** Where ah posts messages to a harness session. Held in memory only,
- * since Claude's has its token. pi has none: ah can't post into it. */
+/** Where ah posts messages to a harness session. pi has none: ah can't
+ * post into it. */
 export type Address =
   | {
       harness: "claude"
       /** Its inbox socket */
       socket: string
-      /** Exported alongside the socket; sending it as an auth line lets the
-       * session verify the post came from its own child even after process
-       * evidence is gone */
-      token?: string
     }
   /** `pid` is the TUI's process, if it could be found, since Codex keeps no
    * record of which threads are running */

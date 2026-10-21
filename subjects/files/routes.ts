@@ -1,6 +1,6 @@
 // The routes every backend with open files has, under /view/<name>/. The CLI opens
-// files through `files`, handing over the agent it runs in and its session's
-// inbox socket and token, since the server isn't the session's child; `files` also lists them,
+// files through `files`, handing over the agent it runs in and where its
+// session can be reached, since the server isn't the session's child; `files` also lists them,
 // `files/<id>` closes one, and `files/handoff` gives `ah server restart` what it
 // takes to open them all again in the next server. Each open file's page lives at <id>/, and the backend
 // handles everything under it. File ids always end in -<hash>, so they can't
@@ -72,11 +72,6 @@ export async function fileRoutes<L extends Live>(
     return Response.json(files.list().map((f) => files.info(f)))
   }
   if (rest === "files/handoff" && req.method === "GET") {
-    // Claude's tokens: for the CLI only, which sends neither header, never
-    // a page, even one the gate takes
-    if (req.headers.has("origin") || req.headers.has("sec-fetch-site")) {
-      return new Response("not for pages\n", { status: 403 })
-    }
     return Response.json(
       files.list().map((f): OpenRequest => ({
         path: f.path,

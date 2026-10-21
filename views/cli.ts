@@ -205,9 +205,9 @@ tracker
     ensureTaskList(file, title, goal)
     const path = realPathOrDie(file)
     const agent = currentAgent() ?? die("ah tracker add: not running in an agent session")
-    // Bound here rather than through the registry, which is on disk and so
-    // can't hold the session's token. The dashboard's view of the file leaves
-    // the binding alone; `ah server restart` carries it over.
+    // Bound by opening the file, since bindings live on open files. The
+    // dashboard's view of the file leaves the binding alone; `ah server
+    // restart` carries it over.
     await openInServer(fileKind(path), port, path)
     await setCurrentTracker(port, agent, path)
     console.log(`the tracker: ${path}`)

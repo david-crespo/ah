@@ -47,7 +47,7 @@ export function abbreviatePath(path: string, home = homedir()): string {
 }
 
 /** An event, and where the agent can be reached now, which the server keeps
- * apart from the event since it has Claude's token */
+ * apart from the event */
 type Report = RegistryEvent & { address?: Address | null }
 
 const post = (port: number, event: Report, timeoutMs: number) =>
