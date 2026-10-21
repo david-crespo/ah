@@ -85,7 +85,9 @@ test("a request goes to the bound session, rendered, after the edits it follows"
     expect(lines).toHaveLength(1)
     const content: string[] = lines[0].message.content.split("\n")
     expect(content[0]).toEqual(header({ kind: "markdown" }, path, 7420))
-    expect(JSON.parse(content[1])).toMatchObject({ kind: "file-edit", new: "there" })
+    expect(content[1]).toEqual(
+      'Edit notice: since the last request, the file on disk replaced "world" with "there" after "hello "',
+    )
     expect(content.slice(2)).toEqual([
       `Request ${request.id}: a comment on the passage "there" (after "hello "):`,
       "warmer",

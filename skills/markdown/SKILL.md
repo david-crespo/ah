@@ -105,10 +105,11 @@ the id is what `ah request respond` takes.
   "downleveling", em-dash chains, fake gravity. Match the register of the
   surrounding text. Keep the meaning; don't pad. As with comments, if the
   identical tic recurs elsewhere in the document, fix it there too.
-- An edit notice, a JSON line with `"kind": "file-edit"`: the file changed
-  on disk since the last request: the user's saves in an editor, or your
-  own edits echoed back. `old`/`new` give
-  one splice covering everything that changed in that window. If they match
+- An edit notice, a line starting `Edit notice:`: the file changed on disk
+  since the last request: the user's saves in an editor, or your own edits
+  echoed back. It gives one splice covering everything that changed in that
+  window (what was inserted, deleted or replaced, and the text before it),
+  quoted as JSON strings. If it matches
   changes you just made, ignore the notice. Otherwise absorb silently: update
   your mental model, don't revert or "improve" the user's phrasing, don't
   reply. If an Edit fails to match afterwards, re-read the file. Edit notices

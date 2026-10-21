@@ -59,20 +59,24 @@ export class LiveDoc {
     this.#broadcast(this.message())
   }
 
-  /** The window's changes as a `file-edit` event line, closing the window;
-   * null if nothing changed, or the changes cancel out */
+  /** The window's changes as an edit notice for the agent, one line,
+   * closing the window; null if nothing changed, or the changes cancel out */
   takeEdit(): string | null {
     const base = this.#windowBase
     this.#windowBase = null
     if (base === null || base === this.text) return null
     const { start, delLen, insert } = splice(base, this.text)
-    return JSON.stringify({
-      kind: "file-edit",
-      file: this.path,
-      ts: new Date().toISOString(),
-      old: base.slice(start, start + delLen).slice(0, 2000),
-      new: insert.slice(0, 2000),
-    })
+    // Quoted as JSON strings, so newlines in them keep the notice one line
+    const quote = (text: string) => JSON.stringify(text.slice(0, 2000))
+    const removed = base.slice(start, start + delLen)
+    const change = !removed
+      ? `inserted ${quote(insert)}`
+      : !insert
+        ? `deleted ${quote(removed)}`
+        : `replaced ${quote(removed)} with ${quote(insert)}`
+    const before = base.slice(Math.max(0, start - 40), start)
+    const at = before ? ` after ${JSON.stringify(before)}` : " at the start"
+    return `Edit notice: since the last request, the file on disk ${change}${at}`
   }
 
   /** The text as the page takes it, also sent when a page connects */

@@ -39,8 +39,9 @@ test("the edit window covers every change since the last comment, once", async (
   await doc.refresh()
   await writeFile(path, "one 2 3\n")
   await doc.refresh()
-  const edit = JSON.parse(doc.takeEdit()!)
-  expect([edit.kind, edit.old, edit.new]).toEqual(["file-edit", "two three", "2 3"])
+  expect(doc.takeEdit()).toEqual(
+    'Edit notice: since the last request, the file on disk replaced "two three" with "2 3" after "one "',
+  )
   expect(doc.takeEdit()).toEqual(null)
   // Typed and undone nets out to nothing
   await writeFile(path, "one 2 3 4\n")

@@ -4,6 +4,7 @@ import type { Request, ThreadEntry } from "../../core/model.ts"
 import type {
   ThreadSnapshot,
   RequestInput,
+  RequestKinds,
   RequestResult,
 } from "../../subjects/thread/events.ts"
 
@@ -19,23 +20,15 @@ export function focusWhenRendered(element: HTMLElement) {
   requestAnimationFrame(() => requestAnimationFrame(() => element.focus()))
 }
 
-/** What the feed labels a request with, after "You", and shows for it. The
- * chat panel's own kinds (kinds.ts) are named; others, such as a task list's,
- * show their kind and arguments. */
-function describe(request: Request): { label?: string; body: string } {
+/** What the feed labels a request with, after "You", and shows for it */
+function describe(request: Request, kinds: RequestKinds): { label?: string; body: string } {
   const { kind, text, args } = request
-  switch (kind) {
-    case "chat":
-      return { body: text ?? "" }
-    case "comment":
-    case "dellm":
-      return {
-        label: "Selection comment",
-        body:
-          text || (kind === "dellm" ? "Rewrite this passage to sound like a person." : ""),
-      }
-  }
-  return { label: kind, body: text || Object.values(args).join(": ") }
+  return (
+    kinds[kind]?.feed?.(request) ?? {
+      label: kind,
+      body: text || Object.values(args).join(": "),
+    }
+  )
 }
 
 export class Conversation {
@@ -61,12 +54,15 @@ export class Conversation {
   private lastTick = Date.now()
 
   private onOpen: () => void
+  private kinds: RequestKinds
   private threadUrl: string
 
-  /** `threadUrl` is where the thread's routes are (subjects/thread/routes.ts);
-   * by default, relative to the page */
-  constructor(onOpen: () => void, threadUrl = location.href) {
+  /** `kinds` are the requests the page's file type takes, for showing them.
+   * `threadUrl` is where the thread's routes are (subjects/thread/routes.ts);
+   * by default, relative to the page. */
+  constructor(onOpen: () => void, kinds: RequestKinds, threadUrl = location.href) {
     this.onOpen = onOpen
+    this.kinds = kinds
     this.threadUrl = threadUrl
     this.element.id = "conversation"
     this.element.setAttribute("aria-label", "Conversation")
@@ -221,7 +217,7 @@ export class Conversation {
       if (entry.type === "request") {
         const state = snapshot.requests.find((state) => state.id === entry.id)
         const meta = this.rows.get(entry.id)!.querySelector(".conversation-meta")!
-        const { label } = describe(entry)
+        const { label } = describe(entry, this.kinds)
         const stateText =
           state && state.status !== "done" ? ` · ${state.status.replace("-", " ")}` : ""
         meta.textContent = `You${label ? ` · ${label}` : ""}${stateText}`
@@ -267,7 +263,7 @@ export class Conversation {
     const body = document.createElement("div")
     body.className = "conversation-body"
     body.innerHTML = markdown.render(
-      entry.type === "request" ? describe(entry).body : (entry.text ?? ""),
+      entry.type === "request" ? describe(entry, this.kinds).body : (entry.text ?? ""),
     )
     for (const link of body.querySelectorAll("a")) {
       link.target = "_blank"

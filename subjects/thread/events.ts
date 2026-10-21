@@ -28,6 +28,9 @@ export interface RequestKind {
   args?: Record<string, { required?: boolean; max?: number }>
   /** What the agent reads for it, after "Request <id>: " */
   render(request: Request): string
+  /** What a page's conversation labels it with, after "You", and shows for
+   * it; without this, its kind and its arguments */
+  feed?(request: Request): { label?: string; body: string }
 }
 export type RequestKinds = Record<string, RequestKind>
 

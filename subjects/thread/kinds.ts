@@ -26,11 +26,12 @@ const selection = {
 }
 
 export const threadKinds: RequestKinds = {
-  chat: { text: "required", render: (r) => r.text! },
+  chat: { text: "required", render: (r) => r.text!, feed: (r) => ({ body: r.text ?? "" }) },
   comment: {
     text: "required",
     args: selection,
     render: (r) => `a comment on ${passage(r)}:\n${r.text}`,
+    feed: (r) => ({ label: "Selection comment", body: r.text ?? "" }),
   },
   dellm: {
     text: "optional",
@@ -38,5 +39,9 @@ export const threadKinds: RequestKinds = {
     render: (r) =>
       `de-LLM ${passage(r)}: rewrite it to sound like a person` +
       (r.text ? `. Guidance: ${r.text}` : ""),
+    feed: (r) => ({
+      label: "Selection comment",
+      body: r.text || "Rewrite this passage to sound like a person.",
+    }),
   },
 }

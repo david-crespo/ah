@@ -8,6 +8,7 @@
 // the chat is off (data-ah-chat="off").
 
 import { Conversation } from "../thread/conversation.ts"
+import { htmlKinds } from "./requests.ts"
 import { setUpSelectionComments } from "../thread/selection.ts"
 
 const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")!
@@ -40,7 +41,7 @@ function reload() {
 let conversation: Conversation | null = null
 if (chat) {
   let hidePopover = () => {}
-  conversation = new Conversation(() => hidePopover(), threadUrl)
+  conversation = new Conversation(() => hidePopover(), htmlKinds, threadUrl)
   // A page's main content when it marks one, so the comment's surrounding
   // text comes from the page rather than its chrome
   const content = document.querySelector<HTMLElement>("main") ?? document.body

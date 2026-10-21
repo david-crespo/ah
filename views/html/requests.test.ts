@@ -14,6 +14,7 @@ test("go takes no text, and the agent reads the item it's for", () => {
   const go = request({ kind: "go", text: "ignored", args: { item: "5", title: "Fix it" } })
   expect(go.text).toBeUndefined()
   expect(render(go, taskListKinds)).toEqual("Request r1: Go ahead with item 5: Fix it")
+  expect(taskListKinds.go.feed?.(go)).toEqual({ label: "Go", body: "Item 5: Fix it" })
 })
 
 test("an item comment needs text and an item", () => {

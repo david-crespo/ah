@@ -11,6 +11,7 @@ import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
 import { WebglAddon } from "@xterm/addon-webgl"
 import { Conversation } from "../thread/conversation.ts"
+import { threadKinds } from "../../subjects/thread/kinds.ts"
 import { setUpSelectionComments } from "../thread/selection.ts"
 import { theme } from "../theme.ts"
 import "./preview.ts"
@@ -23,7 +24,7 @@ const editorToggle = document.getElementById("editor-toggle")
 // with chat on
 const chat = document.getElementById("popover") !== null
 let hidePopover = () => {}
-const conversation = chat ? new Conversation(() => hidePopover()) : null
+const conversation = chat ? new Conversation(() => hidePopover(), threadKinds) : null
 if (conversation) hidePopover = setUpSelectionComments(content, conversation)
 
 /** A WebSocket URL relative to the file's page */
