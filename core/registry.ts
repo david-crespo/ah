@@ -67,18 +67,25 @@ export interface AgentRecord {
   updatedAt: number
 }
 
-/** What ah keeps on disk about agents and trackers */
+/** What ah keeps on disk about agents, trackers and files */
 export interface Registry {
   agents: Map<AgentId, AgentRecord>
   trackers: Map<WorkspaceRoot, WorkspaceRecord>
   /** zsh's label for each block's directory */
   shellLabels: Map<BlockId, string>
+  /** File path -> the agent its requests go to */
+  bindings: Map<string, AgentId>
+  /** Files whose threads hold requests no agent has taken, to send when
+   * one turns up */
+  held: Set<string>
 }
 
 export const emptyRegistry = (): Registry => ({
   agents: new Map(),
   trackers: new Map(),
   shellLabels: new Map(),
+  bindings: new Map(),
+  held: new Set(),
 })
 
 /** An agent's id, from its home */
@@ -285,6 +292,8 @@ interface Stored {
   agents: Record<string, AgentRecord>
   trackers: Record<string, WorkspaceRecord>
   shellLabels: Record<string, string>
+  bindings: Record<string, AgentId>
+  held: string[]
 }
 
 /** The registry as last saved, or null if it never was. Entries that don't
@@ -301,6 +310,8 @@ export function loadRegistry(file = registryFile()): Registry | null {
     agents: entries(raw.agents, isAgentRecord),
     trackers: entries(raw.trackers, isWorkspaceRecord),
     shellLabels: entries(raw.shellLabels, isString),
+    bindings: entries(raw.bindings, isString),
+    held: new Set(Array.isArray(raw.held) ? raw.held.filter(isString) : []),
   }
 }
 
@@ -353,6 +364,8 @@ export function saveRegistry(r: Registry, file = registryFile()) {
     agents: Object.fromEntries(r.agents),
     trackers: Object.fromEntries(r.trackers),
     shellLabels: Object.fromEntries(r.shellLabels),
+    bindings: Object.fromEntries(r.bindings),
+    held: [...r.held],
   }
   mkdirSync(dirname(file), { recursive: true })
   // Rename over the old file so a crash mid-write can't leave half of one

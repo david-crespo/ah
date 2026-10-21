@@ -1,25 +1,23 @@
-// The files a backend has open (markdown's, html's), keyed by absolute path, each
-// with what the server keeps for it while it's open: the agent its comments
-// go to, the pages showing it, the conversation (Thread), and whatever its type
-// keeps live for it (markdown's text and helix panes, html's reload watcher).
-// Opening a file again rebinds it to the new agent rather than opening a
-// second copy.
+// What a backend (markdown's, html's) keeps for files, by absolute path: the
+// conversation (Thread) of any file something asks about, and for a file a
+// page shows, its pages and whatever its type keeps live for it (markdown's
+// text and helix panes, html's reload watcher). Nothing opens a file: a page's
+// URL names its path, signed (subjects/id.ts), so a page that connects brings
+// up the live state, and it stops a few seconds after the last page leaves,
+// long enough for a reload. After a restart, pages reconnect on their own.
 //
-// A file is bound to the agent that opened it, not to the session it was in,
-// so comments follow the agent through /clear, Codex's /new, and a restart in
-// its pane: the agent directory (the agent registry) resolves its address
-// when a comment is posted. The session that opened it is kept too, for an
-// agent the directory can't place. If the agent is gone, comments go to
-// another live agent in its tab, which is working from the same tracker.
-// A file opened from a shell in Rex, in no agent session, is bound to an
-// agent in the shell's tab, picked by the user if there are several.
+// A file is bound to the agent that showed it (`ah view open`), not to the
+// session it was in, so comments follow the agent through /clear, Codex's
+// /new, and a restart in its pane. The binding is the directory's (the core
+// keeps it in the registry, on disk), and the directory resolves the agent's
+// address when a comment is posted. If the agent is gone, comments go to
+// another live agent in its tab, which is working from the same tracker. A
+// file shown from a shell in Rex, in no agent session, is bound to an agent in
+// the shell's tab, picked by the user if there are several.
 //
-// All of it is in memory. `ah server restart` asks the old server for the open files
-// and their agents' addresses and opens them again in the new one (saving
-// the open files was considered and dropped on 2026-10-01). Any other stop
-// forgets every open file, so its
-// pages say it isn't open anymore until an agent opens it again; the
-// conversation log, on disk, is still there when it does.
+// A file with requests no agent took is one the core keeps (its held paths),
+// so they go out when an agent comes back. Threads load the first time
+// they're needed; the log is on disk.
 
 import { stat } from "node:fs/promises"
 import type { WebSocket } from "ws"
@@ -27,22 +25,28 @@ import type { RequestKinds } from "../thread/events.ts"
 import { Thread } from "../thread/thread.ts"
 import { isOneOf } from "../../platform/guards.ts"
 import { fileId } from "../id.ts"
-import { Presence } from "../../platform/presence.ts"
+import { GRACE_MS, Presence } from "../../platform/presence.ts"
 import { describeAddress, addressAlive } from "../../platform/session.ts"
-import type { Address, AgentId, AgentRef, Binding, FileKind } from "../../core/model.ts"
+import type { Address, AgentId, AgentRef, FileKind } from "../../core/model.ts"
 
-/** Where agents can be reached, which changes as they go through sessions.
- * The server's is the core, which keeps the agent registry (core/core.ts). */
+/** Which agent each file's requests go to, and where agents can be reached,
+ * which changes as they go through sessions. The server's is the core, which
+ * keeps the agent registry (core/core.ts). */
 export interface AgentDirectory {
   /** The id of the agent `ref` names, if the directory knows it */
   agentId(ref: AgentRef): AgentId | null
   /** Note `address` as where the agent can be reached now */
   bind(agent: AgentId, address: Address | null): void
-  /** Where the agent can be reached now, if the directory knows */
-  address(agent: string): Address | null
-  /** Where another live agent in the agent's tab can be reached, for when it
-   * can't */
-  standIn(agent: string): Address | null
+  /** Bind the file to `agent`: its requests go there from now on */
+  bindFile(path: string, agent: AgentId): void
+  /** The agent the file is bound to */
+  binding(path: string): AgentId | null
+  /** Where the file's requests go now: `target` if given, else the agent
+   * it's bound to; if that one can't be reached, another live agent in its
+   * tab */
+  route(path: string, target?: AgentId | null): Address | null
+  /** Note whether the file's thread holds requests no agent has taken */
+  hold(path: string, held: boolean): void
 }
 
 /** Where a page is, as its socket's `in` says: a window or browser tab from
@@ -63,6 +67,12 @@ export class Pages {
   /** Whether any window shows the file, for telling its agent when none
    * does (core/notices.ts) */
   readonly presence = new Presence()
+  #onCount: (count: number) => void
+
+  /** `onCount` hears how many are connected each time that changes */
+  constructor(onCount: (count: number) => void = () => {}) {
+    this.#onCount = onCount
+  }
 
   broadcast(message: string) {
     for (const ws of this.#clients.keys()) {
@@ -79,39 +89,56 @@ export class Pages {
     return [...this.#clients.values()]
   }
 
+  get count(): number {
+    return this.#clients.size
+  }
+
   /** `greeting` is sent on connect */
   connect(ws: WebSocket, greeting: string[], location: Location = "page") {
     this.#clients.set(ws, location)
-    this.presence.update(this.#clients.size)
+    this.#counted()
     for (const message of greeting) ws.send(message)
     ws.on("close", () => this.#drop(ws))
     ws.on("error", () => this.#drop(ws))
   }
 
   #drop(ws: WebSocket) {
-    this.#clients.delete(ws)
-    this.presence.update(this.#clients.size)
+    if (this.#clients.delete(ws)) this.#counted()
   }
 
-  /** Tell open pages the file is closed so they stop reconnecting, and hang
-   * up */
-  close() {
-    this.broadcast(JSON.stringify({ type: "closed" }))
-    for (const ws of this.#clients.keys()) ws.close(1000, "file closed")
-    this.#clients.clear()
-    this.presence.update(0)
+  #counted() {
+    this.presence.update(this.#clients.size)
+    this.#onCount(this.#clients.size)
+  }
+
+  /** Tell the windows and tabs showing the file that it's closed, so they
+   * close and stop reconnecting, and hang up; the dashboard's stay. Returns
+   * how many there were. */
+  close(): number {
+    const closing = [...this.#clients].filter(([, where]) => where !== "dashboard")
+    for (const [ws] of closing) {
+      try {
+        ws.send(JSON.stringify({ type: "closed" }))
+      } catch {
+        /* gone already */
+      }
+      ws.close(1000, "file closed")
+      this.#drop(ws)
+    }
+    return closing.length
   }
 }
 
-/** What a file type keeps live for an open file, besides its pages and thread */
+/** What a file type keeps live for a file while pages show it, besides its
+ * pages and thread */
 export interface Live {
   /** A line the agent should read before each request, if there is one */
   context?(): Promise<string | null>
-  /** Stop watching, for closing the file */
+  /** Stop watching, for when no page shows the file */
   close(): void
 }
 
-/** A subject type that's a file, as its backend's open files need it */
+/** A subject type that's a file, as its backend's files need it */
 export interface FileType<L extends Live> {
   /** In its URLs, where its logs go, and the skill the thread's header names */
   kind: FileKind
@@ -119,24 +146,11 @@ export interface FileType<L extends Live> {
   title?: string
   /** The requests its pages send */
   kinds: RequestKinds
-  /** Set up what the type keeps live for a file being opened */
+  /** Set up what the type keeps live for a file a page is showing */
   attach(path: string, pages: Pages): Promise<L>
 }
 
-export interface OpenFile<L extends Live> {
-  /** In the URL: readable, and stable for a path across restarts */
-  id: string
-  path: string
-  /** Where comments go: the agent that last opened it with `ah view
-   * open`. Both null when no agent has, as for the dashboard's view. */
-  binding: Binding
-  openedAt: string
-  pages: Pages
-  thread: Thread
-  live: L
-}
-
-/** An open file as the API shows it */
+/** A file as the API shows it */
 export interface FileInfo {
   id: string
   path: string
@@ -146,34 +160,36 @@ export interface FileInfo {
   /** The harness and where posts go now */
   address: string | null
   addressAlive: boolean
-  openedAt: string
   /** Where its connected pages are */
   views: Location[]
 }
 
-export interface OpenFilesOptions {
+export interface FilesOptions {
   pageOrigin?: string
-  directory?: AgentDirectory | null
 }
 
-export class OpenFiles<L extends Live> {
-  #byId = new Map<string, OpenFile<L>>()
-  // Opening reads the thread's log (and markdown's file), so two opens at
-  // once share one
-  #opening = new Map<string, Promise<OpenFile<L>>>()
+export class Files<L extends Live> {
+  // Each file a page has shown since the server started, kept for its
+  // presence, which notices read after the pages are gone
+  #pages = new Map<string, Pages>()
+  // Attaching reads the file, so two pages at once share one
+  #live = new Map<string, Promise<L>>()
+  #teardowns = new Map<string, ReturnType<typeof setTimeout>>()
+  #threads = new Map<string, Promise<Thread>>()
   #port: number
   #pageOrigin: string
-  #directory: AgentDirectory | null
+  #directory: AgentDirectory
   readonly type: FileType<L>
 
-  /** `port` is the server's, for telling the agent which one to answer.
-   * `pageOrigin` is where the pages are, if not on the server's own origin
-   * (html's, on a port of their own). Without a directory, files are bound
-   * to the session that opened them. */
+  /** `port` is the server's, for telling the agent which one to answer, and
+   * `directory` where each file's requests go. `pageOrigin` is where the
+   * pages are, if not on the server's own origin (html's, on a port of their
+   * own). */
   constructor(
     port: number,
     type: FileType<L>,
-    { pageOrigin = "", directory = null }: OpenFilesOptions = {},
+    directory: AgentDirectory,
+    { pageOrigin = "" }: FilesOptions = {},
   ) {
     this.#port = port
     this.type = type
@@ -181,133 +197,169 @@ export class OpenFiles<L extends Live> {
     this.#directory = directory
   }
 
-  /** The id of the agent `ref` names, if there's a directory that knows it */
+  /** The id of the agent `ref` names, if the directory knows it */
   agentId(ref: AgentRef): AgentId | null {
-    return this.#directory?.agentId(ref) ?? null
+    return this.#directory.agentId(ref)
   }
 
-  /** Open the file, or rebind it if it's already open: to `agent`, opened
-   * from `from`, which also tells the directory where the agent is now */
-  async open(
-    path: string,
-    from: Address | null,
-    agent: AgentId | null = null,
-  ): Promise<OpenFile<L>> {
-    const file = await this.ensure(path)
-    if (agent) this.#directory?.bind(agent, from)
-    file.binding = { agent: this.#directory ? agent : null, openedFrom: from }
-    // Its window may be opening now
-    file.pages.presence.expect()
-    // Send this agent what no agent took, and tell the pages if it's there
-    await file.thread.refresh()
-    return file
-  }
-
-  /** Where the file's comments go now: its agent, or if that's gone, another
-   * in the agent's tab */
-  address({ agent, openedFrom }: Binding): Address | null {
-    const own = (agent && this.#directory?.address(agent)) || openedFrom
-    if (addressAlive(own) || !agent) return own
-    return this.#directory?.standIn(agent) ?? own
-  }
-
-  /** Open the file if it isn't, leaving any binding alone: for views of it,
-   * like the dashboard's, that have no agent of their own */
-  async ensure(path: string): Promise<OpenFile<L>> {
-    const id = fileId(path)
-    const open = this.#byId.get(id)
-    if (open) return open
-    let opening = this.#opening.get(id)
-    if (!opening) {
-      opening = this.#load(id, path).finally(() => this.#opening.delete(id))
-      this.#opening.set(id, opening)
+  /** For `ah view open`: bind the file to `agent`, if given, which can be
+   * reached at `from`, and expect a page, which is on its way */
+  async bind(path: string, from: Address | null, agent: AgentId | null): Promise<FileInfo> {
+    if (agent) {
+      this.#directory.bind(agent, from)
+      this.#directory.bindFile(path, agent)
     }
-    return await opening
+    this.pages(path).presence.expect()
+    // Send this agent what no agent took, and tell the pages if it's there
+    await (await this.thread(path)).refresh()
+    return this.info(path)
   }
 
-  /** `ensure` for a view that shows the file without binding it, like the
-   * dashboard's; null if it isn't a readable file */
+  /** The agent the file is bound to */
+  binding(path: string): AgentId | null {
+    return this.#directory.binding(path)
+  }
+
+  /** The info of a file to show without binding it, like the dashboard's;
+   * null if it isn't a readable file */
   async show(path: string): Promise<FileInfo | null> {
     try {
       if (!(await stat(path)).isFile()) return null
-      return this.info(await this.ensure(path))
     } catch {
       return null
     }
+    return this.info(path)
   }
 
-  async #load(id: string, path: string): Promise<OpenFile<L>> {
-    const pages = new Pages()
-    const live = await this.type.attach(path, pages)
-    const base: Omit<OpenFile<L>, "thread"> = {
-      id,
-      path,
-      binding: { agent: null, openedFrom: null },
-      openedAt: new Date().toISOString(),
-      pages,
-      live,
+  /** The pages showing the file */
+  pages(path: string): Pages {
+    let pages = this.#pages.get(path)
+    if (!pages) {
+      pages = new Pages((count) => this.#counted(path, count))
+      this.#pages.set(path, pages)
     }
-    let file: OpenFile<L>
+    return pages
+  }
+
+  /** A page's socket: counted at once, so the live state stays up, and sent
+   * `greeting` once it's up */
+  async connect(
+    path: string,
+    ws: WebSocket,
+    location: Location,
+    greeting: (live: L, thread: Thread) => string[],
+  ) {
+    this.pages(path).connect(ws, [], location)
     try {
+      const [live, thread] = await Promise.all([this.live(path), this.thread(path)])
+      if (ws.readyState === ws.OPEN)
+        for (const message of greeting(live, thread)) ws.send(message)
+    } catch (e) {
+      console.error(`ah: couldn't show ${path}:`, e)
+      ws.close(1011, "couldn't show the file")
+    }
+  }
+
+  /** What the type keeps live for the file, started if no page has it yet */
+  live(path: string): Promise<L> {
+    let live = this.#live.get(path)
+    if (!live) {
+      live = this.type.attach(path, this.pages(path))
+      live.catch(() => this.#live.delete(path))
+      this.#live.set(path, live)
+      // Stopped again unless a page shows it
+      this.#counted(path, this.pages(path).count)
+    }
+    return live
+  }
+
+  /** With no page left, stop the live state, unless one comes back in time,
+   * as on a reload */
+  #counted(path: string, count: number) {
+    clearTimeout(this.#teardowns.get(path))
+    this.#teardowns.delete(path)
+    if (count) return
+    const timer = setTimeout(() => {
+      this.#teardowns.delete(path)
+      const live = this.#live.get(path)
+      this.#live.delete(path)
+      live?.then((l) => l.close()).catch(() => {})
+    }, GRACE_MS)
+    // Nothing to wait for at exit
+    timer.unref?.()
+    this.#teardowns.set(path, timer)
+  }
+
+  /** The file's thread, loaded the first time it's asked for */
+  thread(path: string): Promise<Thread> {
+    let thread = this.#threads.get(path)
+    if (!thread) {
       // The thread asks for the address each time, so a rebind, or the
       // agent moving to another session, reaches it
-      const bound = { path, address: () => this.address(base.binding) }
-      file = Object.assign(base, {
-        thread: await Thread.open(bound, {
-          kind: this.type.kind,
-          title: this.type.title,
-          kinds: this.type.kinds,
-          port: this.#port,
-          broadcast: (message) => pages.broadcast(message),
-          context: async () => (await live.context?.()) ?? null,
-        }),
+      const bound = { path, address: () => this.#directory.route(path) }
+      thread = Thread.open(bound, {
+        kind: this.type.kind,
+        title: this.type.title,
+        kinds: this.type.kinds,
+        port: this.#port,
+        broadcast: (message) => this.#pages.get(path)?.broadcast(message),
+        context: async () => {
+          const live = this.#live.get(path)
+          return (live && (await (await live).context?.())) ?? null
+        },
+        hold: (held) => this.#directory.hold(path, held),
       })
-    } catch (e) {
-      live.close()
-      throw e
+      // A log it couldn't read is tried again next time
+      thread.catch(() => this.#threads.delete(path))
+      this.#threads.set(path, thread)
     }
-    this.#byId.set(id, file)
-    return file
+    return thread
   }
 
-  /** For when agents come and go: each file's thread sends what it held
-   * to whoever is there now, and tells its pages */
-  refresh() {
-    for (const f of this.#byId.values())
-      f.thread.refresh().catch((e) => console.error(`ah: couldn't refresh ${f.path}:`, e))
+  /** For when agents come and go: each loaded thread, and those of `held`,
+   * files with requests no agent took, sends what it held to whoever is
+   * there now, and tells its pages */
+  refresh(held: string[] = []) {
+    const paths = new Set([...this.#threads.keys(), ...held])
+    for (const path of paths) {
+      this.thread(path)
+        .then((t) => t.refresh())
+        .catch((e) => console.error(`ah: couldn't refresh ${path}:`, e))
+    }
   }
 
-  get(id: string): OpenFile<L> | undefined {
-    return this.#byId.get(id)
+  /** Close the windows and tabs showing the file; how many there were */
+  close(path: string): number {
+    return this.#pages.get(path)?.close() ?? 0
   }
 
-  /** Stop watching it and hang up its pages; returns the closed file, if it
-   * was open */
-  close(id: string): OpenFile<L> | undefined {
-    const file = this.#byId.get(id)
-    if (!file) return undefined
-    this.#byId.delete(id)
-    file.live.close()
-    file.pages.close()
-    return file
+  /** The files pages show now, in the order they were first shown */
+  shown(): string[] {
+    return [...this.#pages].filter(([, p]) => p.count).map(([path]) => path)
   }
 
-  /** Oldest first */
-  list(): OpenFile<L>[] {
-    return [...this.#byId.values()]
+  /** Every file a page has shown, with whether a window does now or did a
+   * moment ago, for the agent's notices */
+  presence(): { path: string; open: boolean }[] {
+    return [...this.#pages].map(([path, p]) => ({ path, open: p.presence.open() }))
   }
 
-  info(f: OpenFile<L>): FileInfo {
-    const address = this.address(f.binding)
+  /** How many pages are connected, for the server's status */
+  get pageCount(): number {
+    return [...this.#pages.values()].reduce((n, p) => n + p.count, 0)
+  }
+
+  info(path: string): FileInfo {
+    const address = this.#directory.route(path)
+    const id = fileId(path)
     return {
-      id: f.id,
-      path: f.path,
-      url: `${this.#pageOrigin}/view/${this.type.kind}/${f.id}/`,
-      agent: f.binding.agent,
+      id,
+      path,
+      url: `${this.#pageOrigin}/view/${this.type.kind}/${id}/`,
+      agent: this.binding(path),
       address: address ? describeAddress(address) : null,
       addressAlive: addressAlive(address),
-      openedAt: f.openedAt,
-      views: f.pages.locations,
+      views: this.#pages.get(path)?.locations ?? [],
     }
   }
 }

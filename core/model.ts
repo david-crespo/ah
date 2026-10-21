@@ -171,14 +171,6 @@ export type Subject =
  * here for when it's built. */
 export type Requestable = Extract<Subject, { kind: FileKind | "diff" }>
 
-/** Who gets a requestable subject's requests: the agent that last opened
- * it, and where it was opened from, for when the registry can't place the
- * agent */
-export interface Binding {
-  agent: AgentId | null
-  openedFrom: Address | null
-}
-
 export type RequestId = string
 
 /** A message from a view to the agent about its subject. `kind` and `args`

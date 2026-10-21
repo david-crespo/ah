@@ -185,6 +185,35 @@ test("a request no agent took is still held after a restart", async () => {
   }
 })
 
+test("a held request keeps the edit notice it came with", async () => {
+  const agent = await inbox()
+  try {
+    const { path, doc } = await markdownFile("hello world\n")
+    let address: { harness: "claude"; socket: string } | null = null
+    const holds: boolean[] = []
+    const thread = await Thread.open(
+      { path, address: () => address },
+      {
+        kind: "markdown",
+        kinds: threadKinds,
+        port: 7420,
+        broadcast: () => {},
+        context: async () => (await doc.refresh(), doc.takeEdit()),
+        hold: (held) => holds.push(held),
+      },
+    )
+    await writeFile(path, "hello there\n")
+    await thread.request(parseRequest({ kind: "chat", text: "one" }, threadKinds))
+    address = { harness: "claude", socket: agent.socket }
+    await thread.refresh()
+    expect(holds).toEqual([true, false])
+    const content = JSON.parse(agent.posts[0].trim()).message.content
+    expect(content).toContain('replaced "world" with "there"')
+  } finally {
+    agent.close()
+  }
+})
+
 test("the header names the port only when it isn't the default", () => {
   expect(header({ kind: "markdown" }, "/d.md", 7420)).toEqual(
     "Markdown requests for /d.md (handle per /markdown skill):",

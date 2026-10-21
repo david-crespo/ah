@@ -1,14 +1,9 @@
-// What html keeps live for each open file (subjects/files/): a watch on
-// its directory that tells its pages to reload.
+// What html keeps live for a file while pages show it (subjects/files/): a
+// watch on its directory that tells its pages to reload.
 
 import { type FSWatcher, watch } from "node:fs"
 import { dirname } from "node:path"
-import {
-  type FileType,
-  type Live,
-  type OpenFile,
-  type Pages,
-} from "../../subjects/files/files.ts"
+import type { FileType, Live, Pages } from "../../subjects/files/files.ts"
 import { htmlKinds } from "./requests.ts"
 
 /** Tells the file's pages to reload when anything in its directory changes:
@@ -45,5 +40,3 @@ export const htmlFiles: FileType<LiveReload> = {
   kinds: htmlKinds,
   attach: async (path, pages) => new LiveReload(path, pages),
 }
-
-export type HtmlFile = OpenFile<LiveReload>

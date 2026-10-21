@@ -1,12 +1,12 @@
-// What the commands of every backend with open files share: opening a file in
-// the server and showing its page, listing the open files, and closing one.
+// What the commands of every backend for files share: binding a file in the
+// server and showing its page, listing what pages show, and closing a file's
+// windows.
 
 import { realpathSync } from "node:fs"
 import { resolve as resolvePath } from "node:path"
 import { styleText } from "node:util"
 import select from "@inquirer/select"
-import { die, ensureStarted, serverJson } from "../../platform/cli.ts"
-import { fileId } from "../id.ts"
+import { callServer, die, ensureStarted, serverUrl } from "../../platform/cli.ts"
 import { focusHere, keepFocus } from "../../platform/focus.ts"
 import { openWindow, windowName } from "../../platform/window.ts"
 import { run } from "../../platform/proc.ts"
@@ -19,7 +19,7 @@ import {
   fileKind,
 } from "../../core/model.ts"
 import type { FileInfo, Location } from "./files.ts"
-import type { OpenRequest } from "./routes.ts"
+import type { ShowRequest } from "./routes.ts"
 
 /** The real path, or the absolute one for a file that may be gone */
 export function absolute(file: string): string {
@@ -30,30 +30,22 @@ export function absolute(file: string): string {
   }
 }
 
-/** Call the files API of the backend for `kind`; a non-2xx response exits with its body */
-async function filesApi<T>(kind: FileKind, port: number, init?: RequestInit) {
-  const res = await fetch(`http://127.0.0.1:${port}/view/${kind}/files`, init)
-  if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
-  return await serverJson<T>(res)
-}
+const filesUrl = (kind: FileKind, port: number) => serverUrl(port, `view/${kind}/files`)
 
-/** Open `path` bound to the agent this runs in, or from a shell in Rex, an
- * agent in its tab; the URL of its page, and where pages already show it */
-export async function openInServer(
+/** Bind `path` to the agent this runs in, or from a shell in Rex, an agent
+ * in its tab; the URL of its page, and where pages already show it */
+export async function showInServer(
   kind: FileKind,
   port: number,
   path: string,
 ): Promise<{ url: URL; views: Location[] }> {
   const address = currentAddress()
   await ensureStarted(port)
-  const request: OpenRequest = address
+  const request: ShowRequest = address
     ? { path, address, agent: currentAgent(address) }
     : { path, address, agentId: await pickAgentNear(port) }
-  const opened = await filesApi<FileInfo>(kind, port, {
-    method: "POST",
-    body: JSON.stringify(request),
-  })
-  return { url: new URL(opened.url, `http://127.0.0.1:${port}`), views: opened.views }
+  const opened = await callServer<FileInfo>(filesUrl(kind, port), { body: request })
+  return { url: new URL(opened.url, serverUrl(port, "")), views: opened.views }
 }
 
 /** A nearby agent as its tab's title has it */
@@ -68,11 +60,9 @@ async function pickAgentNear(port: number): Promise<AgentId | null> {
   const block = process.env.REX_BLOCK
   const none = "ah: not in an agent session or a tab with one; comments won't go anywhere"
   if (!block) return (console.error(none), null)
-  const res = await fetch(
-    `http://127.0.0.1:${port}/core/agents-near?block=${encodeURIComponent(block)}`,
+  const agents = await callServer<NearbyAgent[]>(
+    serverUrl(port, `core/agents-near?block=${encodeURIComponent(block)}`),
   )
-  if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
-  const agents = await serverJson<NearbyAgent[]>(res)
   if (agents.length <= 1) {
     console.error(agents[0] ? `ah: comments go to ${agentLine(agents[0])}` : none)
     return agents[0]?.id ?? null
@@ -109,42 +99,12 @@ async function pickAgentNear(port: number): Promise<AgentId | null> {
   } catch (e) {
     // q, Ctrl+C, or Ctrl+D
     if (e instanceof Error && ["AbortPromptError", "ExitPromptError"].includes(e.name)) {
-      die("ah: no agent picked, nothing opened")
+      die("ah: no agent picked, nothing shown")
     }
     throw e
   } finally {
     process.stdin.off("keypress", onKey)
   }
-}
-
-/** What the backend has open and which agent each file is bound to, for
- * opening them again after a restart; none with no server, or one from
- * before there was a handoff */
-export async function handoff(kind: FileKind, port: number): Promise<OpenRequest[]> {
-  if (!(await status(port))) return []
-  const res = await fetch(`http://127.0.0.1:${port}/view/${kind}/files/handoff`)
-  if (res.ok) return await serverJson<OpenRequest[]>(res)
-  console.error(`ah: can't carry ${kind} files over: ${(await res.text()).trim()}`)
-  return []
-}
-
-/** Open files again with their agents; a file that's gone stays closed.
- * Returns how many opened. */
-export async function takeHandoff(
-  kind: FileKind,
-  port: number,
-  requests: OpenRequest[],
-): Promise<number> {
-  let opened = 0
-  for (const request of requests) {
-    const res = await fetch(`http://127.0.0.1:${port}/view/${kind}/files`, {
-      method: "POST",
-      body: JSON.stringify(request),
-    })
-    if (res.ok) opened++
-    else console.error(`ah: couldn't reopen ${request.path}: ${(await res.text()).trim()}`)
-  }
-  return opened
 }
 
 /** `path`'s page in a window of its own or a tab of the default browser,
@@ -177,8 +137,10 @@ export async function showPage(
   console.log(url.href)
 }
 
-/** The open files of the backend for `kind`, oldest first; the server must be running */
-export const openFiles = (kind: FileKind, port: number) => filesApi<FileInfo[]>(kind, port)
+/** The files pages of the backend for `kind` show, oldest first; the server
+ * must be running */
+export const shownFiles = (kind: FileKind, port: number) =>
+  callServer<FileInfo[]>(filesUrl(kind, port))
 
 /** A file as `ah view ls` prints it: id, path, where its pages are, agent,
  * and where its comments go */
@@ -188,17 +150,16 @@ export function fileLine(f: FileInfo): string {
   return [f.id, f.path, views, f.agent ?? "-", address].join("\t")
 }
 
-/** Close the file if the server has it open */
+/** Close the windows and tabs that show the file */
 export async function closeInServer(
   kind: FileKind,
   port: number,
   path: string,
-): Promise<"closed" | "not open" | "no server"> {
+): Promise<"closed" | "not shown" | "no server"> {
   if (!(await status(port))) return "no server"
-  const res = await fetch(`http://127.0.0.1:${port}/view/${kind}/files/${fileId(path)}`, {
-    method: "DELETE",
-  })
-  if (res.status === 404) return "not open"
+  const query = new URLSearchParams({ path })
+  const res = await fetch(`${filesUrl(kind, port)}?${query}`, { method: "DELETE" })
+  if (res.status === 404) return "not shown"
   if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
   return "closed"
 }

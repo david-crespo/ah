@@ -39,11 +39,10 @@ import { TitleSetter } from "./core/tabtitle/setter.ts"
 import { assetPath } from "./platform/assets.ts"
 import { boxCss } from "./views/dashboard/box.ts"
 import { die, parseNumber, portOption } from "./platform/cli.ts"
-import { handoff, takeHandoff } from "./subjects/files/cli.ts"
 import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
-import { FILE_KINDS, type RexState } from "./core/model.ts"
+import { type FileKind, fileKind, type RexState } from "./core/model.ts"
 import {
   onRexHealth,
   type RexHealth,
@@ -150,19 +149,21 @@ async function serve(port: number, snapshotDelayMs: number | null) {
   core.subscribe((registry) => tabTitles.onRegistry(registry))
   // What windows show, so an agent hears when one it opened closes
   core.watchShowing(() => ({
-    files: [...markdownBackend.files.list(), ...htmlBackend.files.list()].map((f) => ({
-      path: f.path,
-      agent: f.binding.agent,
-      open: f.pages.presence.open(),
-    })),
+    files: [...markdownBackend.files.presence(), ...htmlBackend.files.presence()].map(
+      ({ path, open }) => ({ path, agent: core.binding(path), open }),
+    ),
     dashboard: dashboardBackend.presence.open(),
   }))
   // An agent starting or going away: held comments go to whoever is there
-  // now, and pages show whether anyone is
-  core.subscribe(() => {
-    markdownBackend.files.refresh()
-    htmlBackend.files.refresh()
-  })
+  // now, and pages show whether anyone is. The core keeps which files hold
+  // any, so it reaches those that aren't open, and those from before a restart.
+  const refreshThreads = () => {
+    const held = (kind: FileKind) => core.held.filter((path) => fileKind(path) === kind)
+    markdownBackend.files.refresh(held("markdown"))
+    htmlBackend.files.refresh(held("html"))
+  }
+  refreshThreads()
+  core.subscribe(refreshThreads)
   // opencode has no hooks: its service streams its sessions' events
   void watchOpencode(core)
 
@@ -198,10 +199,7 @@ async function serve(port: number, snapshotDelayMs: number | null) {
       return Response.json({
         pid: process.pid,
         pages: dashboardBackend.pages,
-        views: [...markdownBackend.files.list(), ...htmlBackend.files.list()].reduce(
-          (n, f) => n + f.pages.locations.length,
-          0,
-        ),
+        views: markdownBackend.files.pageCount + htmlBackend.files.pageCount,
         startedAt,
         rex: rexHealth(),
       } satisfies Status)
@@ -317,25 +315,13 @@ server
   .description("Stop the server and start it again, for example after editing ah.")
   .addOption(portOption("Port to serve on"))
   .action(async ({ port }) => {
-    const pages = (await status(port))?.pages ?? 0
-    // The new server would forget the open files and which sessions their
-    // comments go to. They're carried over here, before pages reconnect, so
-    // they find their files open.
-    const open = await Promise.all(
-      FILE_KINDS.map(async (kind) => ({ kind, requests: await handoff(kind, port) })),
-    )
+    const before = await status(port)
     console.error(`ah: ${await stopServer(port)}`)
     await ensureServer(port)
-    let reopened = 0
-    for (const { kind, requests } of open)
-      reopened += await takeHandoff(kind, port, requests)
-    if (reopened)
-      console.error(
-        `ah: carried over ${reopened} open ${reopened === 1 ? "file" : "files"}`,
-      )
     // Until the pages open before reconnect, a command that shows something
     // would see none and open another window
-    if (pages) console.error(`ah: ${await waitForPages(port, pages)}`)
+    if (before?.pages || before?.views)
+      console.error(`ah: ${await waitForPages(port, before)}`)
   })
 
 server

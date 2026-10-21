@@ -127,6 +127,41 @@ test("a gone agent's stand-in is the live one in its tab that last did something
   expect(core.standIn("block:1")).toEqual(null)
 })
 
+test("a file's requests go to the agent it's bound to, or that agent's stand-in", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:2"] }))
+  await report(start("claude", "s1", claude(1), "block:1"))
+  vi.advanceTimersByTime(1000)
+  await report(start("codex", "th2", undefined, "block:2"))
+  const path = join(dir, "notes.md")
+  expect(core.route(path)).toEqual(null)
+  core.bindFile(path, "block:1")
+  // block:1's socket isn't live, so the tab's other agent takes it
+  expect(core.route(path)).toEqual({ harness: "codex", thread: "th2", pid: null })
+  // A sender can name its own agent
+  expect(core.route(path, "block:2")).toEqual({
+    harness: "codex",
+    thread: "th2",
+    pid: null,
+  })
+})
+
+test("bindings and held files outlast the server, while their files do", () => {
+  const kept = join(dir, "kept.md")
+  const gone = join(dir, "gone.md")
+  writeFileSync(kept, "")
+  writeFileSync(gone, "")
+  core.bindFile(kept, "block:1")
+  core.bindFile(gone, "block:1")
+  core.hold(kept, true)
+  core.hold(gone, true)
+  vi.advanceTimersByTime(1000)
+  rmSync(gone)
+  const after = Core.load(join(dir, "registry.json"))
+  expect(after.binding(kept)).toEqual("block:1")
+  expect(after.binding(gone)).toEqual(null)
+  expect(after.held).toEqual([kept])
+})
+
 test("a shell's agents are the live ones in its tab, in its layout order", async () => {
   core.onRex(rex({ t1: ["block:1", "block:2", "block:3", "block:9"], t2: ["block:4"] }))
   await report(start("codex", "th1", undefined, "block:1"))

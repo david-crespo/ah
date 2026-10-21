@@ -13,9 +13,8 @@
 // every message as a `doc-message` event and the socket closing as
 // `doc-close`; `render` fires after each re-render. When the server says the
 // file was closed, it notes that above the preview, stops reconnecting, and
-// fires `closed`. While the server doesn't have the file open at all, as
-// after a restart, it says so and keeps trying, so an agent opening the file
-// again brings the page back.
+// fires `closed`. While the server can't show the file, it says so and keeps
+// trying, so the page comes back with the server, or the file.
 
 import { languages } from "@codemirror/language-data"
 import { LanguageDescription } from "@codemirror/language"
@@ -126,8 +125,8 @@ export class AhMarkdown extends HTMLElement {
     }
   }
 
-  /** A refused socket looks the same whether the server is down or just
-   * doesn't have the file open, so ask for the page to tell them apart */
+  /** A refused socket looks the same whether the server is down or the
+   * file is gone, so ask for the page to tell them apart */
   async #explainClose() {
     const base = this.base.href
     let status: number
@@ -146,7 +145,7 @@ export class AhMarkdown extends HTMLElement {
     }
     if (status === 404) {
       this.#note(
-        "This file isn't open in ah anymore (the server restarted?). Open it again with ah view open.",
+        "ah can't show this file: it's gone, or ah's URL key changed. Open it again with ah view open.",
       )
     } else if (status === 0) {
       this.#note("Can't reach ah. Retrying…")

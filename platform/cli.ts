@@ -18,6 +18,28 @@ export async function ensureStarted(port: number): Promise<number | null> {
   }
 }
 
+/** `route` on the server at `port`, like `core/trackers` */
+export const serverUrl = (port: number, route: string) =>
+  `http://127.0.0.1:${port}/${route}`
+
+/** Call a server route, sending `body` as JSON if given (a POST, unless
+ * `method` says otherwise), and return what it sends back. A non-2xx
+ * response exits with its body. */
+export async function callServer<T>(
+  url: string | URL,
+  { method, body }: { method?: string; body?: unknown } = {},
+): Promise<T> {
+  const res = await fetch(url, {
+    method: method ?? (body === undefined ? "GET" : "POST"),
+    ...(body !== undefined && {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  })
+  if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
+  return await serverJson<T>(res)
+}
+
 /** A response body from ah's own server, as the type its route sends. The
  * CLI and the server ship together, so it isn't checked. */
 export async function serverJson<T>(res: Response): Promise<T> {

@@ -25,10 +25,10 @@ today's date and a kebab-case slug, in a directory of its own. `ah tracker
 add` writes it from the template if it isn't there, adds it to the
 workspace's active trackers (back from parked or done if it was), makes it
 the current one, which the dashboard shows in every tab on the
-workspace, and binds it to this session. To bind an existing tracker again,
-run `ah tracker add <path>`: when picking work back up, and if the server
-stopped other than by `ah server restart`, which keeps the page bound to the
-session. If it fails, mention it in a line and move on.
+workspace, and binds it to this session. To bind an existing tracker to
+this session, as when picking work back up in a new one, run
+`ah tracker add <path>`. The binding outlasts server restarts. If it
+fails, mention it in a line and move on.
 
 Picking up: the SessionStart hook names the workspace's current tracker.
 `ah tracker ls` lists the workspace's active ones, the current one marked

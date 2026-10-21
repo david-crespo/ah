@@ -5,7 +5,7 @@
 // rewrites those.
 //
 // Usage: node lan-proxy.mjs <lan-ip> <page-id>...
-// Page ids are the first column of `ah view ls` (e.g. index-f000374f).
+// Page ids are the first column of `ah view ls` (e.g. index~L1VzZXJz…~Xb3k…).
 import http from "node:http"
 
 const [lanIp, ...pageIds] = process.argv.slice(2)

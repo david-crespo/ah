@@ -134,21 +134,31 @@ function kill(pid: number, signal: NodeJS.Signals) {
 
 /** Stop the server: ask it for its pid, else read the pid file. Returns what
  * happened, for printing. */
-/** Wait for `count` dashboard pages to follow the server, as pages open
- * before a restart reconnect. Returns a status line. */
+/** Wait for the dashboard's pages and the files' to follow the server, as
+ * pages open before a restart reconnect. Returns a status line. */
 export async function waitForPages(
   port: number,
-  count: number,
+  { pages, views }: { pages: number; views: number | null },
   timeoutMs = 5000,
 ): Promise<string> {
-  let pages = 0
+  const before = { pages, views: views ?? 0 }
+  let now = { pages: 0, views: 0 }
+  const line = (n: number, of: number, what: string) =>
+    n >= of ? `${n} ${what}` : `${n} of ${of} ${what}`
+  const summary = () =>
+    [
+      before.pages ? line(now.pages, before.pages, "dashboard pages") : null,
+      before.views ? line(now.views, before.views, "file pages") : null,
+    ]
+      .filter(Boolean)
+      .join(" and ") + " reconnected"
   for (let waited = 0; waited < timeoutMs; waited += 100) {
-    pages = (await status(port))?.pages ?? 0
-    if (pages >= count)
-      return `${pages} dashboard ${pages === 1 ? "page" : "pages"} reconnected`
+    const s = await status(port)
+    now = { pages: s?.pages ?? 0, views: s?.views ?? 0 }
+    if (now.pages >= before.pages && now.views >= before.views) return summary()
     await sleep(100)
   }
-  return `${pages} of ${count} dashboard pages reconnected`
+  return summary()
 }
 
 export async function stopServer(port: number, files = defaultFiles()): Promise<string> {

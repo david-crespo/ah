@@ -9,9 +9,10 @@
 // and POST `tracker-status` to park or finish one (trackers.ts). The CLI's
 // client for the tracker routes is tracker_api.ts.
 //
-// It's also where pages find the agents they're bound to
-// (subjects/files/files.ts): `open` and Claude's hooks say where an agent can be
-// reached.
+// It's also where files' requests find their agents (subjects/files/files.ts):
+// which agent each file is bound to, kept in the registry, and where that
+// agent can be reached now, which `open` and Claude's hooks say. And which
+// files hold requests no agent took, to send when one turns up.
 //
 // The core owns the registry. Each event is applied synchronously, then the
 // registry is saved (debounced) and listeners hear which blocks changed;
@@ -19,7 +20,7 @@
 // ready. Events and summary outcomes are logged to registry-events.jsonl for
 // working out afterwards why a title was what it was.
 
-import { appendFileSync, mkdirSync } from "node:fs"
+import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { isOneOf, isRecord, isString } from "../platform/guards.ts"
 import type { AgentDirectory } from "../subjects/files/files.ts"
@@ -159,6 +160,10 @@ export class Core implements AgentDirectory {
   static load(file = registryFile()): Core {
     const core = new Core(loadRegistry(file) ?? emptyRegistry(), file)
     core.trackers.prune()
+    // Files that are gone take no more requests
+    const { bindings, held } = core.registry
+    for (const path of bindings.keys()) if (!existsSync(path)) bindings.delete(path)
+    for (const path of held) if (!existsSync(path)) held.delete(path)
     return core
   }
 
@@ -203,6 +208,35 @@ export class Core implements AgentDirectory {
 
   bind(agent: AgentId, address: Address | null) {
     if (address) this.#addresses.set(agent, address)
+  }
+
+  bindFile(path: string, agent: AgentId) {
+    if (this.registry.bindings.get(path) === agent) return
+    this.registry.bindings.set(path, agent)
+    this.#scheduleSave()
+  }
+
+  binding(path: string): AgentId | null {
+    return this.registry.bindings.get(path) ?? null
+  }
+
+  route(path: string, target: AgentId | null = null): Address | null {
+    const agent = target ?? this.binding(path)
+    if (!agent) return null
+    const own = this.address(agent)
+    return addressAlive(own) ? own : (this.standIn(agent) ?? own)
+  }
+
+  hold(path: string, held: boolean) {
+    if (this.registry.held.has(path) === held) return
+    if (held) this.registry.held.add(path)
+    else this.registry.held.delete(path)
+    this.#scheduleSave()
+  }
+
+  /** The files whose threads hold requests, to send when agents come and go */
+  get held(): string[] {
+    return [...this.registry.held]
   }
 
   /** Codex and opencode are reached by their session, so an agent's is

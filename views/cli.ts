@@ -3,7 +3,7 @@
 // the dashboard shows. The extension picks the backend that serves the page:
 // an .html file is the agent's own page, served as is on an origin of its own
 // (views/html/); anything else is markdown, rendered by ah with a helix pane
-// (views/markdown/). Opening, listing and closing (subjects/files/), the thread
+// (views/markdown/). Showing, listing and closing (subjects/files/), the thread
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
@@ -12,16 +12,15 @@ import { basename, dirname, join, relative, resolve } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { threadCommands } from "../subjects/thread/cli.ts"
 import { FILE_KINDS, fileKind, type TrackerEntry } from "../core/model.ts"
-import { die, portOption } from "../platform/cli.ts"
+import { die, portOption, serverUrl } from "../platform/cli.ts"
 import {
   absolute,
   closeInServer,
-  openInServer,
   fileLine,
-  openFiles,
+  showInServer,
+  shownFiles,
   showPage,
 } from "../subjects/files/cli.ts"
-import { fileId } from "../subjects/id.ts"
 import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
@@ -35,9 +34,7 @@ import { taskListPage } from "./html/task_list_file.ts"
 
 /** Where the file's thread takes the agent's events */
 const threadUrl = (path: string, port: number) =>
-  fileKind(path) === "html"
-    ? `http://127.0.0.1:${port}/view/html/${fileId(path)}/_ah/activity`
-    : `http://127.0.0.1:${port}/view/markdown/${fileId(path)}/activity`
+  serverUrl(port, `view/${fileKind(path)}/files/thread?path=${encodeURIComponent(path)}`)
 
 /** The file's real path, or exit with a hint if it's only in the notes dir */
 /** `realPathOrDie`, for a file to serve: under the cwd or its workspace */
@@ -87,19 +84,19 @@ function ensureTaskList(file: string, title?: string, goal?: string) {
   console.log(`wrote ${absolute(file)}`)
 }
 
-export const view = new Command("view")
-  .description("Show a markdown or HTML file in a page you can comment on")
-  .action(function () {
-    this.help()
-  })
+export const view = new Command("view").description(
+  "Show a markdown or HTML file in a page you can comment on. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
+)
 
 view
-  .command("open")
+  .command("open", { isDefault: true })
   .summary("Open a file in a page you can comment on")
   .description(
-    "Open a file in a page you can comment on. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several. HTML files are served as they are, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already open in a window keeps that window, which comes to the front under the same rule.",
+    "Open a file in a page you can comment on; `ah view <file>` does the same. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several; the file stays bound to that agent until another opens it. HTML files are served as they are, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already shown in a window keeps that window, which comes to the front under the same rule. Prints the page's URL, which keeps working across server restarts.",
   )
-  .argument("<file>")
+  // Optional so that `ah view` alone, which comes here as the default, shows
+  // the help rather than a missing argument
+  .argument("[file]")
   .addOption(
     new Option(
       "--in <place>",
@@ -116,6 +113,7 @@ view
   .option("--no-chat", "Without the conversation")
   .addOption(portOption())
   .action(async (file, { in: place, editor, chat, port }) => {
+    if (!file) return view.help()
     const path = openablePathOrDie(file)
     const kind = fileKind(path)
     if ((place === "split" || place === "here") && kind === "html") {
@@ -143,7 +141,7 @@ view
       ])
     }
     if (place === "here") return await runInherited("glow", ["--tui", path])
-    const { url, views } = await openInServer(kind, port, path)
+    const { url, views } = await showInServer(kind, port, path)
     if (!editor && kind === "markdown") url.searchParams.set("editor", "off")
     if (!chat) url.searchParams.set("chat", "off")
     await showPage(place, url, path, views)
@@ -151,30 +149,24 @@ view
 
 view
   .command("ls")
-  .summary("List the files open in pages")
+  .summary("List the files pages show")
   .description(
-    "List the files open in pages, one line per file. Each line shows the file's id, its path, where its pages are (window, tab, or dashboard), the agent it belongs to, and where its comments go. After those come the files the server still has open but no page shows. Comments sent to these files are still delivered.",
+    "List the files pages show now, one line per file. Each line shows the file's id, its path, where its pages are (window, tab, or dashboard), the agent it's bound to, and where its comments go.",
   )
   .addOption(portOption())
   .action(async ({ port }) => {
-    if (!(await status(port))) return console.error("ah: server not running, no files open")
+    if (!(await status(port))) return console.error("ah: server not running, nothing shown")
     const files = (
-      await Promise.all(FILE_KINDS.map((kind) => openFiles(kind, port)))
+      await Promise.all(FILE_KINDS.map((kind) => shownFiles(kind, port)))
     ).flat()
-    const shown = files.filter((f) => f.views.length)
-    const unshown = files.filter((f) => !f.views.length)
-    for (const f of shown) console.log(fileLine(f))
-    if (!unshown.length) return
-    if (shown.length) console.log()
-    console.log("# open, no page connected")
-    for (const f of unshown) console.log(fileLine(f))
+    for (const f of files) console.log(fileLine(f))
   })
 
 view
   .command("close")
-  .summary("Stop showing a file")
+  .summary("Close a file's windows")
   .description(
-    "Stop showing a file. Its pages show that it's closed. If the file is a tracker, it stays a tracker, and the dashboard opens it again.",
+    "Close the windows and browser tabs that show a file. The dashboard keeps showing it if it's a tracker there. The file stays bound to its agent, and comments sent to it still arrive.",
   )
   .argument("<file>")
   .addOption(portOption())
@@ -182,8 +174,9 @@ view
     // The file may be gone by now
     const path = absolute(file)
     const result = await closeInServer(fileKind(path), port, path)
-    if (result === "no server") return console.error("ah: server not running, nothing open")
-    if (result !== "closed") return console.error(`ah: ${path} isn't open`)
+    if (result === "no server")
+      return console.error("ah: server not running, nothing shown")
+    if (result !== "closed") return console.error(`ah: no window shows ${path}`)
     console.log(`closed ${path}`)
   })
 
@@ -214,10 +207,9 @@ tracker
     ensureTaskList(file, title, goal)
     const path = openablePathOrDie(file)
     const agent = currentAgent() ?? die("ah tracker add: not running in an agent session")
-    // Bound by opening the file, since bindings live on open files. The
-    // dashboard's view of the file leaves the binding alone; `ah server
-    // restart` carries it over.
-    await openInServer(fileKind(path), port, path)
+    // Bound the way `ah view open` binds; the dashboard's view of the file
+    // leaves the binding alone
+    await showInServer(fileKind(path), port, path)
     await setCurrentTracker(port, agent, path)
     console.log(`the tracker: ${path}`)
     console.log(await ensureDashboardPage(port))

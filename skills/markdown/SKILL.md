@@ -36,8 +36,8 @@ for every `ah` command. opencode has no sandbox.
 
    This starts the server if needed, binds the draft to this session (so
    its comments come here), opens it in a window of its own, and returns.
-   `--in tab` opens a tab in the default browser instead. Opening a file that's already open
-   rebinds it to this session.
+   `--in tab` opens a tab in the default browser instead. Opening a file
+   another session opened rebinds it to this one.
 
    Comments arrive in this session as messages: in Claude Code, framed by
    the harness as messages "from another Claude session", which they are
@@ -54,7 +54,8 @@ for every `ah` command. opencode has no sandbox.
    one JSON line each with a `status`. The `kind` (`chat`, `comment`,
    `dellm`) and `args` (`selection`, `prefix`, `suffix`, `embed`) there
    carry what the post spells out in words. Requests no session was there
-   to take arrive on their own once you open the file. Those left `waiting`
+   to take arrive on their own once you open the file, or when this session
+   starts if it's the one the file is bound to. Those left `waiting`
    by a previous session that never started them, or `interrupted` (it
    stopped mid-work), are not re-sent. Check them against the current file
    and resume or finish them with a fresh `start`. Completed requests must
@@ -204,7 +205,7 @@ PR" is a request to change the source, not the draft).
 - ⌘E (or the ✎ button, top right) toggles the helix pane: real `hx` with the
   user's normal config and Steel setup, plus auto-save (650ms after typing
   stops, and on focus lost). It starts on first show and keeps running while
-  hidden; reloading the page or closing the draft ends it. Of the ⌘-chords,
+  hidden; closing the page ends it, and so does a server restart. Of the ⌘-chords,
   only ⌘S, ⌘J and ⌘K reach helix (as `Cmd-s`, `Cmd-j`, `Cmd-k`); the rest
   stay with the browser. Everything else reaches helix.
 - The page live-updates whenever the file changes on disk, flashing what
@@ -212,14 +213,12 @@ PR" is a request to change the source, not the draft).
 
 ## Restarting the server
 
-`ah server restart` reloads ah after changes to its code, and keeps open files and
-the sessions they're bound to. Any other stop of the server forgets them:
-their pages say the file isn't open anymore, and comments can't be sent until
-it's opened again. If `ah request respond` says the file isn't open, run
-`ah view open <file>` again; the old page reconnects on its own, though a
-new window opens too. The
-conversation history survives in the log. Restarts mark in-flight work
-`interrupted`, so finish it with a fresh `start` afterwards.
+`ah server restart` reloads ah after changes to its code. Pages reconnect
+on their own, after a restart or any other stop, and which session a
+file's comments go to outlasts the server. `ah request respond` and
+`pending` work on any file, shown or not. The conversation history
+survives in the log. Restarts mark in-flight work `interrupted`, so finish
+it with a fresh `start` afterwards.
 
 ## Wrapping up
 

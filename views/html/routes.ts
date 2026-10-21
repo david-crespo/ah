@@ -4,8 +4,8 @@
 // (platform/origin.ts), so a page can't read files, list sessions, or post into
 // them through the API.
 //
-// The API port has what the CLI uses: opening, listing and closing files
-// (subjects/files/routes.ts), and <id>/_ah/activity, where the agent answers. A
+// The API port has what the CLI uses: showing, listing and closing files, and
+// each file's thread, where the agent answers (subjects/files/routes.ts). A
 // page's URL there redirects to the pages port.
 //
 // The pages port has a file's page, /view/html/<id>/: the file as is, with the
@@ -15,7 +15,7 @@
 // links work, except <id>/_ah/, which is ah's: the socket (reloads and the
 // conversation) and the request route. chat.js, the client, is shared by
 // every page. All pages share the one origin, so one page could post a
-// request into another's thread; the agent's own activity stays on the API
+// request into another's thread; the agent's own activity is only on the API
 // port.
 
 import { createReadStream } from "node:fs"
@@ -32,11 +32,12 @@ import { threadRoute } from "../../subjects/thread/routes.ts"
 import {
   type AgentDirectory,
   type FileInfo,
+  Files,
   locationOf,
-  OpenFiles,
 } from "../../subjects/files/files.ts"
 import { fileRoutes } from "../../subjects/files/routes.ts"
-import { type HtmlFile, htmlFiles, type LiveReload } from "./files.ts"
+import { pathOf } from "../../subjects/id.ts"
+import { htmlFiles, type LiveReload } from "./files.ts"
 
 const types: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -93,7 +94,7 @@ export function inject(
 }
 
 export class HtmlBackend {
-  files: OpenFiles<LiveReload>
+  files: Files<LiveReload>
   #bundles = new ClientBundles("html")
   /** Where the pages are */
   readonly pagesOrigin: string
@@ -107,15 +108,15 @@ export class HtmlBackend {
   constructor(
     port: number,
     pagesPort: number,
-    directory: AgentDirectory | null = null,
+    directory: AgentDirectory,
     trackers: Pick<Trackers, "setStatus" | "statusOf"> | null = null,
   ) {
     this.#trackers = trackers
     this.pagesOrigin = `http://127.0.0.1:${pagesPort}`
-    this.files = new OpenFiles(port, htmlFiles, { pageOrigin: this.pagesOrigin, directory })
+    this.files = new Files(port, htmlFiles, directory, { pageOrigin: this.pagesOrigin })
   }
 
-  /** Open `path` for the dashboard to show in a frame, leaving any binding
+  /** `path` for the dashboard to show in a frame, leaving any binding
    * alone; null if it isn't a readable file */
   show(path: string): Promise<FileInfo | null> {
     this.#bundles.prebuild("chat.js")
@@ -125,19 +126,17 @@ export class HtmlBackend {
   /** On the API port; `rest` is the path after /view/html/ */
   async handle(req: Request, rest: string): Promise<Response> {
     const fileResponse = await fileRoutes(req, rest, this.files, {
-      opened: () => this.#bundles.prebuild("chat.js"),
-      page: async (req, file, sub) => {
-        if (sub === "_ah/activity") {
-          return (await threadRoute(req, "activity", file.thread)) ?? notFound()
-        }
+      shown: () => this.#bundles.prebuild("chat.js"),
+      page: async (req, _path, id, sub) => {
         if (req.method !== "GET") return notFound()
         const { search } = new URL(req.url)
-        const url = new URL(`/view/html/${file.id}/${sub}${search}`, this.pagesOrigin)
+        const url = new URL(`/view/html/${id}/${sub}${search}`, this.pagesOrigin)
         return Response.redirect(url, 302)
       },
     })
     if (fileResponse) return fileResponse
-    if (rest === "") return indexPage(this.files.list())
+    if (rest === "")
+      return indexPage(this.files.shown().map((path) => this.files.info(path)))
     return notFound()
   }
 
@@ -145,26 +144,27 @@ export class HtmlBackend {
   async handlePage(req: Request, rest: string): Promise<Response> {
     if (this.#bundles.has(rest)) return await this.#bundles.response(rest)
     const m = rest.match(/^([^/]+)(\/?)(.*)$/)
-    const file = m && this.files.get(m[1])
-    if (!m || !file) return notFound()
-    const [, , slash, sub] = m
+    const path = m && pathOf(m[1])
+    if (!m || !path || !(await isFile(path))) return notFound()
+    const [, id, slash, sub] = m
     // The page's URLs are relative to its directory
-    if (!slash) return Response.redirect(new URL(`/view/html/${file.id}/`, req.url), 302)
-    // The agent's, on the API port
-    if (sub === "_ah/activity") return notFound()
-    return await this.#page(req, file, sub)
+    if (!slash) return Response.redirect(new URL(`/view/html/${id}/`, req.url), 302)
+    return await this.#page(req, path, id, sub)
   }
 
   /** A page's socket, at <id>/_ah/socket on the pages port */
   upgradePage(rest: string, query: URLSearchParams): ((ws: WebSocket) => void) | null {
     const m = rest.match(/^([^/]+)\/_ah\/socket$/)
-    const file = m && this.files.get(m[1])
-    if (!file) return null
-    return (ws) => file.pages.connect(ws, [file.thread.snapshot(true)], locationOf(query))
+    const path = m && pathOf(m[1])
+    if (!path) return null
+    return (ws) =>
+      void this.files.connect(path, ws, locationOf(query), (_live, thread) => [
+        thread.snapshot(true),
+      ])
   }
 
   /** `sub` is the path after the file's page, /view/html/<id>/ */
-  async #page(req: Request, file: HtmlFile, sub: string): Promise<Response> {
+  async #page(req: Request, path: string, id: string, sub: string): Promise<Response> {
     // A task list's Park, Done, and Resume buttons: the server sets its
     // status, without the agent
     if (sub === "_ah/tracker-status" && req.method === "POST") {
@@ -172,35 +172,43 @@ export class HtmlBackend {
       const { status }: { status?: unknown } = await req.json().catch(() => ({}))
       if (status !== "active" && status !== "parked" && status !== "done")
         return new Response("bad status", { status: 400 })
-      if (!this.#trackers.setStatus(file.path, status))
+      if (!this.#trackers.setStatus(path, status))
         return new Response("not a tracker", { status: 404 })
       // The file didn't change, so its watch won't reload its pages
-      file.pages.broadcast(JSON.stringify({ type: "reload" }))
+      this.files.pages(path).broadcast(JSON.stringify({ type: "reload" }))
       return new Response(null, { status: 204 })
     }
-    if (sub.startsWith("_ah/")) {
-      return (await threadRoute(req, sub.slice("_ah/".length), file.thread)) ?? notFound()
-    }
+    if (sub === "_ah/request")
+      return (
+        (await threadRoute(req, "request", await this.files.thread(path))) ?? notFound()
+      )
+    if (sub.startsWith("_ah/")) return notFound()
     if (sub === "") {
       const query = new URL(req.url).searchParams
       const chat = query.get("chat") !== "off"
       const dashboard = query.get("in") === "dashboard"
       let html: string
       try {
-        html = await readFile(file.path, "utf8")
+        html = await readFile(path, "utf8")
       } catch {
-        return new Response(`can't read ${file.path}`, { status: 404 })
+        return new Response(`can't read ${path}`, { status: 404 })
       }
-      const status = this.#trackers?.statusOf(file.path) ?? null
-      return new Response(inject(html, file.id, { chat, dashboard, status }), {
+      const status = this.#trackers?.statusOf(path) ?? null
+      return new Response(inject(html, id, { chat, dashboard, status }), {
         headers: { "content-type": "text/html; charset=utf-8", ...noStore },
       })
     }
-    return await sibling(file.path, sub)
+    return await sibling(path, sub)
   }
 }
 
 const notFound = () => new Response("not found", { status: 404 })
+
+const isFile = (path: string) =>
+  stat(path).then(
+    (s) => s.isFile(),
+    () => false,
+  )
 
 /** A file next to the page, or under its directory, of a type a web page
  * loads (`types`) and outside dot directories, so a page can't read a
@@ -222,7 +230,7 @@ async function sibling(pagePath: string, sub: string): Promise<Response> {
   return new Response(body, { headers: { "content-type": type, ...noStore } })
 }
 
-function indexPage(pages: HtmlFile[]): Response {
+function indexPage(pages: FileInfo[]): Response {
   const escape = (s: string) =>
     s.replace(
       /[&<>"]/g,

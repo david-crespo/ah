@@ -1,7 +1,7 @@
-// The markdown backend's routes, under /view/markdown/. Opening, listing and
-// closing files are subjects/files/routes.ts. Each open file's page lives at
+// The markdown backend's routes, under /view/markdown/. Showing, listing and
+// closing files are subjects/files/routes.ts. Each file's page lives at
 // /view/markdown/<id>/, with its doc socket, helix pty socket, local media, and
-// its thread's routes (subjects/thread/routes.ts). The client bundles, stylesheets,
+// the route its requests go to (subjects/thread/routes.ts). The client bundles, stylesheets,
 // and GitHub embeds are shared by every file and sit at /view/markdown/
 // itself: bundle.js for a file's page, and preview.js with just the
 // <ah-markdown> element, for other pages that show a file.
@@ -19,11 +19,12 @@ import { threadRoute } from "../../subjects/thread/routes.ts"
 import {
   type AgentDirectory,
   type FileInfo,
+  Files,
   locationOf,
-  OpenFiles,
 } from "../../subjects/files/files.ts"
 import { fileRoutes } from "../../subjects/files/routes.ts"
-import { type LiveMarkdown, markdownFiles, type MarkdownFile } from "./files.ts"
+import { pathOf } from "../../subjects/id.ts"
+import { type LiveMarkdown, markdownFiles } from "./files.ts"
 import { fetchBlob, mimeTypes, resolveAsset } from "./github.ts"
 import { indexPage, page } from "./page.ts"
 
@@ -31,16 +32,16 @@ const css = { "content-type": "text/css; charset=utf-8" }
 const stylesheets = new Set(["markdown.css", "xterm.css"])
 
 export class MarkdownBackend {
-  files: OpenFiles<LiveMarkdown>
+  files: Files<LiveMarkdown>
   #bundles = new ClientBundles("markdown")
 
   /** `port` is the server's, for telling the agent which one to answer, and
    * `directory` where the agents its files are bound to are now */
-  constructor(port: number, directory: AgentDirectory | null = null) {
-    this.files = new OpenFiles(port, markdownFiles, { directory })
+  constructor(port: number, directory: AgentDirectory) {
+    this.files = new Files(port, markdownFiles, directory)
   }
 
-  /** Open `path` for another view's page to show with <ah-markdown>, without
+  /** `path` for another view's page to show with <ah-markdown>, without
    * binding it to a session; null if it isn't a readable file */
   show(path: string): Promise<FileInfo | null> {
     this.#bundles.prebuild("preview.js")
@@ -50,30 +51,35 @@ export class MarkdownBackend {
   /** A file's doc socket, at <id>/doc, or its helix pane's, at <id>/pty */
   upgrade(rest: string, query: URLSearchParams): ((ws: WebSocket) => void) | null {
     const m = rest.match(/^([^/]+)\/(doc|pty)$/)
-    const file = m && this.files.get(m[1])
-    if (!file) return null
-    if (m[2] === "pty") return (ws) => void file.live.helix.connect(ws, query)
+    const path = m && pathOf(m[1])
+    if (!m || !path) return null
+    if (m[2] === "pty") {
+      return (ws) =>
+        void this.files.live(path).then(
+          (live) => live.helix.connect(ws, query),
+          () => ws.close(1011, "couldn't show the file"),
+        )
+    }
     return (ws) =>
-      file.pages.connect(
-        ws,
-        [file.live.doc.message(), file.thread.snapshot(true)],
-        locationOf(query),
-      )
+      void this.files.connect(path, ws, locationOf(query), (live, thread) => [
+        live.doc.message(),
+        thread.snapshot(true),
+      ])
   }
 
   /** `rest` is the path after /view/markdown/ */
   async handle(req: Request, rest: string): Promise<Response> {
     const { searchParams } = new URL(req.url)
     const fileResponse = await fileRoutes(req, rest, this.files, {
-      opened: () => this.#bundles.prebuild("bundle.js"),
-      page: (req, file, sub) => this.#page(req, file, sub),
+      shown: () => this.#bundles.prebuild("bundle.js"),
+      page: (req, path, _id, sub) => this.#page(req, path, sub),
     })
     if (fileResponse) return fileResponse
 
     if (rest === "") {
-      const files = this.files.list().map((f) => ({
-        id: f.id,
-        name: escape(basename(f.path)),
+      const files = this.files.shown().map((path) => ({
+        id: this.files.info(path).id,
+        name: escape(basename(path)),
       }))
       return new Response(indexPage(files), {
         headers: { "content-type": "text/html; charset=utf-8" },
@@ -97,18 +103,22 @@ export class MarkdownBackend {
   }
 
   /** `sub` is the path after the file's page, /view/markdown/<id>/ */
-  async #page(req: Request, file: MarkdownFile, sub: string): Promise<Response> {
+  async #page(req: Request, path: string, sub: string): Promise<Response> {
     const { searchParams } = new URL(req.url)
     if (sub === "") {
       const editor = searchParams.get("editor") !== "off"
       const chat = searchParams.get("chat") !== "off"
-      return new Response(page(escape(basename(file.path)), { editor, chat }), {
+      return new Response(page(escape(basename(path)), { editor, chat }), {
         headers: { "content-type": "text/html; charset=utf-8" },
       })
     }
-    const threadResponse = await threadRoute(req, sub, file.thread)
-    if (threadResponse) return threadResponse
-    if (sub === "local") return await localMedia(file.path, searchParams.get("path") ?? "")
+    if (sub === "request") {
+      return (
+        (await threadRoute(req, sub, await this.files.thread(path))) ??
+        new Response("not found", { status: 404 })
+      )
+    }
+    if (sub === "local") return await localMedia(path, searchParams.get("path") ?? "")
     return new Response("not found", { status: 404 })
   }
 }

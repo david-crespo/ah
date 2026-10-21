@@ -1,8 +1,8 @@
-// What markdown keeps live for each open file (subjects/files/): the text
-// its pages show (LiveDoc), and any helix panes.
+// What markdown keeps live for a file while pages show it (subjects/files/):
+// the text its pages show (LiveDoc), and any helix panes.
 
 import { threadKinds } from "../../subjects/thread/kinds.ts"
-import type { FileType, Live, OpenFile } from "../../subjects/files/files.ts"
+import type { FileType, Live } from "../../subjects/files/files.ts"
 import { LiveDoc } from "./doc.ts"
 import { HelixPanes } from "./helix.ts"
 
@@ -37,5 +37,3 @@ export const markdownFiles: FileType<LiveMarkdown> = {
       new HelixPanes(path),
     ),
 }
-
-export type MarkdownFile = OpenFile<LiveMarkdown>

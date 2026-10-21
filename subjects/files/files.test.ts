@@ -1,25 +1,41 @@
+import { EventEmitter } from "node:events"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, beforeEach, expect, test } from "vitest"
-import type { Address } from "../../core/model.ts"
-import { type AgentDirectory, type Live, locationOf, OpenFiles, Pages } from "./files.ts"
+import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { WebSocket } from "ws"
-import { EventEmitter } from "node:events"
+import { GRACE_MS } from "../../platform/presence.ts"
+import { pathOf } from "../id.ts"
+import type { RequestKinds } from "../thread/events.ts"
+import { Files, type Live, locationOf, Pages } from "./files.ts"
+import { MemoryDirectory } from "./testing.ts"
+
+const kinds: RequestKinds = { chat: { text: "required", render: (r) => r.text! } }
 
 let dir: string
-let files: OpenFiles<Live>
+let directory: MemoryDirectory
+let attached: string[]
+let closed: string[]
+const type = {
+  kind: "markdown" as const,
+  kinds,
+  attach: async (path: string): Promise<Live> => {
+    attached.push(path)
+    return { close: () => closed.push(path) }
+  },
+}
+let files: Files<Live>
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), "ah-files-"))
   process.env.XDG_STATE_HOME = join(dir, "state")
-  files = new OpenFiles(7420, {
-    kind: "markdown",
-    kinds: {},
-    attach: async () => ({ close() {} }),
-  })
+  directory = new MemoryDirectory()
+  attached = []
+  closed = []
+  files = new Files(7420, type, directory)
 })
 afterEach(async () => {
-  for (const f of files.list()) files.close(f.id)
+  vi.useRealTimers()
   delete process.env.XDG_STATE_HOME
   await rm(dir, { recursive: true })
 })
@@ -30,98 +46,131 @@ async function md(name: string) {
   return path
 }
 
-test("opening a file again rebinds it instead of adding a second", async () => {
-  const a = await md("a.md")
-  const b = await md("b.md")
-  const first = await files.open(a, { harness: "claude", socket: "/s/1.sock" })
-  const sent: string[] = []
-  first.pages.connect(
-    { send: (m: string) => sent.push(m), on() {}, close() {} } as never,
-    [],
-  )
-  await files.open(b, null)
-  const again = await files.open(a, { harness: "codex", thread: "t1", pid: process.pid })
-  expect(again).toBe(first)
-  expect(again.binding.openedFrom).toEqual({
-    harness: "codex",
-    thread: "t1",
-    pid: process.pid,
+/** A page's socket: what it was sent, and whether it was closed */
+function socket() {
+  const ws = Object.assign(new EventEmitter(), {
+    OPEN: 1,
+    readyState: 1,
+    sent: [] as string[],
+    send(m: string) {
+      ws.sent.push(m)
+    },
+    close() {
+      ws.readyState = 3
+      ws.emit("close")
+    },
   })
-  expect(files.list().map((f) => f.path)).toEqual([a, b])
-  expect(sent.map((m) => JSON.parse(m))).toEqual([
-    expect.objectContaining({
-      type: "thread",
-      agentConnected: true,
-      replay: false,
-    }),
+  return ws as typeof ws & WebSocket
+}
+
+test("binding a file again moves it to the new agent", async () => {
+  const a = await md("a.md")
+  await files.bind(a, { harness: "claude", socket: "/s/1.sock" }, "block:1")
+  const codex = { harness: "codex" as const, thread: "t1", pid: process.pid }
+  const info = await files.bind(a, codex, "block:2")
+  expect(files.binding(a)).toEqual("block:2")
+  expect(directory.route(a)).toEqual(codex)
+  expect(info).toMatchObject({ path: a, agent: "block:2", views: [] })
+  // The URL names the file
+  expect(pathOf(info.id)).toEqual(a)
+  expect(info.url).toEqual(`/view/markdown/${info.id}/`)
+})
+
+test("showing a file leaves its binding alone", async () => {
+  const a = await md("a.md")
+  await files.bind(a, null, "block:1")
+  expect(await files.show(a)).toMatchObject({ agent: "block:1" })
+  expect(await files.show(join(dir, "gone.md"))).toEqual(null)
+})
+
+test("the first page brings up the live state, which stops a while after the last leaves", async () => {
+  vi.useFakeTimers()
+  const a = await md("a.md")
+  const [one, two] = [socket(), socket()]
+  await Promise.all([
+    files.connect(a, one, "window", (_live, thread) => [thread.snapshot(true)]),
+    files.connect(a, two, "dashboard", () => ["hi"]),
   ])
+  expect(attached).toEqual([a])
+  expect(JSON.parse(one.sent[0])).toMatchObject({ type: "thread", replay: true })
+  expect(two.sent).toEqual(["hi"])
+  expect(files.shown()).toEqual([a])
+  one.close()
+  two.close()
+  expect(files.shown()).toEqual([])
+  // A reload comes back in time
+  vi.advanceTimersByTime(GRACE_MS / 2)
+  const three = socket()
+  await files.connect(a, three, "window", () => [])
+  vi.advanceTimersByTime(GRACE_MS)
+  expect(closed).toEqual([])
+  expect(attached).toEqual([a])
+  three.close()
+  vi.advanceTimersByTime(GRACE_MS)
+  await vi.waitFor(() => expect(closed).toEqual([a]))
 })
 
-test("two opens at once share one", async () => {
+test("closing a file hangs up its windows, but not the dashboard's", async () => {
   const a = await md("a.md")
-  const [x, y] = await Promise.all([files.open(a, null), files.ensure(a)])
-  expect(x).toBe(y)
-  expect(files.list().length).toEqual(1)
+  const [window, dashboard] = [socket(), socket()]
+  await files.connect(a, window, "window", () => [])
+  await files.connect(a, dashboard, "dashboard", () => [])
+  expect(files.close(a)).toEqual(1)
+  expect(window.sent.map((m) => JSON.parse(m))).toEqual([{ type: "closed" }])
+  expect(window.readyState).toEqual(3)
+  expect(dashboard.readyState).toEqual(1)
+  expect(files.info(a).views).toEqual(["dashboard"])
+  expect(files.close(join(dir, "b.md"))).toEqual(0)
 })
 
-test("ensure opens a file but doesn't rebind an open one", async () => {
+test("a file's presence outlasts its pages, for the agent's notices", async () => {
+  vi.useFakeTimers()
   const a = await md("a.md")
-  await files.open(a, { harness: "claude", socket: "/s/1.sock" })
-  expect((await files.ensure(a)).binding.openedFrom).toEqual({
-    harness: "claude",
-    socket: "/s/1.sock",
+  const page = socket()
+  await files.connect(a, page, "window", () => [])
+  expect(files.presence()).toEqual([{ path: a, open: true }])
+  page.close()
+  vi.advanceTimersByTime(GRACE_MS)
+  expect(files.presence()).toEqual([{ path: a, open: false }])
+})
+
+test("a held request tells the directory", async () => {
+  const a = await md("a.md")
+  directory.bindFile(a, "block:1")
+  const thread = await files.thread(a)
+  expect(await files.thread(a)).toBe(thread)
+  await thread.request({ kind: "chat", text: "hi", args: {} })
+  expect([...directory.held]).toEqual([a])
+  // Not running: no Claude process has this socket, so it stays held
+  directory.addresses.set("block:1", { harness: "claude", socket: join(dir, "none.sock") })
+  await thread.refresh()
+  expect([...directory.held]).toEqual([a])
+})
+
+test("held requests go out after a restart, to the agent there now", async () => {
+  const a = await md("a.md")
+  directory.bindFile(a, "block:1")
+  await (await files.thread(a)).request({ kind: "chat", text: "hi", args: {} })
+
+  const posts: string[] = []
+  const inbox = join(dir, "inbox.sock")
+  const server = createServer((conn) => {
+    let text = ""
+    conn.on("data", (chunk) => (text += chunk))
+    conn.on("end", () => (posts.push(text), conn.end()))
   })
-  expect((await files.ensure(await md("b.md"))).binding.openedFrom).toEqual(null)
-  expect(files.list().length).toEqual(2)
-})
-
-test("close removes only that file", async () => {
-  const a = await files.open(await md("a.md"), null)
-  const b = await files.open(await md("b.md"), null)
-  expect(files.close(a.id)?.path).toEqual(a.path)
-  expect(files.close(a.id)).toEqual(undefined)
-  expect(files.get(b.id)).toBe(b)
-})
-
-test("a file bound to an agent goes wherever the directory says it is now", async () => {
-  const addresses = new Map<string, Address>()
-  let standIn: Address | null = null
-  const directory: AgentDirectory = {
-    agentId: (ref) => ref.block,
-    bind: (agent, address) => {
-      if (address) addresses.set(agent, address)
-    },
-    address: (agent) => addresses.get(agent) ?? null,
-    standIn: () => standIn,
+  await new Promise<void>((resolve) => server.listen(inbox, resolve))
+  try {
+    directory.addresses.set("block:1", { harness: "claude", socket: inbox })
+    // A new server knows the file only from the directory's held paths
+    const after = new Files(7420, type, directory)
+    after.refresh([...directory.held])
+    await vi.waitFor(() => expect(posts).toHaveLength(1))
+    expect(posts[0]).toContain("hi")
+    await vi.waitFor(() => expect([...directory.held]).toEqual([]))
+  } finally {
+    server.close()
   }
-  files = new OpenFiles(
-    7420,
-    { kind: "markdown", kinds: {}, attach: async () => ({ close() {} }) },
-    {
-      directory,
-    },
-  )
-  const opened = { harness: "codex" as const, thread: "th1", pid: null }
-  const agent = files.agentId({
-    harness: "codex",
-    session: "th1",
-    block: "block:1",
-    process: null,
-  })
-  const file = await files.open(await md("a.md"), opened, agent)
-  expect(file.binding.agent).toEqual("block:1")
-  expect(files.address(file.binding)).toEqual(opened)
-  // Codex's /new
-  addresses.set("block:1", { harness: "codex", thread: "th2", pid: null })
-  expect(files.info(file).address).toEqual("codex th2")
-  // The directory forgot it: back to the session that opened the file
-  addresses.clear()
-  expect(files.address(file.binding)).toEqual(opened)
-  // The agent's gone (no ~/.claude/sessions/1.json): another in its tab
-  addresses.set("block:1", { harness: "claude", socket: "/s/1.sock" })
-  expect(files.address(file.binding)).toEqual({ harness: "claude", socket: "/s/1.sock" })
-  standIn = { harness: "codex", thread: "th3", pid: null }
-  expect(files.address(file.binding)).toEqual(standIn)
 })
 
 test("a page's location comes from its socket's query", () => {
@@ -131,15 +180,13 @@ test("a page's location comes from its socket's query", () => {
 })
 
 test("pages know where each connected one is, and stop counting a closed one", () => {
-  const socket = () =>
-    Object.assign(new EventEmitter(), { send() {} }) as unknown as WebSocket
   const pages = new Pages()
   const [a, b] = [socket(), socket()]
   pages.connect(a, [], "window")
   pages.connect(b, [], "dashboard")
   expect(pages.locations).toEqual(["window", "dashboard"])
   expect(pages.presence.count).toEqual(2)
-  ;(a as unknown as EventEmitter).emit("close")
+  a.close()
   expect(pages.locations).toEqual(["dashboard"])
   expect(pages.presence.count).toEqual(1)
 })

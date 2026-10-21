@@ -30,6 +30,8 @@ function registry(
     agents: new Map(agents.map((a) => [blockOf(a)!, a])),
     trackers: new Map(),
     shellLabels: new Map(Object.entries(shellLabels)),
+    bindings: new Map(),
+    held: new Set(),
   }
 }
 

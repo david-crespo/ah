@@ -3,20 +3,13 @@
 
 import { readFileSync } from "node:fs"
 import { Argument, Command } from "@commander-js/extra-typings"
-import { die, ensureStarted, portOption, serverJson } from "../../platform/cli.ts"
+import { callServer, ensureStarted, portOption } from "../../platform/cli.ts"
 import { absolute } from "../files/cli.ts"
 import { type ThreadSnapshot, PHASES } from "./events.ts"
 
 /** `threadUrl` is where the file's thread takes the agent's events on that port */
 export function threadCommands(threadUrl: (path: string, port: number) => string) {
-  const notOpen = (path: string, file: string) =>
-    die(`ah: ${path} isn't open; open it with \`ah view open ${file}\``)
-  const snapshot = async (url: string, path: string, file: string) => {
-    const res = await fetch(url)
-    if (res.status === 404) notOpen(path, file)
-    if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
-    return serverJson<ThreadSnapshot>(res)
-  }
+  const snapshot = (url: string) => callServer<ThreadSnapshot>(url)
 
   const pending = new Command("pending")
     .summary("List a file's requests that aren't done")
@@ -28,7 +21,7 @@ export function threadCommands(threadUrl: (path: string, port: number) => string
     .action(async (file, { port }) => {
       const path = absolute(file)
       await ensureStarted(port)
-      const { entries, requests } = await snapshot(threadUrl(path, port), path, file)
+      const { entries, requests } = await snapshot(threadUrl(path, port))
       const byId = new Map(entries.map((e) => [e.id, e]))
       for (const state of requests) {
         if (state.status === "done") continue
@@ -60,21 +53,11 @@ export function threadCommands(threadUrl: (path: string, port: number) => string
       const url = threadUrl(path, port)
       await ensureStarted(port)
       const workId = requests.length ? (work ?? `w-${requests[0]}`) : work
-      const post = async (body: object) => {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(body),
-        })
-        if (res.status === 404 && (await res.clone().text()) === "not found") {
-          notOpen(path, file)
-        }
-        if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
-      }
+      const post = (body: object) => callServer(url, { body })
       // Quick work can skip `start`: anything that ends or updates work starts
       // it first if this attempt hasn't
       if (requests.length && phase !== "start" && phase !== "reply") {
-        const { requests: states } = await snapshot(url, path, file)
+        const { requests: states } = await snapshot(url)
         const started = requests.every((id) =>
           states.some((s) => s.id === id && s.status === "working" && s.workId === workId),
         )

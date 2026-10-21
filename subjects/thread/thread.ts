@@ -70,6 +70,8 @@ export interface ThreadOptions {
   broadcast: (message: string) => void
   /** A line the agent should read before each request, if there is one */
   context?: () => Promise<string | null>
+  /** Hear whether the thread holds requests no agent has taken */
+  hold?: (held: boolean) => void
 }
 
 export class Thread {
@@ -79,6 +81,9 @@ export class Thread {
   #queue: Promise<unknown> = Promise.resolve()
   /** Whether the pages were last told an agent is there */
   #told: boolean | null = null
+  /** Context no post has carried yet, kept for the requests it came with,
+   * which are held until an agent turns up */
+  #unsent: string[] = []
 
   private constructor(file: Bound, log: ThreadLog, options: ThreadOptions) {
     this.#file = file
@@ -126,9 +131,10 @@ export class Thread {
    * to turn up, so it never fails the user's send. */
   request(input: RequestInput): Promise<RequestResult> {
     return this.#serially(async () => {
-      const context = (await this.#options.context?.()) ?? null
+      await this.#takeContext()
       const request = await this.#log.request(input)
-      const agentConnected = await this.#deliver(context, [request])
+      const agentConnected = await this.#deliver([request])
+      this.#hold()
       this.#broadcast()
       return { request, agentConnected }
     })
@@ -142,7 +148,11 @@ export class Thread {
     return this.#serially(async () => {
       const alive = addressAlive(this.#file.address())
       const held = alive ? this.#log.undelivered() : []
-      if (held.length) await this.#deliver((await this.#options.context?.()) ?? null, held)
+      if (held.length) {
+        await this.#takeContext()
+        await this.#deliver(held)
+      }
+      this.#hold()
       if (alive !== this.#told) this.#broadcast()
     })
   }
@@ -151,19 +161,30 @@ export class Thread {
   activity(input: ActivityInput) {
     return this.#serially(async () => {
       const entry = await this.#log.activity(input)
+      // Finishing a held request takes it out of the held ones
+      this.#hold()
       this.#broadcast()
       return entry
     })
   }
 
-  /** Post the requests, with the context ahead of them, and log that they
-   * went */
-  async #deliver(context: string | null, requests: Request[]): Promise<boolean> {
+  async #takeContext() {
+    const context = (await this.#options.context?.()) ?? null
+    if (context !== null) this.#unsent.push(context)
+  }
+
+  #hold() {
+    this.#options.hold?.(this.#log.undelivered().length > 0)
+  }
+
+  /** Post the requests, with the context no post has carried ahead of them,
+   * and log that they went */
+  async #deliver(requests: Request[]): Promise<boolean> {
     const address = this.#file.address()
     if (!address) return false
     const lines = [
       header(this.#options, this.#file.path, this.#options.port),
-      ...(context === null ? [] : [context]),
+      ...this.#unsent,
       ...requests.map((request) => render(request, this.#options.kinds)),
     ]
     try {
@@ -172,6 +193,7 @@ export class Thread {
       console.error(`ah: could not reach ${describeAddress(address)}:`, error)
       return false
     }
+    this.#unsent = []
     await this.#log.deliver(requests.map((request) => request.id))
     return true
   }
