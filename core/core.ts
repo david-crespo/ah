@@ -23,7 +23,12 @@ import { appendFileSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { isOneOf, isRecord, isString } from "../platform/guards.ts"
 import type { AgentDirectory } from "../subjects/files/files.ts"
-import { parseAddress, parseAgentRef, addressAlive } from "../platform/session.ts"
+import {
+  addressAlive,
+  claudeSocket,
+  parseAddress,
+  parseAgentRef,
+} from "../platform/session.ts"
 import {
   type Address,
   type AgentId,
@@ -202,14 +207,19 @@ export class Core implements AgentDirectory {
   /** Codex and opencode are reached by their session, so an agent's is
    * always the one it's in now, even after Codex's /new. Claude is reached
    * by its process's inbox socket, which lasts through /clear; a new process
-   * in the pane reports its own from its hooks. */
+   * in the pane reports its own from its hooks. Until it has, or after the
+   * server restarts, the socket comes from Claude's record of the session. */
   address(agent: string): Address | null {
     const known = this.#addresses.get(agent) ?? null
     const record = this.registry.agents.get(agent)
     if (!record) return known
     switch (record.harness) {
-      case "claude":
-        return known?.harness === "claude" ? known : null
+      case "claude": {
+        const own = known?.harness === "claude" ? known : null
+        if (addressAlive(own)) return own
+        const socket = claudeSocket(record.session)
+        return socket ? { harness: "claude", socket } : own
+      }
       case "codex":
         // The pid is for telling whether it's alive; a new session's isn't
         // known, so it's taken to be until a post fails

@@ -16,7 +16,7 @@
 //   background service that every TUI is a client of; posting to the
 //   service's /api/session/<id>/prompt steers a busy session mid-turn.
 
-import { readFileSync, statSync } from "node:fs"
+import { readdirSync, readFileSync, statSync } from "node:fs"
 import { createConnection } from "node:net"
 import { basename, join } from "node:path"
 import { type Address, type AgentRef, HARNESSES } from "../core/model.ts"
@@ -220,6 +220,37 @@ export function addressAlive(address: Address | null): boolean {
     case "opencode":
       return opencodeRunning()
   }
+}
+
+/** The inbox socket of the running Claude process in `session`, from its
+ * <config dir>/sessions/<pid>.json, for an agent the server has no address
+ * for, like every agent right after it starts. It comes without the token
+ * an address from the session's own shell has; in auto mode a post lands
+ * without one (tested 2026-10-20). */
+export function claudeSocket(session: string): string | null {
+  for (const dir of claudeConfigDirs().map(claudeSessionsDir)) {
+    let names: string[]
+    try {
+      names = readdirSync(dir)
+    } catch {
+      continue
+    }
+    for (const name of names) {
+      if (!/^\d+\.json$/.test(name)) continue
+      try {
+        const raw: unknown = JSON.parse(readFileSync(join(dir, name), "utf8"))
+        if (
+          isRecord(raw) &&
+          raw.sessionId === session &&
+          typeof raw.messagingSocketPath === "string"
+        )
+          return raw.messagingSocketPath
+      } catch {
+        // mid-write, or gone
+      }
+    }
+  }
+  return null
 }
 
 function exists(path: string): boolean {
