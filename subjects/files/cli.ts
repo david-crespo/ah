@@ -7,11 +7,18 @@ import { styleText } from "node:util"
 import select from "@inquirer/select"
 import { die, ensureStarted, serverJson } from "../../platform/cli.ts"
 import { fileId } from "../id.ts"
+import { focusHere, keepFocus } from "../../platform/focus.ts"
+import { openWindow, windowName } from "../../platform/window.ts"
 import { run } from "../../platform/proc.ts"
 import { currentAgent, currentAddress } from "../../platform/session.ts"
 import { status } from "../../platform/server.ts"
-import type { AgentId, FileKind, NearbyAgent } from "../../core/model.ts"
-import type { FileInfo } from "./files.ts"
+import {
+  type AgentId,
+  type FileKind,
+  type NearbyAgent,
+  fileKind,
+} from "../../core/model.ts"
+import type { FileInfo, Location } from "./files.ts"
 import type { OpenRequest } from "./routes.ts"
 
 /** The real path, or the absolute one for a file that may be gone */
@@ -31,12 +38,12 @@ async function filesApi<T>(kind: FileKind, port: number, init?: RequestInit) {
 }
 
 /** Open `path` bound to the agent this runs in, or from a shell in Rex, an
- * agent in its tab; the URL of its page */
+ * agent in its tab; the URL of its page, and where pages already show it */
 export async function openInServer(
   kind: FileKind,
   port: number,
   path: string,
-): Promise<URL> {
+): Promise<{ url: URL; views: Location[] }> {
   const address = currentAddress()
   await ensureStarted(port)
   const request: OpenRequest = address
@@ -46,7 +53,7 @@ export async function openInServer(
     method: "POST",
     body: JSON.stringify(request),
   })
-  return new URL(opened.url, `http://127.0.0.1:${port}`)
+  return { url: new URL(opened.url, `http://127.0.0.1:${port}`), views: opened.views }
 }
 
 /** A nearby agent as its tab's title has it */
@@ -140,18 +147,32 @@ export async function takeHandoff(
   return opened
 }
 
-/** In a Chrome app window or a tab of the default browser */
-export async function showPage(place: "window" | "tab", url: URL) {
+/** `path`'s page in a window of its own or a tab of the default browser,
+ * taking focus only as `focusHere` allows. With `shown` saying a window
+ * already shows it, that window comes forward instead. */
+export async function showPage(
+  place: "window" | "tab",
+  url: URL,
+  path: string,
+  shown: Location[],
+) {
   // Its socket says so, for `ah view ls`
   url.searchParams.set("in", place)
+  const focus = await focusHere()
   if (place === "window") {
-    // -n hands the window to the running Chrome, which creates it without
-    // coming forward. Activating Chrome brings the new window in front of
-    // the terminal.
-    await run("open", ["-na", "Google Chrome", "--args", `--app=${url}`])
-    await run("open", ["-a", "Google Chrome"])
-  } else {
+    const name = windowName(path)
+    const html = fileKind(path) === "html"
+    await openWindow(
+      url.href,
+      { name, badge: name.charAt(0).toUpperCase(), color: html ? "#d97706" : "#0d9488" },
+      focus,
+      shown.includes("window"),
+    )
+  } else if (focus.take) {
     await run("open", [url.href])
+  } else {
+    await run("open", ["-g", url.href])
+    await keepFocus(focus.front)
   }
   console.log(url.href)
 }

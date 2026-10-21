@@ -36,7 +36,7 @@ for every `ah` command. opencode has no sandbox.
    ```
 
    This starts the server if needed, binds the page to this session, opens
-   it in a Chrome app window, and returns. `--in tab`
+   it in a window of its own, and returns. `--in tab`
    opens a tab in the default browser instead, and `--no-chat` gives live reload only. Opening
    a file that's already open rebinds it to this session.
 

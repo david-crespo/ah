@@ -11,7 +11,10 @@
   "files": [
     "dist",
     "views/**/*.css",
-    "views/dashboard/page.html"
+    "views/dashboard/page.html",
+    "webview/main.swift",
+    "webview/Info.plist",
+    "webview/build.sh"
   ],
   "type": "module",
   "scripts": {

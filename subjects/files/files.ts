@@ -45,7 +45,7 @@ export interface AgentDirectory {
   standIn(agent: string): Address | null
 }
 
-/** Where a page is, as its socket's `in` says: a Chrome window or tab from
+/** Where a page is, as its socket's `in` says: a window or browser tab from
  * `ah view open`, or the dashboard's doc slot */
 export const LOCATIONS = ["window", "tab", "dashboard"] as const
 export type Location = (typeof LOCATIONS)[number] | "page"

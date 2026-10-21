@@ -21,15 +21,17 @@ export const dashboard = new Command("dashboard")
 dashboard
   .command("open")
   .summary("Open the dashboard window")
-  .description("Open the dashboard window. Does nothing if it's already open.")
+  .description(
+    "Open the dashboard window, or if it's already open, keep that one. The window comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens or stays without taking focus.",
+  )
   .addOption(
-    new Option("--in <place>", "window: a Chrome app window")
+    new Option("--in <place>", "window: a window of its own, with its own Dock tile")
       .choices(["window"])
       .default("window"),
   )
   .option(
     "--no-other-display",
-    "Leave the window where Chrome puts it, instead of on a display without the pointer",
+    "Leave the window where macOS puts it, instead of filling a display without the pointer",
   )
   .addOption(portOption())
   .action(async ({ port, otherDisplay }) => {

@@ -88,14 +88,14 @@ view
   .command("open")
   .summary("Open a file in a page you can comment on")
   .description(
-    "Open a file in a page you can comment on. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several. HTML files are served as they are, and any other file is shown as markdown.",
+    "Open a file in a page you can comment on. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several. HTML files are served as they are, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already open in a window keeps that window, which comes to the front under the same rule.",
   )
   .argument("<file>")
   .addOption(
     new Option(
       "--in <place>",
       [
-        "window: a Chrome app window; tab: the default browser;",
+        "window: a window of its own, with its own Dock tile; tab: the default browser;",
         "split (markdown only): glow in a new Rex split 35% above this terminal, focus staying put;",
         "here (markdown only): glow in this terminal",
       ].join(" "),
@@ -134,10 +134,10 @@ view
       ])
     }
     if (place === "here") return await runInherited("glow", ["--tui", path])
-    const url = await openInServer(kind, port, path)
+    const { url, views } = await openInServer(kind, port, path)
     if (!editor && kind === "markdown") url.searchParams.set("editor", "off")
     if (!chat) url.searchParams.set("chat", "off")
-    await showPage(place, url)
+    await showPage(place, url, path, views)
   })
 
 view

@@ -3,7 +3,9 @@
 // tracker, is core/tracker_api.ts.
 
 import { status } from "../../platform/server.ts"
-import { openDashboard } from "./open.ts"
+import { focusHere } from "../../platform/focus.ts"
+import { focusWindow } from "../../platform/window.ts"
+import { dashboardUrl, openDashboard } from "./open.ts"
 
 /** One line for agents deciding where to show things */
 export async function dashboardStatus(port: number): Promise<string> {
@@ -14,13 +16,17 @@ export async function dashboardStatus(port: number): Promise<string> {
 }
 
 /** Make sure a dashboard page is open to show what we just put in it,
- * opening one if there is none. Returns a status line like dashboardStatus. */
+ * opening one if there is none, or bringing its window forward if
+ * `focusHere` allows. Returns a status line like dashboardStatus. */
 export async function ensureDashboardPage(
   port: number,
   otherDisplay = true,
 ): Promise<string> {
   const s = await status(port)
-  if (s?.pages) return await dashboardStatus(port)
+  if (s?.pages) {
+    if ((await focusHere()).take) await focusWindow(dashboardUrl(port))
+    return await dashboardStatus(port)
+  }
   await openDashboard(port, otherDisplay)
   return "dashboard: no page was open, opened one"
 }

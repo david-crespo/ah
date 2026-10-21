@@ -262,18 +262,38 @@ export async function setTabLabel(
   }
 }
 
+/** The Rex app's entry in `client.list`, if the app is connected */
+async function appClient(): Promise<Record<string, unknown> | undefined> {
+  const list = await call("client.list")
+  if (!isRecord(list) || !Array.isArray(list.clients)) return undefined
+  return list.clients.find(
+    (c): c is Record<string, unknown> =>
+      isRecord(c) && isRecord(c.info) && c.info.kind === "app",
+  )
+}
+
+/** Whether the Rex app is process `pid` and has `block` focused: the app shows
+ * `session`, whose selected tab has `block` as its focused block */
+export async function appFocuses(
+  pid: number,
+  session: string,
+  block: string,
+): Promise<boolean> {
+  const app = await appClient()
+  if (!app || !isRecord(app.principal) || app.principal.pid !== pid) return false
+  if (!Array.isArray(app.session_ids) || !app.session_ids.includes(session)) return false
+  const view = parseView(await call("session.view", { session_id: session }))
+  return view?.windows.find((w) => w.id === view.activeWindow)?.focused === block
+}
+
 /** Show a tab in the Rex app, leaving whichever app is in front there: the
  * click that asked for it was in the dashboard, which stays. The app keeps its
  * own selected tab and doesn't follow `session.focus_window`, so this asks it
  * to with its `session.select` action, which needs Remote Control on in its
  * settings. */
 export async function selectTab(session: string, tab: string): Promise<void> {
-  const list = await call("client.list")
-  const app =
-    isRecord(list) && Array.isArray(list.clients)
-      ? list.clients.find((c) => isRecord(c) && isRecord(c.info) && c.info.kind === "app")
-      : undefined
-  if (!isRecord(app) || !isString(app.client_id)) throw new Error("no Rex app connected")
+  const app = await appClient()
+  if (!app || !isString(app.client_id)) throw new Error("no Rex app connected")
   const { success, stderr } = await runRex([
     "--autostart=false",
     "--client",

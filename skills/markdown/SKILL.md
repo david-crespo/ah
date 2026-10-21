@@ -35,7 +35,7 @@ for every `ah` command. opencode has no sandbox.
    ```
 
    This starts the server if needed, binds the draft to this session (so
-   its comments come here), opens it in a Chrome app window, and returns.
+   its comments come here), opens it in a window of its own, and returns.
    `--in tab` opens a tab in the default browser instead. Opening a file that's already open
    rebinds it to this session.
 
