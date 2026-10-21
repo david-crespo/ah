@@ -331,7 +331,9 @@ server
     for (const { kind, requests } of open)
       reopened += await takeHandoff(kind, port, requests)
     if (reopened)
-      console.error(`ah: reopened ${reopened} ${reopened === 1 ? "file" : "files"}`)
+      console.error(
+        `ah: carried over ${reopened} open ${reopened === 1 ? "file" : "files"}`,
+      )
     // Until the pages open before reconnect, a command that shows something
     // would see none and open another window
     if (pages) console.error(`ah: ${await waitForPages(port, pages)}`)

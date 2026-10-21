@@ -1,5 +1,11 @@
 # ah
 
+ah is the user's personal tooling first. It's built around their setup: Rex,
+their Helix fork and its Steel config, and Claude Code. Config that plugs ah
+into those tools (Helix keybindings and Steel commands, Rex bindings) lives in
+their dotfiles (`~/repos/dotfiles`) for now. Later, a setup doc here will
+carry all of it, so the repo is self-contained.
+
 ## The CLI
 
 The CLI is mainly for agents: the user rarely runs it. Design commands,
