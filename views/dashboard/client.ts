@@ -16,9 +16,7 @@ const logPane = byId("log-pane")
 const docPane = byId("doc-pane")
 const docName = byId("doc-name")
 const trackerStrip = byId("trackers")
-const parkedStrip = byId("parked")
-// Whether the parked trackers are showing, under the active ones
-let parkedOpen = false
+const parkedMenu = byId("parked")
 const status = byId("status")
 
 let version: string | null = null
@@ -123,14 +121,15 @@ document.addEventListener("keydown", (e) => {
   if (tabs[i].id !== state.focused) void focus(tabs[i].id)
 })
 
-/** The focused workspace's trackers to switch between, and under them, when
- * opened, the parked ones; picking a parked one resumes it */
+/** The focused workspace's trackers to switch between, and a menu of the
+ * parked ones; picking a parked one resumes it */
 function renderTrackers(tab: string | null) {
   const root = state.tabs.find((t) => t.id === tab)?.root
   const t = root ? trackers.get(root) : undefined
   if (!tab || !t || (!t.current && !t.active.length && !t.parked.length)) {
     trackerStrip.replaceChildren()
-    parkedStrip.replaceChildren()
+    parkedMenu.hidePopover()
+    parkedMenu.replaceChildren()
     return
   }
   const trackerTab = (path: string, className: string) =>
@@ -139,19 +138,17 @@ function renderTrackers(tab: string | null) {
       { className, title: path, onclick: () => void pickTracker(tab, path) },
       trackerName(path),
     )
+  // A button for popovertarget, which opens and closes the menu, and leaves
+  // closing it on Escape or a click outside to the browser
   const toggle = t.parked.length
     ? [
-        el(
-          "span",
-          {
-            className: "tracker-tab parked-toggle" + (parkedOpen ? " open" : ""),
-            title: parkedOpen ? "Hide the parked trackers" : "Show the parked trackers",
-            onclick: () => {
-              parkedOpen = !parkedOpen
-              renderTrackers(tab)
-            },
-          },
-          `${t.parked.length} parked`,
+        Object.assign(
+          el(
+            "button",
+            { className: "tracker-tab parked-toggle", title: "The parked trackers" },
+            `${t.parked.length} parked`,
+          ),
+          { popoverTargetElement: parkedMenu },
         ),
       ]
     : []
@@ -165,10 +162,50 @@ function renderTrackers(tab: string | null) {
       ),
     ...toggle,
   )
-  parkedStrip.replaceChildren(
-    ...(parkedOpen ? t.parked.map((path) => trackerTab(path, "tracker-tab")) : []),
+  if (!t.parked.length) parkedMenu.hidePopover()
+  parkedMenu.replaceChildren(
+    ...t.parked.map((path) =>
+      el(
+        "button",
+        {
+          title: path,
+          onclick: () => {
+            parkedMenu.hidePopover()
+            void pickTracker(tab, path)
+          },
+        },
+        trackerName(path),
+      ),
+    ),
   )
 }
+
+// The menu opens in the top layer, above a frame, so it's placed by hand:
+// under the tracker strip, lined up with the toggle at its right end
+parkedMenu.addEventListener("beforetoggle", (e) => {
+  const toggle = trackerStrip.querySelector(".parked-toggle")
+  if (e.newState !== "open" || !toggle) return
+  parkedMenu.style.top = trackerStrip.getBoundingClientRect().bottom + "px"
+  parkedMenu.style.right =
+    document.documentElement.clientWidth - toggle.getBoundingClientRect().right + "px"
+})
+// So it closes when the toggle moves out from under it, and on a click in a
+// frame, which the browser's light dismiss doesn't see but takes the focus
+// from this window
+const closeParked = () => parkedMenu.hidePopover()
+docPane.addEventListener("scroll", closeParked)
+window.addEventListener("resize", closeParked)
+window.addEventListener("blur", closeParked)
+// Up and down through the parked trackers, as in a menu
+parkedMenu.addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return
+  e.preventDefault()
+  const items = [...parkedMenu.children] as HTMLElement[]
+  const i = items.indexOf(document.activeElement as HTMLElement)
+  const step = e.key === "ArrowDown" ? 1 : -1
+  const next = i === -1 ? (step === 1 ? 0 : -1) : (i + step) % items.length
+  items.at(next)?.focus()
+})
 
 async function pickTracker(tab: string, path: string) {
   const res = await fetch("tracker", {

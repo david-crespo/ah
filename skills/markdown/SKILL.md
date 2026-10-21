@@ -203,9 +203,9 @@ PR" is a request to change the source, not the draft).
 - ⌘E (or the ✎ button, top right) toggles the helix pane: real `hx` with the
   user's normal config and Steel setup, plus auto-save (650ms after typing
   stops, and on focus lost). It starts on first show and keeps running while
-  hidden; reloading the page or closing the draft ends it. Browser ⌘-chords
-  don't reach helix (the browser owns them), so Cmd-key helix bindings don't
-  work there; everything else does.
+  hidden; reloading the page or closing the draft ends it. Of the ⌘-chords,
+  only ⌘S, ⌘J and ⌘K reach helix (as `Cmd-s`, `Cmd-j`, `Cmd-k`); the rest
+  stay with the browser. Everything else reaches helix.
 - The page live-updates whenever the file changes on disk, flashing what
   changed
 

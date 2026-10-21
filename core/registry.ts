@@ -13,8 +13,9 @@
 // couldn't place, is keyed by its session (`codex:<id>`).
 //
 // The pane keeps showing its agent after Stop or SessionEnd, so an idle pane
-// keeps its summary, until the shell in it changes directory. The record
-// itself lasts as long as the pane.
+// keeps its summary, until the shell in it changes directory. One that ended
+// counts in the tab title only while no other agent there is running
+// (tabtitle/title.ts). The record itself lasts as long as the pane.
 //
 // `apply` only changes state, synchronously, and returns what to do next: the
 // blocks whose tabs need a new title, and a summary to start. The caller
@@ -55,6 +56,8 @@ export interface AgentRecord {
   /** Its pane shows it: false once the shell there changed directory, or the
    * session moved to another pane */
   shown: boolean
+  /** Its session ended (SessionEnd) and no other has started in the pane */
+  ended: boolean
   /** Bumped by every prompt, so a slow summary can't replace a newer one */
   promptSequence: number
   /** The prompt the summary is for. The title shows the summary while the
@@ -199,6 +202,7 @@ export function apply(r: Registry, e: RegistryEvent, now = Date.now()): Applied 
     cwd: e.cwd ?? (same ? previous.cwd : null),
     busy: same ? previous.busy : false,
     shown: true,
+    ended: e.event === "SessionEnd",
     promptSequence: same ? previous.promptSequence : 0,
     summary: same ? previous.summary : null,
     summarySequence: same ? previous.summarySequence : 0,
@@ -315,6 +319,7 @@ function isAgentRecord(r: unknown): r is AgentRecord {
     isStringOrNull(r.cwd) &&
     typeof r.busy === "boolean" &&
     typeof r.shown === "boolean" &&
+    typeof r.ended === "boolean" &&
     typeof r.promptSequence === "number" &&
     isStringOrNull(r.summary) &&
     typeof r.summarySequence === "number" &&

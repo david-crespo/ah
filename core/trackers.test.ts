@@ -118,6 +118,7 @@ test("outside a jj workspace, the directory stands in for one", () => {
     busy: false,
     summary: null,
     shown: false,
+    ended: false,
     promptSequence: 0,
     summarySequence: 0,
     updatedAt: 0,

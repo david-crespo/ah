@@ -130,30 +130,61 @@
         margin: -10px -24px 8px;
         border-bottom: 1px solid var(--border);
       }
-      #trackers:empty,
-      #parked:empty {
+      #trackers:empty {
         display: none;
       }
-      body.doc-frame #trackers,
-      body.doc-frame #parked {
+      body.doc-frame #trackers {
         margin: 0;
-      }
-      /* Under the active ones, when opened: a wrapping row, dimmer */
-      #parked {
-        display: flex;
-        flex-wrap: wrap;
-        margin: -8px -24px 8px;
-        border-bottom: 1px solid var(--border);
-        opacity: 0.75;
       }
       .tracker-tab.parked-toggle {
         margin-left: auto;
-        border-right: none;
+        border: none;
         border-left: 1px solid var(--border);
+        background: none;
+        font-family: inherit;
+        line-height: inherit;
         font-style: italic;
       }
-      .tracker-tab.parked-toggle.open {
+      body:has(#parked:popover-open) .parked-toggle {
         color: inherit;
+      }
+      /* The parked trackers, in a menu under the toggle (client.ts places
+         it). A popover sits above the frame, which would cover it otherwise. */
+      #parked:popover-open {
+        display: flex;
+        flex-direction: column;
+      }
+      #parked {
+        inset: auto;
+        margin: 0;
+        padding: 4px 0;
+        max-width: min(40ch, calc(100vw - 32px));
+        max-height: 60vh;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        background: var(--bg);
+        color: var(--text);
+        box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
+      }
+      #parked button {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        padding: 4px 14px;
+        border: none;
+        background: none;
+        font: inherit;
+        font-size: 0.9em;
+        text-align: left;
+        color: var(--muted);
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      #parked button:hover,
+      #parked button:focus-visible {
+        outline: none;
+        color: inherit;
+        background: var(--surface);
       }
       /* Narrowed to fit, like an editor's */
       .tracker-tab {
@@ -221,7 +252,7 @@
       </div>
       <div id="doc-pane">
         <nav id="trackers"></nav>
-        <nav id="parked"></nav>
+        <div id="parked" popover></div>
         <div class="doc-name" id="doc-name"></div>
       </div>
     </main>

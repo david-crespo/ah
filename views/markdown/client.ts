@@ -58,17 +58,39 @@ preview.addEventListener("closed", () => {
 // editor state.
 let term: Terminal | null = null
 let ptySock: WebSocket | null = null
+/** ⌘-chords the user's helix config binds: write, and extend the selection
+ * by a line up or down */
+const HELIX_CMD_KEYS = new Set(["s", "j", "k"])
+
+/** Rex's cell for 13pt Berkeley Mono with its cell height at +6% (Settings,
+ * Workspace.terminalCellHeightPercent), in CSS pixels: 16×33 at 2x */
+const REX_CELL = { width: 8, height: 16.5 }
+
+/** Space xterm's cells out to Rex's. xterm floors the font's advance to
+ * whole device pixels and uses its bare height, and what those come to
+ * depends on the browser (Chrome's 15×30 at 2x, WebKit's bigger), so set
+ * letterSpacing (added in device pixels) and lineHeight (multiplying the
+ * height) from what it measured. That's in xterm's private render service,
+ * so without it the cells stay as they are. */
+function matchRexCells(term: Terminal) {
+  type Core = { _renderService?: { dimensions?: { device?: { char?: Size } } } }
+  type Size = { width: number; height: number }
+  const char = (term as unknown as { _core?: Core })._core?._renderService?.dimensions
+    ?.device?.char
+  if (!char?.width || !char.height) return
+  const dpr = window.devicePixelRatio
+  term.options.letterSpacing = Math.round(REX_CELL.width * dpr) - char.width
+  // xterm floors the product, so aim half a pixel over
+  term.options.lineHeight = Math.max(
+    1,
+    (Math.round(REX_CELL.height * dpr) + 0.5) / char.height,
+  )
+}
 
 function startHelix(host: HTMLElement) {
   term = new Terminal({
     fontSize: theme.fontSize,
     fontFamily: theme.fontFamily,
-    // xterm floors the 0.6em advance to whole device pixels and uses the
-    // font's bare height, so 13px Berkeley Mono gets 15×30 cells at 2x where
-    // Ghostty (with adjust-cell-height = 2) gives 16×33. letterSpacing is
-    // added in device pixels; lineHeight multiplies the height.
-    letterSpacing: 1,
-    lineHeight: 1.1,
     theme: { background: theme.background },
     cursorBlink: false,
     macOptionIsMeta: true,
@@ -87,12 +109,10 @@ function startHelix(host: HTMLElement) {
   } catch (err) {
     console.warn("ah: WebGL renderer unavailable, using DOM renderer", err)
   }
+  matchRexCells(term)
   fit.fit()
   // Reachable from the devtools console for debugging rendering issues
   Object.assign(globalThis, { ahTerm: term })
-  // Let ⌘-chords through to the page (⌘E toggles this pane, ⌘S is swallowed
-  // below) instead of xterm eating them.
-  term.attachCustomKeyEventHandler((e) => !e.metaKey)
 
   const spawnSize = { cols: term.cols, rows: term.rows }
   const ws = new WebSocket(
@@ -109,6 +129,21 @@ function startHelix(host: HTMLElement) {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
   }
   const sendSize = () => send({ type: "resize", cols: term!.cols, rows: term!.rows })
+  // xterm doesn't encode ⌘, so the ⌘-chords helix binds go to it as kitty
+  // keyboard protocol super chords (CSI codepoint;9u), which helix parses
+  // without negotiating the protocol. preventDefault keeps the browser from
+  // acting on them too (⌘S would open Save Page). Other ⌘-chords go to the
+  // page (⌘E toggles this pane) instead of xterm eating them.
+  term.attachCustomKeyEventHandler((e) => {
+    if (!e.metaKey) return true
+    const key = e.key.toLowerCase()
+    if (HELIX_CMD_KEYS.has(key) && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      e.preventDefault()
+      if (e.type === "keydown")
+        send({ type: "input", data: `\x1b[${key.codePointAt(0)};9u` })
+    }
+    return false
+  })
   ws.onopen = () => {
     // A fit that ran while the socket was still connecting had nowhere to
     // go; if the size moved on since spawn, tell helix now.
@@ -190,25 +225,4 @@ if (editorHost && editorToggle) {
       setEditorShown(!document.body.classList.contains("editor-shown"))
     }
   })
-
-  // Helix auto-saves, so ⌘S has nothing to do; consume the reflexive macOS
-  // save shortcut before the browser opens its Save Page UI.
-  document.addEventListener(
-    "keydown",
-    (event) => {
-      if (
-        event.metaKey &&
-        !event.ctrlKey &&
-        !event.altKey &&
-        !event.shiftKey &&
-        event.key.toLowerCase() === "s" &&
-        event.target instanceof Node &&
-        editorHost.contains(event.target)
-      ) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
-    },
-    { capture: true },
-  )
 }

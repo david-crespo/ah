@@ -303,18 +303,17 @@
   background: var(--chat-blue);
   animation: conversation-breathe 2.4s ease-in-out infinite;
 }
-#conversation .conversation-unread {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--chat-blue);
+/* Something to read: the toggle's border and chevron turn blue for an
+   unread message, amber for a request that needs a reply or failed. The
+   corner dot is only for the agent's connection. */
+#conversation[data-unread] .conversation-toggle {
+  border-color: var(--chat-blue);
+  color: var(--chat-blue);
 }
-#conversation[data-status="needs-reply"] .conversation-unread,
-#conversation[data-status="error"] .conversation-unread {
-  background: light-dark(#9a6700, #d29922);
+#conversation[data-status="needs-reply"] .conversation-toggle,
+#conversation[data-status="error"] .conversation-toggle {
+  border-color: light-dark(#9a6700, #d29922);
+  color: light-dark(#9a6700, #d29922);
 }
 /* Whether comments reach an agent: a green dot on the toggle when one is
    connected. When they wouldn't reach one, the dot moves to the pill beside

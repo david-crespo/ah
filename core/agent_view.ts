@@ -21,7 +21,7 @@ export interface ClaudeProcess {
 
 export interface AgentView extends Pick<
   AgentRecord,
-  "harness" | "session" | "label" | "cwd" | "busy" | "summary" | "shown"
+  "harness" | "session" | "label" | "cwd" | "busy" | "summary" | "shown" | "ended"
 > {
   id: AgentId
   /** Its pane, null outside Rex */
@@ -89,6 +89,7 @@ export function listAgents(
       busy: a.busy,
       summary: a.summary,
       shown: a.shown,
+      ended: a.ended,
       block,
       tab: block ? (tabs.get(block) ?? null) : null,
       process: p ? { pid: p.pid, status: p.status, socket: p.socket } : null,
@@ -104,6 +105,7 @@ export function listAgents(
     busy: p.status === "busy",
     summary: null,
     shown: false,
+    ended: false,
     block: null,
     tab: null,
     process: { pid: p.pid, status: p.status, socket: p.socket },

@@ -80,9 +80,27 @@ test("Stop and SessionEnd go idle but leave the agent shown", () => {
   apply(r, hook("UserPromptSubmit", "a", "t1"))
   summary(r, "t1", "a", 1, "Port titles")
   apply(r, hook("Stop", "a", "t1"))
+  expect(r.agents.get("t1")?.ended).toBe(false)
   apply(r, hook("SessionEnd", "a", "t1"))
   expect(r.agents.get("t1")?.busy).toBe(false)
+  expect(r.agents.get("t1")?.ended).toBe(true)
   expect(tabTitle(["t1"], r)).toBe("ah | Port titles")
+})
+
+test("an agent that ended drops out of the title while another in the tab runs", () => {
+  const r = emptyRegistry()
+  apply(r, hook("UserPromptSubmit", "a", "t1"))
+  summary(r, "t1", "a", 1, "Port titles")
+  apply(r, hook("UserPromptSubmit", "b", "t2"))
+  summary(r, "t2", "b", 1, "Side question")
+  apply(r, hook("SessionEnd", "b", "t2"))
+  expect(tabTitle(["t1", "t2"], r)).toBe("ah | Port titles")
+
+  // A new session in the same pane counts again
+  apply(r, hook("SessionStart", "c", "t2"))
+  expect(r.agents.get("t2")?.ended).toBe(false)
+  summary(r, "t2", "c", 1, "Next")
+  expect(tabTitle(["t1", "t2"], r)).toBe("ah | Port titles | Next")
 })
 
 test("a slow summary for an older prompt doesn't replace a newer one", () => {

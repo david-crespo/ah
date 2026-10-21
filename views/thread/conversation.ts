@@ -48,7 +48,6 @@ export class Conversation {
   private error: HTMLElement
   private empty: HTMLElement
   private newMessages: HTMLButtonElement
-  private badge: HTMLElement
   private offline: HTMLElement
   private snapshot: ThreadSnapshot | null = null
   private rows = new Map<string, HTMLElement>()
@@ -86,7 +85,6 @@ export class Conversation {
         <button class="conversation-toggle" type="button" aria-expanded="false" aria-controls="conversation-history" aria-label="Open conversation">
           <span class="conversation-spinner" aria-hidden="true"></span>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg>
-          <span class="conversation-unread" hidden></span>
           <span class="conversation-agent" aria-hidden="true"></span>
         </button>
       </div>`
@@ -99,7 +97,6 @@ export class Conversation {
     this.error = this.element.querySelector(".conversation-error")!
     this.empty = this.element.querySelector(".conversation-empty")!
     this.newMessages = this.element.querySelector(".conversation-new")!
-    this.badge = this.element.querySelector(".conversation-unread")!
     this.offline = this.element.querySelector(".conversation-offline")!
     this.toggle.addEventListener("click", () => this.setOpen(!this.open, true))
     this.form.addEventListener("submit", (event) => {
@@ -443,7 +440,8 @@ export class Conversation {
         (entry) => entry.type === "activity" && entry.text && !this.read.has(entry.id),
       ) ?? []
     const unread = unreadEntries.length
-    // The badge is for messages nothing shows: not one a toast has up
+    // Unread tints the toggle, for messages nothing shows: not one a toast
+    // has up
     const unseen = unreadEntries.some(
       (entry) => this.open || this.rows.get(entry.id)?.hidden !== false,
     )
@@ -465,7 +463,7 @@ export class Conversation {
     }`
     this.toggle.setAttribute("aria-label", label)
     this.toggle.title = label
-    this.badge.hidden = !unseen && !["needs-reply", "error"].includes(status)
+    this.element.toggleAttribute("data-unread", unseen)
   }
 
   async send(input: RequestInput): Promise<RequestResult> {
