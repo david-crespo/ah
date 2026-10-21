@@ -32,11 +32,11 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah view open --in window <path-to-file.html>
+   ah view open <path-to-file.html>
    ```
 
    This starts the server if needed, binds the page to this session, opens
-   it in a Chrome app window, and returns. `--in` is required: `--in tab`
+   it in a Chrome app window, and returns. `--in tab`
    opens a tab in the default browser instead, and `--no-chat` gives live reload only. Opening
    a file that's already open rebinds it to this session.
 
@@ -114,7 +114,7 @@ scratchpad and pass `--text-file <path>`.
 
 `ah server restart` keeps open pages and the sessions they're bound to. Any other
 stop of the server forgets them: their comments can't be sent until
-`ah view open --in window <file>` runs again, and the old page reconnects and reloads
+`ah view open <file>` runs again, and the old page reconnects and reloads
 on its own. The conversation history survives in its log under
 `~/.local/state/ah/html/`. When the user is done with the page,
 `ah view close <file>`.

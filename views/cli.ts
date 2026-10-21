@@ -101,7 +101,7 @@ view
       ].join(" "),
     )
       .choices(["window", "tab", "split", "here"] as const)
-      .makeOptionMandatory(),
+      .default("window" as const),
   )
   .option("--no-editor", "Markdown preview only, without the helix pane")
   .option("--no-chat", "Without the conversation")

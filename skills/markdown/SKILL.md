@@ -31,13 +31,12 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah view open --in window <path-to-draft.md>
+   ah view open <path-to-draft.md>
    ```
 
    This starts the server if needed, binds the draft to this session (so
    its comments come here), opens it in a Chrome app window, and returns.
-   `--in` is required: `--in tab` opens a tab in the default browser
-   instead. Opening a file that's already open
+   `--in tab` opens a tab in the default browser instead. Opening a file that's already open
    rebinds it to this session.
 
    Comments arrive in this session as messages: in Claude Code, framed by
@@ -215,7 +214,7 @@ PR" is a request to change the source, not the draft).
 the sessions they're bound to. Any other stop of the server forgets them:
 their pages say the file isn't open anymore, and comments can't be sent until
 it's opened again. If `ah request respond` says the file isn't open, run
-`ah view open --in window <file>` again; the old page reconnects on its own, though a
+`ah view open <file>` again; the old page reconnects on its own, though a
 new window opens too. The
 conversation history survives in the log. Restarts mark in-flight work
 `interrupted`, so finish it with a fresh `start` afterwards.
