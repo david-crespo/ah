@@ -137,8 +137,10 @@ ah-item:hover .ah-item-head {
   height: 16px;
 }
 
-/* Icons sit on the title's first line when it wraps */
+/* Icons sit on the title's first line when it wraps. The status icon is a
+   little bigger than the buttons'. */
 .ah-item-status {
+  width: 19px;
   align-self: flex-start;
   align-items: center;
   height: 1lh;
@@ -152,6 +154,13 @@ ah-item svg {
   stroke-width: 1.4;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* Thinner strokes keep the bigger icon as light as the title text */
+ah-item .ah-item-status svg {
+  width: 19px;
+  height: 19px;
+  stroke-width: 1.2;
 }
 
 ah-item svg .fill {
@@ -171,7 +180,8 @@ ah-item[status="done"] .ah-item-status {
   color: var(--t-green);
 }
 
-ah-item[status="hold"] .ah-item-status {
+ah-item[status="hold"] .ah-item-status,
+ah-item[status="question"] .ah-item-status {
   color: var(--t-yellow);
 }
 
@@ -499,7 +509,8 @@ ah-step[status="done"] .ah-step-status {
   color: var(--t-green);
 }
 
-ah-step[status="hold"] .ah-step-status {
+ah-step[status="hold"] .ah-step-status,
+ah-step[status="question"] .ah-step-status {
   color: var(--t-yellow);
 }
 

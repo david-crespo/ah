@@ -15,37 +15,42 @@
 //   <ah-step status="done" rev="pqqsyksr">What the step does</ah-step>
 //
 // and its title line counts the ones done. Steps are lettered in order, so
-// the second step of item 3 is 3B. Open and hold items get a
-// Go button, which posts a `go` request with the item's id and title into the
-// page's thread (views/html/requests.ts), and every item a comment button,
-// which opens a box for an `item-comment` request. Each button shows its last request's state from the thread
-// the page's socket carries (chat.js re-dispatches it as `ah-thread` on
+// the second step of item 3 is 3B. Open and hold items get a Go button,
+// which posts a `go` request with the item's id and title into the page's
+// thread (views/html/requests.ts); a question item waits for the user's
+// answer instead. Every item gets a comment button, which opens a box for an
+// `item-comment` request. Each button shows its last request's state from
+// the thread the page's socket carries (chat.js re-dispatches it as `ah-thread` on
 // the document). The page reloads on every edit, so which items are open,
 // and an unsent comment, are kept across reloads.
 
 import type { ThreadSnapshot, RequestInput } from "../../subjects/thread/events.ts"
 
-const STATUSES = ["todo", "doing", "done", "dropped", "hold"] as const
+const STATUSES = ["todo", "doing", "done", "dropped", "hold", "question"] as const
 type Status = (typeof STATUSES)[number]
 
 const svg = (body: string) => `<svg viewBox="0 0 16 16" aria-hidden="true">${body}</svg>`
+
+const QUESTION_ICON = svg(
+  `<circle cx="8" cy="8" r="5.5"/><path d="M6.15 6.3a1.9 1.9 0 1 1 2.7 1.7c-.55.3-.85.65-.85 1.2v.3"/><circle class="fill" cx="8" cy="11.25" r=".7"/>`,
+)
 
 const STATUS_ICONS: Record<Status, string> = {
   todo: svg(`<circle cx="8" cy="8" r="5.5"/>`),
   doing: svg(
     `<circle cx="8" cy="8" r="5.5"/><path class="fill" d="M8 2.5a5.5 5.5 0 0 1 0 11z"/>`,
   ),
-  done: svg(`<circle cx="8" cy="8" r="5.5"/><path d="m5.5 8.2 1.8 1.8 3.2-3.6"/>`),
+  done: svg(`<circle cx="8" cy="8" r="5.5"/><path d="m5.3 8.2 2 2 3.5-3.9"/>`),
   dropped: svg(`<circle cx="8" cy="8" r="5.5"/><path d="M4.2 11.8 11.8 4.2"/>`),
-  hold: svg(`<circle cx="8" cy="8" r="5.5"/><path d="M6.6 5.8v4.4M9.4 5.8v4.4"/>`),
+  hold: svg(`<circle cx="8" cy="8" r="5.5"/><path d="M6.5 5.5v5M9.5 5.5v5"/>`),
+  // Waiting on the user's answer, which a comment or the terminal gives
+  question: QUESTION_ICON,
 }
 
 /** A button's face for each state of its request; `ready` is the button's own */
 const STATE_ICONS = {
   pending: svg(`<circle class="spin" cx="8" cy="8" r="5.5" pathLength="100"/>`),
-  question: svg(
-    `<circle cx="8" cy="8" r="5.5"/><path d="M6.4 6.4a1.7 1.7 0 1 1 2.4 1.5c-.5.3-.8.6-.8 1.1v.3"/><circle class="fill" cx="8" cy="11.1" r=".6"/>`,
-  ),
+  question: QUESTION_ICON,
   error: svg(
     `<path d="M8 2.8 13.6 12.5H2.4z"/><path d="M8 6.6v2.6"/><circle class="fill" cx="8" cy="10.9" r=".6"/>`,
   ),
@@ -184,7 +189,11 @@ class CommentBox {
     this.#text.addEventListener("input", () => this.#saveDraft())
     this.#text.addEventListener("keydown", (e) => {
       // ctrl+enter for terminal-browser panes, where cmd chords may not arrive
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void this.#send()
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+        // Unhandled, macOS beeps at the chord
+        e.preventDefault()
+        void this.#send()
+      }
       if (e.key === "Escape") this.close()
     })
     document.addEventListener("mousedown", (e) => {

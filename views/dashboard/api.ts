@@ -16,15 +16,16 @@ export async function dashboardStatus(port: number): Promise<string> {
 }
 
 /** Make sure a dashboard page is open to show what we just put in it,
- * opening one if there is none, or bringing its window forward if
- * `focusHere` allows. Returns a status line like dashboardStatus. */
+ * opening one if there is none. With `raise`, an open one's window comes
+ * forward if `focusHere` allows; without, it stays where it is, since it
+ * updates in place. Returns a status line like dashboardStatus. */
 export async function ensureDashboardPage(
   port: number,
-  otherDisplay = true,
+  { otherDisplay = true, raise = true }: { otherDisplay?: boolean; raise?: boolean } = {},
 ): Promise<string> {
   const s = await status(port)
   if (s?.pages) {
-    if ((await focusHere()).take) await focusWindow(dashboardUrl(port))
+    if (raise && (await focusHere()).take) await focusWindow(dashboardUrl(port))
     return await dashboardStatus(port)
   }
   await openDashboard(port, otherDisplay)

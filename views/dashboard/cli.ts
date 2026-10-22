@@ -35,7 +35,7 @@ dashboard
   )
   .addOption(portOption())
   .action(async ({ port, otherDisplay }) => {
-    console.log(await ensureDashboardPage(port, otherDisplay))
+    console.log(await ensureDashboardPage(port, { otherDisplay }))
   })
 
 dashboard

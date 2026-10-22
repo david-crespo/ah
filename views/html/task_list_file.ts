@@ -30,7 +30,7 @@ export function taskListPage(title: string, goal: string): string {
     <h3>Short title</h3>
     <p>Detail: what's wrong, what to change, file references, what was decided.</p>
   </ah-item>
-  status: todo, doing, done, dropped, or hold. rev: the change ID, once there is one. -->
+  status: todo, doing, done, dropped, hold, or question. rev: the change ID, once there is one. -->
 ${groups}
 </main>
 </body>

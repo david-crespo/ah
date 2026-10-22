@@ -67,7 +67,11 @@ item in the one that fits:
   review's numbers. New items take the next number. When items are
   reordered, renumber them all to match the new order, and update any
   mention of the old numbers in the details.
-- `status`: `todo` (the default), `doing`, `done`, `dropped`, `hold`.
+- `status`: `todo` (the default), `doing`, `done`, `dropped`, `hold`
+  (set aside), `question` (waiting on the user's answer). For a question,
+  put it in the detail, under `<h4>Open</h4>` with the options, and ask it
+  in chat too. When it's answered, record the answer under `Decided` and
+  move the item on.
 - `rev`: the jj change ID once there is one. Leave it off until then.
 - The `<h3>` is the title: a few words. Everything after it is the detail,
   collapsed under the title. Put all of it there. There's no separate review
@@ -116,7 +120,8 @@ around the items; the stylesheet and `task_list.js` own all of that.
 
 ## The Go button
 
-Each `todo` and `hold` item has a Go button. A click wakes the session with an
+Each `todo` and `hold` item has a Go button; a `question` item doesn't, since
+it waits for an answer. A click wakes the session with an
 HTML request (the html skill's format; in Claude Code it's framed as a message
 "from another Claude session", which it isn't) that reads
 `Go ahead with item <id>: <title>`: the user's instruction to start that

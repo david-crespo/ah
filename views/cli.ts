@@ -212,7 +212,9 @@ tracker
     await showInServer(fileKind(path), port, path)
     await setCurrentTracker(port, agent, path)
     console.log(`the tracker: ${path}`)
-    console.log(await ensureDashboardPage(port))
+    // The dashboard already shows the new tracker, so an open one stays
+    // behind whatever the user is looking at
+    console.log(await ensureDashboardPage(port, { raise: false }))
   })
 
 tracker

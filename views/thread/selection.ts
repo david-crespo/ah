@@ -140,7 +140,11 @@ export function setUpSelectionComments(
   document.getElementById("dellm")!.addEventListener("click", () => submit("dellm"))
   commentText.addEventListener("keydown", (e) => {
     // ctrl+enter for terminal-browser panes, where cmd chords may not arrive
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit("comment")
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      // Unhandled, macOS beeps at the chord
+      e.preventDefault()
+      void submit("comment")
+    }
     if (e.key === "Escape") hidePopover()
   })
   return hidePopover
