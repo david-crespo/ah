@@ -20,7 +20,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs"
 import { createConnection } from "node:net"
 import { basename, join } from "node:path"
 import { type Address, type AgentRef, HARNESSES } from "../core/model.ts"
-import { isOneOf, isRecord } from "./guards.ts"
+import { isOneOf, isRecord, str } from "./guards.ts"
 import { claudeConfigDirs, claudeSessionsDir, stateHome } from "./paths.ts"
 import { ancestors, command, processTable, run } from "./proc.ts"
 
@@ -102,8 +102,6 @@ export function currentAddress(): Address | null {
       return { harness: "opencode", id: env.OPENCODE_SESSION_ID! }
   }
 }
-
-const str = (v: unknown) => (typeof v === "string" && v ? v : null)
 
 /** An agent a command names, checked, or null if it isn't one */
 export function parseAgentRef(o: unknown): AgentRef | null {

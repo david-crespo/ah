@@ -16,6 +16,7 @@
 // first prompt and the user can rename. Child sessions (subagents) are
 // skipped so they can't claim the tab from their parent.
 
+import { str } from "../platform/guards.ts"
 import { opencodeService, processRunning } from "../platform/session.ts"
 import { abbreviatePath } from "./hook.ts"
 import type { HookEventName, RegistryEvent } from "./registry.ts"
@@ -25,8 +26,6 @@ export type OpencodeUpdate =
   | { kind: "event"; event: HookEventName; session: string; cwd: string | null }
   | { kind: "title"; session: string; title: string }
   | { kind: "child"; session: string }
-
-const str = (v: unknown) => (typeof v === "string" && v ? v : null)
 
 /** One event off the stream, as what the registry needs from it */
 export function readUpdate(raw: unknown): OpencodeUpdate | null {

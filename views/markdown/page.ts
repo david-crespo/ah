@@ -5,13 +5,17 @@
 
 import { chatStylesheet, selectionPopover } from "../thread/page.ts"
 
+// Both pages load only their own scripts and styles, and talk only to the
+// server, over HTTP or its sockets; images and video can come from anywhere
+const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src 'none'; object-src 'none'">`
+
 export function page(title: string, { editor, chat }: { editor: boolean; chat: boolean }) {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src 'none'; object-src 'none'">
+${csp}
 <title>${title}</title>
 <link rel="stylesheet" href="/github-markdown.css">
 <link rel="stylesheet" href="../markdown.css">
@@ -104,7 +108,7 @@ export function indexPage(files: { id: string; name: string }[]) {
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src 'none'; object-src 'none'">
+${csp}
 <title>Open files</title>
 <link rel="stylesheet" href="/github-markdown.css">
 <link rel="stylesheet" href="markdown.css">

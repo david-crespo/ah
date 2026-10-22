@@ -2,7 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
-import { LiveDoc, splice } from "./doc.ts"
+import { LiveDoc } from "./doc.ts"
+import { splice } from "./splice.ts"
 
 let dir: string
 let docs: LiveDoc[] = []

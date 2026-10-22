@@ -38,28 +38,8 @@ import {
 import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
 import { htmlFiles, type LiveReload } from "./files.ts"
-
-const types: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".htm": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".txt": "text/plain; charset=utf-8",
-  ".md": "text/plain; charset=utf-8",
-  ".csv": "text/csv; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
-}
+import { escapeHtml } from "../escape.ts"
+import { contentTypes } from "../mime.ts"
 
 // Pages reload on every change, so nothing they load should be cached
 const noStore = { "cache-control": "no-store" }
@@ -224,21 +204,16 @@ async function sibling(pagePath: string, sub: string): Promise<Response> {
   } catch {
     return notFound()
   }
-  const type = types[extname(real).toLowerCase()]
+  const type = contentTypes[extname(real).toLowerCase()]
   if (!type) return notFound()
   const body = Readable.toWeb(createReadStream(real)) as ReadableStream<Uint8Array>
   return new Response(body, { headers: { "content-type": type, ...noStore } })
 }
 
 function indexPage(pages: FileInfo[]): Response {
-  const escape = (s: string) =>
-    s.replace(
-      /[&<>"]/g,
-      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!,
-    )
   const rows = pages.map(
     (p) =>
-      `<li><a href="${p.id}/">${escape(basename(p.path))}</a> <code>${escape(p.path)}</code></li>`,
+      `<li><a href="${p.id}/">${escapeHtml(basename(p.path))}</a> <code>${escapeHtml(p.path)}</code></li>`,
   )
   const html = `<!doctype html>
 <html lang="en">

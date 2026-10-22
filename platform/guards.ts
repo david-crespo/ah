@@ -10,3 +10,6 @@ export const isString = (value: unknown): value is string => typeof value === "s
 
 export const isStringOrNull = (value: unknown): value is string | null =>
   value === null || typeof value === "string"
+
+/** A non-empty string, or null for anything else */
+export const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null)

@@ -25,8 +25,10 @@ import {
 import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
 import { type LiveMarkdown, markdownFiles } from "./files.ts"
-import { fetchBlob, mimeTypes, resolveAsset } from "./github.ts"
+import { fetchBlob, resolveAsset } from "./github.ts"
 import { indexPage, page } from "./page.ts"
+import { escapeHtml } from "../escape.ts"
+import { mediaType } from "../mime.ts"
 
 const css = { "content-type": "text/css; charset=utf-8" }
 const stylesheets = new Set(["markdown.css", "xterm.css"])
@@ -79,7 +81,7 @@ export class MarkdownBackend {
     if (rest === "") {
       const files = this.files.shown().map((path) => ({
         id: this.files.info(path).id,
-        name: escape(basename(path)),
+        name: escapeHtml(basename(path)),
       }))
       return new Response(indexPage(files), {
         headers: { "content-type": "text/html; charset=utf-8" },
@@ -108,7 +110,7 @@ export class MarkdownBackend {
     if (sub === "") {
       const editor = searchParams.get("editor") !== "off"
       const chat = searchParams.get("chat") !== "off"
-      return new Response(page(escape(basename(path)), { editor, chat }), {
+      return new Response(page(escapeHtml(basename(path)), { editor, chat }), {
         headers: { "content-type": "text/html; charset=utf-8" },
       })
     }
@@ -122,12 +124,6 @@ export class MarkdownBackend {
     return new Response("not found", { status: 404 })
   }
 }
-
-const escape = (s: string) =>
-  s.replace(
-    /[&<>"]/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!,
-  )
 
 async function ghBlob(q: URLSearchParams): Promise<Response> {
   const args = ["owner", "repo", "ref", "path"].map((k) => q.get(k) ?? "")
@@ -162,7 +158,7 @@ export async function localMedia(filePath: string, p: string): Promise<Response>
   }
   // Nothing else is a plausible screenshot location
   if (!allowed.some((dir) => plainlyUnder(dir, real))) return notFound
-  const type = mimeTypes[real.split(".").pop()?.toLowerCase() ?? ""]
+  const type = mediaType(real)
   if (!type) return notFound
   const body = Readable.toWeb(createReadStream(real)) as ReadableStream<Uint8Array>
   return new Response(body, { headers: { "content-type": type } })

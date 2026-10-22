@@ -22,7 +22,7 @@
 
 import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
-import { isOneOf, isRecord, isString } from "../platform/guards.ts"
+import { isOneOf, isRecord, isString, str } from "../platform/guards.ts"
 import type { AgentDirectory } from "../subjects/files/files.ts"
 import {
   addressAlive,
@@ -63,7 +63,6 @@ import { buildSummaryPayload, generateSummary } from "./summary.ts"
 
 /** In a block that still exists, or running */
 export const isCurrent = (a: AgentView) => a.tab !== null || a.process !== null
-const str = (v: unknown) => (typeof v === "string" && v ? v : null)
 
 /** A posted event, checked, or null if it isn't one */
 export function parseEvent(o: unknown): RegistryEvent | null {

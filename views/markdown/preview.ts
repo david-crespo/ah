@@ -22,6 +22,7 @@ import { classHighlighter, highlightCode } from "@lezer/highlight"
 import { createMarkdown } from "./render.ts"
 import { type Conflict, findConflictEnd, parseConflict } from "./conflict.ts"
 import type { ThreadSnapshot } from "../../subjects/thread/events.ts"
+import { splice } from "./splice.ts"
 
 /** What the doc socket sends: the text, the file's thread, and the
  * file closing */
@@ -230,20 +231,6 @@ declare global {
   interface HTMLElementTagNameMap {
     "ah-markdown": AhMarkdown
   }
-}
-
-// Single contiguous splice turning oldStr into newStr (common prefix/suffix)
-function splice(oldStr: string, newStr: string) {
-  let start = 0
-  const maxStart = Math.min(oldStr.length, newStr.length)
-  while (start < maxStart && oldStr[start] === newStr[start]) start++
-  let endOld = oldStr.length
-  let endNew = newStr.length
-  while (endOld > start && endNew > start && oldStr[endOld - 1] === newStr[endNew - 1]) {
-    endOld--
-    endNew--
-  }
-  return { start, delLen: endOld - start, insert: newStr.slice(start, endNew) }
 }
 
 // ---------- rendering ----------

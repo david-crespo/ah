@@ -25,7 +25,7 @@
 import { Command, Option } from "@commander-js/extra-typings"
 import { homedir } from "node:os"
 import { portOption } from "../platform/cli.ts"
-import { isOneOf } from "../platform/guards.ts"
+import { isOneOf, str } from "../platform/guards.ts"
 import { ensureServer } from "../platform/server.ts"
 import { currentAgent, currentAddress } from "../platform/session.ts"
 import { underCodexDaemon } from "./tuis.ts"
@@ -88,8 +88,6 @@ async function readStdin(): Promise<string> {
   for await (const chunk of process.stdin) text += chunk
   return text
 }
-
-const str = (v: unknown) => (typeof v === "string" && v ? v : null)
 
 export function hookEvent(
   input: string,

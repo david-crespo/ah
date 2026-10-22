@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { cacheHome } from "../../platform/paths.ts"
 import { run } from "../../platform/proc.ts"
+import { mediaType } from "../mime.ts"
 
 let ghTokenPromise: Promise<string | null> | undefined
 function ghToken(): Promise<string | null> {
@@ -58,9 +59,7 @@ export async function resolveAsset(url: string) {
     const u = new URL(url)
     if (!assetHosts.includes(u.hostname)) {
       const type =
-        u.searchParams.get("response-content-type") ??
-        mimeTypes[u.pathname.split(".").pop()?.toLowerCase() ?? ""] ??
-        ""
+        u.searchParams.get("response-content-type") ?? mediaType(u.pathname) ?? ""
       return { src: url, type }
     }
     const res = await fetch(url, { redirect: "manual" })
@@ -74,16 +73,4 @@ export async function resolveAsset(url: string) {
     throw new Error(`asset not accessible: ${url}`)
   }
   throw new Error(`too many redirects: ${url}`)
-}
-
-export const mimeTypes: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  svg: "image/svg+xml",
-  mp4: "video/mp4",
-  mov: "video/quicktime",
-  webm: "video/webm",
 }
