@@ -31,6 +31,8 @@ function registry(
     trackers: new Map(),
     shellLabels: new Map(Object.entries(shellLabels)),
     bindings: new Map(),
+    picks: new Map(),
+    outbox: new Map(),
     held: new Set(),
   }
 }

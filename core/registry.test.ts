@@ -207,8 +207,14 @@ test("prune drops agents in closed panes and old ones outside Rex", () => {
   // Rex not running: only age counts
   expect(prune(r, null, new Set(), week)).toBe(true)
   expect([...r.agents.keys()]).toEqual(["t2"])
+  r.picks.set("t3", "t2")
+  r.picks.set("t4", "t2")
+  r.outbox.set("t3", ["a"])
+  r.outbox.set("t4", ["b"])
   expect(prune(r, live(["t2"]), new Set(["t4"]), week)).toBe(true)
   expect([...r.shellLabels.keys()]).toEqual(["t4"])
+  expect([...r.picks.keys()]).toEqual(["t4"])
+  expect([...r.outbox.keys()]).toEqual(["t4"])
 })
 
 test("a session starting takes its block's shell label over the hook's", () => {
@@ -226,6 +232,8 @@ test("saves and loads", () => {
   const r = emptyRegistry()
   apply(r, hook("SessionStart", "a", "t1"))
   apply(r, { kind: "shell", block: "t2", label: "x" })
+  r.picks.set("t2", "t1")
+  r.outbox.set("t2", ["first", "second"])
   r.trackers.set("/r", {
     current: "/r/t.html",
     trackers: [{ path: "/r/t.html", status: "active", used: 1 }],

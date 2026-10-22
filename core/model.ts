@@ -90,6 +90,8 @@ export interface NearbyAgent {
   label: string
   summary: string | null
   busy: boolean
+  /** Whether a send from the shell without an agent named goes to it */
+  target: boolean
 }
 
 // Trackers

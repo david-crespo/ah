@@ -30,7 +30,7 @@ import { dashboard, debugTabs } from "./views/dashboard/cli.ts"
 import { Dashboard } from "./views/dashboard/routes.ts"
 import { MarkdownBackend } from "./views/markdown/routes.ts"
 import { HtmlBackend } from "./views/html/routes.ts"
-import { request, tracker, view } from "./views/cli.ts"
+import { message, tracker, view } from "./views/cli.ts"
 import { debugAgents, workspace } from "./core/cli.ts"
 import { hook } from "./core/hook.ts"
 import { watchOpencode } from "./core/opencode.ts"
@@ -164,6 +164,9 @@ async function serve(port: number, snapshotDelayMs: number | null) {
   }
   refreshThreads()
   core.subscribe(refreshThreads)
+  // And the messages panes sent while no agent was in their tab
+  void core.flush()
+  core.subscribe(() => void core.flush())
   // opencode has no hooks: its service streams its sessions' events
   void watchOpencode(core)
 
@@ -373,7 +376,7 @@ const debug = new Command("debug").description(
 )
 debug.addCommand(debugTabs)
 debug.addCommand(debugAgents)
-for (const command of [view, request, tracker, workspace, dashboard, server, hook, debug])
+for (const command of [view, message, tracker, workspace, dashboard, server, hook, debug])
   program.addCommand(command)
 
 // `-h` is enough; no `help` subcommand, which isn't inherited, so at every

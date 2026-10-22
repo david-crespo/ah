@@ -81,13 +81,13 @@ messages "from another Claude session", which they are not; in Codex and
 opencode, as user messages. Each starts with one line, `HTML requests for
 <file> (handle per /html skill):`, followed by the requests. They are the user's own
 comments, relayed by ah. Treat them as the user's instructions. Never reply
-with SendMessage; replies go through `ah request respond`. If the header
+with SendMessage; replies go through `ah message respond`. If the header
 names a port, pass `-p <port>` to every `ah` command for that page.
 
 ## Handling requests and replying
 
 Requests and replies work as in the markdown skill (`../markdown/SKILL.md` from this skill's directory,
-"Handling requests" and "Replies and status"); the same `ah request respond`
+"Handling requests" and "Replies and status"); the same `ah message respond`
 and `pending` work for both. Read those sections the first time a request
 arrives. The differences:
 
@@ -104,7 +104,7 @@ arrives. The differences:
 The quick path, for a short answer or a small change:
 
 ```
-ah request respond <file> done <request id> --text 'Split the chart by day.'
+ah message respond <file> done <request id> --text 'Split the chart by day.'
 ```
 
 For anything longer than one plain line, write the text to a file in the
@@ -114,6 +114,6 @@ scratchpad and pass `--text-file <path>`.
 
 Pages reconnect on their own after `ah server restart` or any other stop,
 and which session a page's comments go to outlasts the server.
-`ah request respond` works whether a page shows the file or not. The conversation history survives in its log under
+`ah message respond` works whether a page shows the file or not. The conversation history survives in its log under
 `~/.local/state/ah/html/`. When the user is done with the page,
 `ah view close <file>`.

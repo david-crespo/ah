@@ -1,14 +1,34 @@
-// `ah request respond` and `ah request pending`: how the agent answers a
-// page's thread
+// `ah message respond` and `ah message pending`: how the agent answers a
+// page's thread; and `ah message send`, the user's comment from their editor
+// or a diff review, as a plain message to an agent in the Rex tab
+// (core/send.ts) or, from a markdown page's helix pane, into the file's
+// thread
 
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { Argument, Command } from "@commander-js/extra-typings"
-import { callServer, ensureStarted, portOption } from "../../platform/cli.ts"
+import {
+  callServer,
+  die,
+  ensureStarted,
+  portOption,
+  readStdin,
+} from "../../platform/cli.ts"
 import { absolute } from "../files/cli.ts"
-import { type ThreadSnapshot, PHASES } from "./events.ts"
+import { type RequestResult, type ThreadSnapshot, PHASES } from "./events.ts"
 
-/** `threadUrl` is where the file's thread takes the agent's events on that port */
-export function threadCommands(threadUrl: (path: string, port: number) => string) {
+/** `fileUrl` is where the file's `thread` takes the agent's events, and its
+ * `request` route takes requests from outside the page, on that port.
+ * `sendToTab` sends a plain message to an agent in a Rex tab (core/send.ts). */
+export function threadCommands(
+  fileUrl: (path: string, port: number, route: "thread" | "request") => string,
+  sendToTab: (
+    port: number,
+    block: string | null,
+    agent: string | null,
+    text: string,
+  ) => Promise<"sent" | "held">,
+) {
+  const threadUrl = (path: string, port: number) => fileUrl(path, port, "thread")
   const snapshot = (url: string) => callServer<ThreadSnapshot>(url)
 
   const pending = new Command("pending")
@@ -68,5 +88,97 @@ export function threadCommands(threadUrl: (path: string, port: number) => string
       console.log([phase, ...requests].join(" "))
     })
 
-  return [respond, pending]
+  const send = new Command("send")
+    .summary("Send the user's comment to an agent")
+    .description(
+      [
+        "Send the user's comment to an agent, as their editor or a diff review does. The text is --text, --text-file, or stdin.",
+        "In a Rex pane, or with --agent, it's a plain message. It goes to --agent if given, which also becomes this pane's pick for later sends; else to the pane's pick, or the tab's only agent. With several agents in the tab and no pick, it refuses and lists them (`ah workspace agents`). With no agent there, it waits for the next one in the tab, unless the pane closes first. With --file, ah writes the message: the file, the lines and the selection, then the text; without it, the text goes as it is, as a diff review sends its prompt.",
+        "Outside Rex, as in a markdown page's helix pane, --file is required and the comment goes into the file's thread, as one made on its page: on the selection, or the lines, or the whole file without either. It goes to the agent the file is bound to, or waits for one.",
+        "Prints `sent`, or `held` when it waits; on a thread, with the request's id.",
+      ].join("\n\n"),
+    )
+    .option("--file <path>", "The file the comment is on")
+    .option("--lines <n|n-m>", "The lines of --file it's on, 1-based")
+    .option("--selection <text>", "The text the user selected, if any")
+    .option(
+      "--agent <id>",
+      "The agent it's for, by id (see `ah workspace agents`); later sends from this pane go to it too",
+    )
+    .option("--text <text>", "The comment")
+    .option("--text-file <path>", "Read the comment from a file")
+    .addOption(portOption())
+    .action(async (opts) => {
+      const { agent, selection, text: inline, textFile, port } = opts
+      const text = (
+        inline ?? (textFile ? readFileSync(textFile, "utf8") : await readStdin())
+      )?.trim()
+      if (!text) die("ah message send: no comment; give --text, --text-file, or stdin")
+      const path = opts.file === undefined ? null : absolute(opts.file)
+      if (path && !existsSync(path)) die(`ah: no such file: ${opts.file}`)
+      const lines = opts.lines === undefined ? null : parseLines(opts.lines)
+      if (lines && !path) die("ah message send: --lines needs --file")
+      const block = process.env.REX_BLOCK ?? null
+      if (block || agent) {
+        const message = path ? comment(path, lines, selection ?? null, text) : text
+        const status = await sendToTab(port, block, agent ?? null, message)
+        return console.log(
+          status === "sent"
+            ? "sent"
+            : "held: no agent here to take it; it goes to the next one",
+        )
+      }
+      if (!path) die("ah message send: not in a Rex pane, so give --file or --agent")
+      // A comment on the page quotes what it's on; from the lines, the lines
+      const quoted = selection ?? (lines ? linesOf(path, lines) : "")
+      await ensureStarted(port)
+      const { request, agentConnected } = await callServer<RequestResult>(
+        fileUrl(path, port, "request"),
+        {
+          body: quoted
+            ? { kind: "comment", text, args: { selection: quoted } }
+            : { kind: "chat", text, args: {} },
+        },
+      )
+      console.log(`${agentConnected ? "sent" : "held"} ${request.id}`)
+    })
+
+  return [send, respond, pending]
+}
+
+type Lines = [first: number, last: number]
+
+function parseLines(arg: string): Lines {
+  const match = /^(\d+)(?:-(\d+))?$/.exec(arg)
+  const first = Number(match?.[1])
+  const last = Number(match?.[2] ?? first)
+  if (!match || first < 1 || last < first) die(`ah: --lines takes n or n-m, not ${arg}`)
+  return [first, last]
+}
+
+/** The lines of the file on disk, trimmed */
+function linesOf(path: string, [first, last]: Lines): string {
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .slice(first - 1, last)
+    .join("\n")
+    .trim()
+}
+
+/** What the agent reads for a comment on lines of path, or the whole file */
+export function comment(
+  path: string,
+  lines: Lines | null,
+  selection: string | null,
+  text: string,
+): string {
+  const place = !lines
+    ? path
+    : lines[0] === lines[1]
+      ? `line ${lines[0]} of ${path}`
+      : `lines ${lines[0]}-${lines[1]} of ${path}`
+  const quote = selection
+    ? `, selecting:\n\`\`\`\n${selection.trimEnd()}\n\`\`\`\n\n`
+    : ":\n\n"
+  return `A comment from the user on ${place}${quote}${text}`
 }

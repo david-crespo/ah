@@ -2,13 +2,29 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
-import type { RexState } from "./model.ts"
+import type { Address, RexState } from "./model.ts"
 import { emptyRegistry, type RegistryEvent } from "./registry.ts"
-import { Core } from "./core.ts"
+import { Core, RELAYED } from "./core.ts"
+
+/** What `ah message send` posted, and whether posts fail, as when the agent's
+ * session is gone */
+const inbox = vi.hoisted(() => ({
+  posts: [] as { to: Address; text: string }[],
+  down: false,
+}))
+vi.mock("../platform/session.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../platform/session.ts")>()),
+  postTo: async (to: Address, text: string) => {
+    if (inbox.down) throw new Error("no session")
+    inbox.posts.push({ to, text })
+  },
+}))
 
 let dir: string
 let core: Core
 beforeEach(() => {
+  inbox.posts = []
+  inbox.down = false
   // Saves are debounced; keep them from landing after the dir is gone
   vi.useFakeTimers()
   dir = mkdtempSync(join(tmpdir(), "ah-sessions-"))
@@ -185,10 +201,108 @@ test("a shell's agents are the live ones in its tab, in its layout order", async
     label: "ah",
     summary: null,
     busy: false,
+    target: false,
   })
   expect(await near("block:9")).toEqual([agent("block:1"), agent("block:2")])
   // A pane Rex doesn't know
   expect(await near("block:5")).toEqual([])
+})
+
+test("a shell's pick is where its sends go while it's in the tab", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:2", "block:9"], t2: ["block:4"] }))
+  await report(start("codex", "th1", undefined, "block:1"))
+  await report(start("codex", "th2", undefined, "block:2"))
+  await report(start("codex", "th4", undefined, "block:4"))
+  const pick = async (agent: string) =>
+    await core.handle(
+      new Request("http://ah/core/pick", {
+        method: "POST",
+        body: JSON.stringify({ block: "block:9", agent }),
+      }),
+      "pick",
+    )
+  expect(core.targetNear("block:9")).toBe(null)
+  expect((await pick("block:2")).status).toBe(200)
+  expect(core.targetNear("block:9")).toBe("block:2")
+  // Not in its tab
+  expect((await pick("block:4")).status).toBe(409)
+  expect(core.targetNear("block:9")).toBe("block:2")
+  // The picked agent's pane closes: the one left is the target
+  core.onRex(rex({ t1: ["block:1", "block:9"], t2: ["block:4"] }))
+  expect(core.targetNear("block:9")).toBe("block:1")
+  // The shell's pane closes: the pick goes
+  core.onRex(rex({ t1: ["block:1"], t2: ["block:4"] }))
+  vi.advanceTimersByTime(11_000)
+  core.onRex(rex({ t1: ["block:1"], t2: ["block:4"] }))
+  expect(core.registry.picks.has("block:9")).toBe(false)
+})
+
+const sendFrom = async (block: string | null, text: string, agent?: string) =>
+  await core.handle(
+    new Request("http://ah/core/send", {
+      method: "POST",
+      body: JSON.stringify({ block, agent, text }),
+    }),
+    "send",
+  )
+const posted = () =>
+  inbox.posts.map(({ to, text }) => [to, text.replace(`${RELAYED}\n\n`, "")])
+const codex = (thread: string) => ({ harness: "codex", thread, pid: null })
+
+test("a pane's message goes to the agent in its tab, or waits for one", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:9"] }))
+  // No agent in the tab yet
+  expect(await (await sendFrom("block:9", "first")).json()).toEqual({ status: "held" })
+  expect(await (await sendFrom("block:9", "second")).json()).toEqual({ status: "held" })
+  expect(inbox.posts).toEqual([])
+  await report(start("codex", "th1", undefined, "block:1"))
+  await core.flush()
+  expect(posted()).toEqual([
+    [codex("th1"), "first"],
+    [codex("th1"), "second"],
+  ])
+  expect(inbox.posts[0].text.startsWith(RELAYED)).toBe(true)
+  expect(core.registry.outbox.has("block:9")).toBe(false)
+  expect(await (await sendFrom("block:9", "third")).json()).toEqual({ status: "sent" })
+  expect(posted().at(-1)).toEqual([codex("th1"), "third"])
+})
+
+test("a message that can't be posted waits, behind the ones before it", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:9"] }))
+  await report(start("codex", "th1", undefined, "block:1"))
+  inbox.down = true
+  expect(await (await sendFrom("block:9", "first")).json()).toEqual({ status: "held" })
+  inbox.down = false
+  // An older message is still waiting, so this one goes after it
+  expect(await (await sendFrom("block:9", "second")).json()).toEqual({ status: "sent" })
+  expect(posted()).toEqual([
+    [codex("th1"), "first"],
+    [codex("th1"), "second"],
+  ])
+})
+
+test("a message names its agent, which becomes the pane's pick", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:2", "block:9"], t2: ["block:4"] }))
+  await report(start("codex", "th1", undefined, "block:1"))
+  await report(start("codex", "th2", undefined, "block:2"))
+  await report(start("codex", "th4", undefined, "block:4"))
+  // Several agents and no pick: it waits rather than guess
+  expect(await (await sendFrom("block:9", "which?")).json()).toEqual({ status: "held" })
+  expect((await sendFrom("block:9", "there", "block:4")).status).toBe(409)
+  expect(await (await sendFrom("block:9", "to 2", "block:2")).json()).toEqual({
+    status: "sent",
+  })
+  expect(core.targetNear("block:9")).toBe("block:2")
+  expect(posted()).toEqual([
+    [codex("th2"), "which?"],
+    [codex("th2"), "to 2"],
+  ])
+  // Outside Rex, straight to the agent named, or nowhere
+  expect(await (await sendFrom(null, "from a shell", "block:4")).json()).toEqual({
+    status: "sent",
+  })
+  expect(posted().at(-1)).toEqual([codex("th4"), "from a shell"])
+  expect((await sendFrom(null, "to nobody")).status).toBe(409)
 })
 
 test("hooks tell the agent its trackers, then what changed", async () => {

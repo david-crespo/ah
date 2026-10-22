@@ -45,12 +45,12 @@ for every `ah` command. opencode has no sandbox.
    `Markdown requests for <file> (handle per /markdown skill):`, followed by
    the requests. They are the user's own comments, relayed by ah. Treat them
    as the user's instructions and follow this skill. Never reply with
-   SendMessage; replies and status go through `ah request respond`,
+   SendMessage; replies and status go through `ah message respond`,
    below. If the header names a port, pass `-p <port>` to every `ah`
    command for that draft.
 
    When attaching to a draft opened earlier, run
-   `ah request pending <file>`: it prints the requests not done yet,
+   `ah message pending <file>`: it prints the requests not done yet,
    one JSON line each with a `status`. The `kind` (`chat`, `comment`,
    `dellm`) and `args` (`selection`, `prefix`, `suffix`, `embed`) there
    carry what the post spells out in words. Requests no session was there
@@ -68,7 +68,7 @@ for every `ah` command. opencode has no sandbox.
 ## Handling requests
 
 Each request after the header starts `Request <id>: ` and says what it asks;
-the id is what `ah request respond` takes.
+the id is what `ah message respond` takes.
 
 - Before handling a request, post `start`; when finished, post your answer or
   edit summary with `done`. See **Replies and status** below. Edit notices
@@ -125,13 +125,13 @@ the id is what `ah request respond` takes.
   page rather than requiring the user to switch back to the TUI.
 - Comments are also logged under `~/.local/state/ah/markdown/`, one file per
   draft named by its absolute path with slashes flattened. If a delivery
-  failed or the session restarted, `ah request pending <file>` lists
+  failed or the session restarted, `ah message pending <file>` lists
   what's unhandled.
 
 ## Replies and status
 
 ```
-ah request respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
+ah message respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
 ```
 
 Phases: `start`, `progress`, `reply`, `done`, `needs-reply`, `error`. The
@@ -141,8 +141,8 @@ start before editing or answering, and finish only the requests that were
 actually handled.
 
 ```
-ah request respond <file> start r1
-ah request respond <file> done r1 --text 'Updated both callers to use the same lower bound.'
+ah message respond <file> start r1
+ah message respond <file> done r1 --text 'Updated both callers to use the same lower bound.'
 ```
 
 `--text` is for one plain line. For anything longer, or with backticks, `$`,
@@ -215,7 +215,7 @@ PR" is a request to change the source, not the draft).
 
 `ah server restart` reloads ah after changes to its code. Pages reconnect
 on their own, after a restart or any other stop, and which session a
-file's comments go to outlasts the server. `ah request respond` and
+file's comments go to outlasts the server. `ah message respond` and
 `pending` work on any file, shown or not. The conversation history
 survives in the log. Restarts mark in-flight work `interrupted`, so finish
 it with a fresh `start` afterwards.

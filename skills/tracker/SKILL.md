@@ -128,11 +128,11 @@ HTML request (the html skill's format; in Claude Code it's framed as a message
 item, like typing "do 4". The page shows a spinner on the button until you answer
 the request:
 
-1. `ah request respond <file> start <request id>`, and set the item to
+1. `ah message respond <file> start <request id>`, and set the item to
    `status="doing"`.
 2. Do the work and answer in the terminal, as for any request. The dashboard
    is a companion to the terminal, and its conversation panel is hidden.
-3. `ah request respond <file> done <request id>`, with no text, and update
+3. `ah message respond <file> done <request id>`, with no text, and update
    the item (`done`, `rev`). The spinner clears.
 
 If you need to ask before going ahead, ask in the terminal and post

@@ -47,23 +47,35 @@ export async function showInServer(
 }
 
 /** A nearby agent as its tab's title has it */
-const agentLine = (a: NearbyAgent) =>
+export const agentLine = (a: NearbyAgent) =>
   [a.label, a.summary].filter(Boolean).join(" | ") +
   ` (${a.harness}${a.busy ? ", working" : ""})`
 
-/** From a shell in no agent session: the agent in its Rex tab, or if
- * there are several, the one the user picks. Picking takes a terminal, so
- * without one, several is an error. */
+/** The live agents in the Rex tab of `block`, in its layout order */
+export async function agentsNear(port: number, block: string): Promise<NearbyAgent[]> {
+  return await callServer<NearbyAgent[]>(
+    serverUrl(port, `core/agents-near?block=${encodeURIComponent(block)}`),
+  )
+}
+
+/** Make `agent` the one the shell in `block` sends to from now on */
+export async function pickAgent(port: number, block: string, agent: AgentId) {
+  await callServer(serverUrl(port, "core/pick"), { body: { block, agent } })
+}
+
+/** From a shell in no agent session: the agent its comments go to (its
+ * pick, or its Rex tab's only agent), or else the one the user picks, which
+ * becomes the pane's pick. Picking takes a terminal, so without one, several
+ * is an error. */
 async function pickAgentNear(port: number): Promise<AgentId | null> {
   const block = process.env.REX_BLOCK
   const none = "ah: not in an agent session or a tab with one; comments won't go anywhere"
   if (!block) return (console.error(none), null)
-  const agents = await callServer<NearbyAgent[]>(
-    serverUrl(port, `core/agents-near?block=${encodeURIComponent(block)}`),
-  )
-  if (agents.length <= 1) {
-    console.error(agents[0] ? `ah: comments go to ${agentLine(agents[0])}` : none)
-    return agents[0]?.id ?? null
+  const agents = await agentsNear(port, block)
+  const target = agents.find((a) => a.target)
+  if (target || !agents.length) {
+    console.error(target ? `ah: comments go to ${agentLine(target)}` : none)
+    return target?.id ?? null
   }
   if (!process.stdin.isTTY) {
     const list = agents.map((a) => `  ${agentLine(a)}`).join("\n")
@@ -76,7 +88,7 @@ async function pickAgentNear(port: number): Promise<AgentId | null> {
   }
   process.stdin.on("keypress", onKey)
   try {
-    return await select(
+    const picked = await select(
       {
         message: "Which agent gets comments?",
         choices: agents.map((a) => ({ name: agentLine(a), value: a.id })),
@@ -94,6 +106,8 @@ async function pickAgentNear(port: number): Promise<AgentId | null> {
       // stdout is for the page's URL
       { output: process.stderr, signal: quit.signal },
     )
+    await pickAgent(port, block, picked)
+    return picked
   } catch (e) {
     // q, Ctrl+C, or Ctrl+D
     if (e instanceof Error && ["AbortPromptError", "ExitPromptError"].includes(e.name)) {

@@ -1,7 +1,7 @@
 // A thread: a page's requests to the agent it's bound to, and the agent's
 // activity on them.
 // The page's requests are posted into the session, each rendered by its
-// subject type's kinds, and the agent's activity (`ah request respond`) is
+// subject type's kinds, and the agent's activity (`ah message respond`) is
 // shown back on the page. One append-only log per file, under ~/.local/state/ah/<kind>/, is both
 // the history and what a session catching up reads.
 //

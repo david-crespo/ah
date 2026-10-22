@@ -1,6 +1,6 @@
 // A thread's routes: `request` under the page it belongs to, from the page,
 // and `activity` under the files API (subjects/files/routes.ts), from the
-// agent (through `ah request respond` and `pending`): GET for the requests and
+// agent (through `ah message respond` and `pending`): GET for the requests and
 // history, POST for a phase or reply.
 
 import { InputError, parseActivity, parseRequest } from "./events.ts"

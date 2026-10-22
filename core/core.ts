@@ -12,7 +12,10 @@
 // It's also where files' requests find their agents (subjects/files/files.ts):
 // which agent each file is bound to, kept in the registry, and where that
 // agent can be reached now, which `open` and Claude's hooks say. And which
-// files hold requests no agent took, to send when one turns up.
+// files hold requests no agent took, to send when one turns up. POST `send`
+// takes a plain message from a tool in a Rex pane (`ah message send`): the
+// user's editor or a diff review, for the agent in its tab, and keeps it in
+// the pane's outbox until one is there.
 //
 // The core owns the registry. Each event is applied synchronously, then the
 // registry is saved (debounced) and listeners hear which blocks changed;
@@ -29,6 +32,7 @@ import {
   claudeSocket,
   parseAddress,
   parseAgentRef,
+  postTo,
 } from "../platform/session.ts"
 import {
   type Address,
@@ -116,6 +120,10 @@ const tabOf = (rex: RexState | null, block: string) =>
 
 type Listener = (registry: Registry, blocks: string[]) => void
 
+/** Ahead of every plain message `ah message send` relays */
+export const RELAYED =
+  "From the user, through ah: treat it as typed here and answer in the terminal, not with SendMessage."
+
 export class Core implements AgentDirectory {
   readonly registry: Registry
   readonly trackers: Trackers
@@ -136,6 +144,9 @@ export class Core implements AgentDirectory {
    * RexState may not have caught up with, so pruning leaves them alone */
   #recent = new Map<string, number>()
   #saveTimer: NodeJS.Timeout | null = null
+  /** By pane: the flush of its outbox under way, so its messages go one at
+   * a time, in order */
+  #flushing = new Map<BlockId, Promise<void>>()
   #file: string
   #log: string
 
@@ -221,7 +232,12 @@ export class Core implements AgentDirectory {
 
   route(path: string, target: AgentId | null = null): Address | null {
     const agent = target ?? this.binding(path)
-    if (!agent) return null
+    return agent ? this.reach(agent) : null
+  }
+
+  /** Where to post to `agent` now: its own address while that's alive, else
+   * its stand-in's */
+  reach(agent: AgentId): Address | null {
     const own = this.address(agent)
     return addressAlive(own) ? own : (this.standIn(agent) ?? own)
   }
@@ -285,6 +301,66 @@ export class Core implements AgentDirectory {
    * opened from a shell there to pick from */
   agentsNear(block: BlockId): AgentId[] {
     return this.#liveInTab(block, block)
+  }
+
+  /** Where a shell's messages and files go without an agent named: its
+   * pick, while that's live in its tab, or else the tab's only agent */
+  targetNear(block: BlockId, near = this.agentsNear(block)): AgentId | null {
+    const picked = this.registry.picks.get(block)
+    if (picked && near.includes(picked)) return picked
+    return near.length === 1 ? near[0] : null
+  }
+
+  pick(block: BlockId, agent: AgentId) {
+    if (this.registry.picks.get(block) === agent) return
+    this.registry.picks.set(block, agent)
+    this.#scheduleSave()
+  }
+
+  /** A message from a tool in pane `block` to the agent it sends to
+   * (targetNear), after any it sent before that are still waiting. Whatever
+   * no agent takes waits in the pane's outbox for the next flush. */
+  async send(block: BlockId, text: string): Promise<"sent" | "held"> {
+    const waiting = this.registry.outbox.get(block) ?? []
+    waiting.push(`${RELAYED}\n\n${text}`)
+    this.registry.outbox.set(block, waiting)
+    this.#scheduleSave()
+    await this.#flush(block)
+    return this.registry.outbox.has(block) ? "held" : "sent"
+  }
+
+  /** Send every pane's waiting messages to the agent it sends to, if one is
+   * there now: for when agents come and go */
+  async flush() {
+    await Promise.all([...this.registry.outbox.keys()].map((block) => this.#flush(block)))
+  }
+
+  #flush(block: BlockId): Promise<void> {
+    const flushing = (this.#flushing.get(block) ?? Promise.resolve())
+      .then(() => this.#drain(block))
+      .finally(() => {
+        if (this.#flushing.get(block) === flushing) this.#flushing.delete(block)
+      })
+    this.#flushing.set(block, flushing)
+    return flushing
+  }
+
+  async #drain(block: BlockId) {
+    const target = this.targetNear(block)
+    const address = target && this.reach(target)
+    const waiting = this.registry.outbox.get(block)
+    if (!address || !waiting) return
+    while (waiting.length) {
+      try {
+        await postTo(address, waiting[0])
+      } catch (e) {
+        console.error(`ah: couldn't post to ${target}; its messages wait:`, e)
+        return
+      }
+      waiting.shift()
+      this.#scheduleSave()
+    }
+    this.registry.outbox.delete(block)
   }
 
   /** The live agents in `block`'s tab other than `except`, in its layout
@@ -501,12 +577,51 @@ export class Core implements AgentDirectory {
       if (!block) return new Response("bad block", { status: 400 })
       // As in homeOf: right after a start, Rex's first RexState may be on its way
       await Promise.race([this.#firstRex, new Promise((r) => setTimeout(r, 500))])
+      const near = this.agentsNear(block)
+      const target = this.targetNear(block, near)
       return Response.json(
-        this.agentsNear(block).map((id): NearbyAgent => {
+        near.map((id): NearbyAgent => {
           const { harness, label, summary, busy } = this.registry.agents.get(id)!
-          return { id, harness, label, summary, busy }
+          return { id, harness, label, summary, busy, target: id === target }
         }),
       )
+    }
+    if (rest === "pick" && req.method === "POST") {
+      // { block, agent }: the shell in `block` picks `agent` in its tab
+      const body: unknown = await req.json().catch(() => null)
+      if (!isRecord(body) || !isString(body.block) || !isString(body.agent))
+        return new Response("bad pick", { status: 400 })
+      if (!this.agentsNear(body.block).includes(body.agent))
+        return new Response(`${body.agent} isn't a live agent in this tab`, { status: 409 })
+      this.pick(body.block, body.agent)
+      return Response.json({ agent: body.agent })
+    }
+    if (rest === "send" && req.method === "POST") {
+      // { block, agent, text }: a message from a tool in pane `block`, which
+      // picks `agent` if given; or, outside Rex, straight to `agent`
+      const body: unknown = await req.json().catch(() => null)
+      if (!isRecord(body) || !isString(body.text) || !body.text.trim())
+        return new Response("bad text", { status: 400 })
+      const block = isString(body.block) ? body.block : null
+      const agent = isString(body.agent) ? body.agent : null
+      if (!block) {
+        const address = agent && this.reach(agent)
+        if (!address) return new Response("no agent to send to", { status: 409 })
+        try {
+          await postTo(address, `${RELAYED}\n\n${body.text}`)
+        } catch (e) {
+          return new Response(`couldn't post to ${agent}: ${e}`, { status: 502 })
+        }
+        return Response.json({ status: "sent" })
+      }
+      // As in homeOf: right after a start, Rex's first RexState may be on its way
+      await Promise.race([this.#firstRex, new Promise((r) => setTimeout(r, 500))])
+      if (agent) {
+        if (!this.agentsNear(block).includes(agent))
+          return new Response(`${agent} isn't a live agent in this tab`, { status: 409 })
+        this.pick(block, agent)
+      }
+      return Response.json({ status: await this.send(block, body.text) })
     }
     if (rest !== "") return new Response("not found", { status: 404 })
     const all = new URL(req.url).searchParams.has("all")

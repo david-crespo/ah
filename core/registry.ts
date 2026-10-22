@@ -75,6 +75,12 @@ export interface Registry {
   shellLabels: Map<BlockId, string>
   /** File path -> the agent its requests go to */
   bindings: Map<string, AgentId>
+  /** A shell pane -> the agent in its tab it picked, for the messages it
+   * sends and the files it opens */
+  picks: Map<BlockId, AgentId>
+  /** A pane -> the messages it sent that no agent has taken yet, oldest
+   * first, to send when one turns up in its tab */
+  outbox: Map<BlockId, string[]>
   /** Files whose threads hold requests no agent has taken, to send when
    * one turns up */
   held: Set<string>
@@ -85,6 +91,8 @@ export const emptyRegistry = (): Registry => ({
   trackers: new Map(),
   shellLabels: new Map(),
   bindings: new Map(),
+  picks: new Map(),
+  outbox: new Map(),
   held: new Set(),
 })
 
@@ -253,7 +261,8 @@ export function applySummary(
 }
 
 /** Drop what nothing will need again: agents in panes Rex no longer has,
- * agents outside Rex with no event for a week, and labels of closed blocks.
+ * agents outside Rex with no event for a week, and the labels, picks and
+ * unsent messages of closed blocks.
  * `live` is every block in the tree; pass null when Rex isn't running, so quitting it
  * doesn't forget everything, and only age counts. `recent` are blocks an
  * event just named, which the last RexState may not have caught up with.
@@ -275,10 +284,12 @@ export function prune(
       changed = true
     }
   }
-  for (const block of r.shellLabels.keys()) {
-    if (gone(block)) {
-      r.shellLabels.delete(block)
-      changed = true
+  for (const blocks of [r.shellLabels, r.picks, r.outbox]) {
+    for (const block of blocks.keys()) {
+      if (gone(block)) {
+        blocks.delete(block)
+        changed = true
+      }
     }
   }
   return changed
@@ -293,6 +304,8 @@ interface Stored {
   trackers: Record<string, WorkspaceRecord>
   shellLabels: Record<string, string>
   bindings: Record<string, AgentId>
+  picks: Record<string, AgentId>
+  outbox: Record<string, string[]>
   held: string[]
 }
 
@@ -311,6 +324,8 @@ export function loadRegistry(file = registryFile()): Registry | null {
     trackers: entries(raw.trackers, isWorkspaceRecord),
     shellLabels: entries(raw.shellLabels, isString),
     bindings: entries(raw.bindings, isString),
+    picks: entries(raw.picks, isString),
+    outbox: entries(raw.outbox, isStrings),
     held: new Set(Array.isArray(raw.held) ? raw.held.filter(isString) : []),
   }
 }
@@ -352,6 +367,8 @@ const isWorkspaceRecord = (w: unknown): w is WorkspaceRecord =>
       typeof t.used === "number",
   )
 
+const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(isString)
+
 function entries<T>(value: unknown, is: (v: unknown) => v is T): Map<string, T> {
   const map = new Map<string, T>()
   if (!isRecord(value)) return map
@@ -365,6 +382,8 @@ export function saveRegistry(r: Registry, file = registryFile()) {
     trackers: Object.fromEntries(r.trackers),
     shellLabels: Object.fromEntries(r.shellLabels),
     bindings: Object.fromEntries(r.bindings),
+    picks: Object.fromEntries(r.picks),
+    outbox: Object.fromEntries(r.outbox),
     held: [...r.held],
   }
   mkdirSync(dirname(file), { recursive: true })

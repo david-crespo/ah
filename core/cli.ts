@@ -1,10 +1,12 @@
 // `ah workspace` and `ah debug agents`, which read the registry as the
-// server last saved it, so they work with the server down.
+// server last saved it, so they work with the server down, except
+// `ah workspace agents`, which asks the server.
 
 import { Command } from "@commander-js/extra-typings"
 import { resolve } from "node:path"
 import type { RexState, Tab, WorkspaceRoot } from "./model.ts"
-import { die } from "../platform/cli.ts"
+import { die, ensureStarted, portOption } from "../platform/cli.ts"
+import { agentsNear } from "../subjects/files/cli.ts"
 import { readRex } from "../platform/rex.ts"
 import { blockOf, emptyRegistry, loadRegistry } from "./registry.ts"
 import { rootFinder, tabRoot } from "./workspace.ts"
@@ -104,4 +106,18 @@ workspace
     const found = (await workspaces()).find((w) => w.root === root)
     if (!found) die(`ah: no tab open on ${root}`)
     console.log(JSON.stringify(found, null, 2))
+  })
+
+workspace
+  .command("agents")
+  .summary("List the agents a send from this Rex pane can go to")
+  .description(
+    "List the live agents in this Rex pane's tab, in layout order, one JSON line each, for an editor to show where `ah message send` goes or to pick from. `target` is true on the one a send without --agent goes to: the pane's pick (the last --agent sent from it, while it's in the tab) or the tab's only agent. Prints nothing outside Rex.",
+  )
+  .addOption(portOption())
+  .action(async ({ port }) => {
+    const block = process.env.REX_BLOCK
+    if (!block) return
+    await ensureStarted(port)
+    for (const agent of await agentsNear(port, block)) console.log(JSON.stringify(agent))
   })

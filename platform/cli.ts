@@ -46,6 +46,14 @@ export async function serverJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T
 }
 
+/** Stdin, all of it, when it's piped */
+export async function readStdin(): Promise<string | null> {
+  if (process.stdin.isTTY) return null
+  const chunks: Buffer[] = []
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer)
+  return Buffer.concat(chunks).toString("utf8")
+}
+
 export function die(message: string): never {
   console.error(message)
   process.exit(1)

@@ -1,4 +1,4 @@
-// `ah view`, `ah request` and `ah tracker`: files an agent shows the user,
+// `ah view`, `ah message` and `ah tracker`: files an agent shows the user,
 // with a conversation back to the agent, and the workspace's trackers, which
 // the dashboard shows. The extension picks the backend that serves the page:
 // an .html file is the agent's own page, served as is on an origin of its own
@@ -26,6 +26,7 @@ import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
+import { sendToTab } from "../core/send.ts"
 import {
   setCurrentTracker,
   setTrackerStatus,
@@ -33,9 +34,10 @@ import {
 } from "../core/tracker_api.ts"
 import { taskListPage } from "./html/task_list_file.ts"
 
-/** Where the file's thread takes the agent's events */
-const threadUrl = (path: string, port: number) =>
-  serverUrl(port, `view/${fileKind(path)}/files/thread?path=${encodeURIComponent(path)}`)
+/** Where the file's thread takes the agent's events, or requests from
+ * outside its page */
+const fileUrl = (path: string, port: number, route: "thread" | "request") =>
+  serverUrl(port, `view/${fileKind(path)}/files/${route}?path=${encodeURIComponent(path)}`)
 
 /** The file's real path, or exit with a hint if it's only in the notes dir */
 /** `realPathOrDie`, for a file to serve: under the cwd or its workspace */
@@ -92,7 +94,7 @@ export const view = new Command("view").description(
 /** Any URL, like a diff review tool's page: shown in a window or
  * tab like a file's page, but with no subject ah knows, so nothing is bound
  * and there's no thread. Whatever serves it can talk to agents itself, with
- * `ah request send`. */
+ * `ah message send`. */
 const isUrl = (arg: string) => /^https?:\/\//i.test(arg) && URL.canParse(arg)
 
 view
@@ -204,12 +206,14 @@ view
     console.log(`closed ${path}`)
   })
 
-export const request = new Command("request")
-  .description("Send and receive comments from pages")
+export const message = new Command("message")
+  .description(
+    "Messages between the user and agents: what's waiting, and the agent's answers",
+  )
   .action(function () {
     this.help()
   })
-for (const command of threadCommands(threadUrl)) request.addCommand(command)
+for (const command of threadCommands(fileUrl, sendToTab)) message.addCommand(command)
 
 export const tracker = new Command("tracker")
   .description("Task trackers for a workspace")

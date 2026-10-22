@@ -1,9 +1,11 @@
 // The routes every backend for files has, under /view/<name>/. The CLI shows
 // files through `files`, handing over the agent it runs in and where its
 // session can be reached, since the server isn't the session's child; `files`
-// also lists what pages show, `files?path=` closes a file's windows, and
+// also lists what pages show, `files?path=` closes a file's windows,
 // `files/thread?path=` is any file's thread, for the agent's replies (`ah
-// request respond`) and what's pending. A file's page lives at <id>/, the
+// message respond`) and what's pending, and `files/request?path=` takes a
+// request into it from outside the page: the helix pane in a markdown page
+// (`ah message send`). A file's page lives at <id>/, the
 // signed id that names its path (subjects/id.ts), and the backend handles
 // everything under it. Ids always have a `~`, so they can't collide with the
 // backend's own routes.
@@ -96,6 +98,13 @@ export async function fileRoutes<L extends Live>(
     const bad = await fileAt(path)
     if (bad) return bad
     const response = await threadRoute(req, "activity", await files.thread(path!))
+    return response ?? new Response("not found\n", { status: 404 })
+  }
+  if (rest === "files/request") {
+    const path = query.get("path")
+    const bad = await fileAt(path)
+    if (bad) return bad
+    const response = await threadRoute(req, "request", await files.thread(path!))
     return response ?? new Response("not found\n", { status: 404 })
   }
 
