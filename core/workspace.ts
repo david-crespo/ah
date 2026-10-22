@@ -1,8 +1,8 @@
 // Which jj workspace a directory or a tab is in. A workspace is known by
 // its root, the directory holding `.jj`.
 
-import { realpathSync, statSync } from "node:fs"
-import { dirname, join } from "node:path"
+import { readFileSync, realpathSync, statSync } from "node:fs"
+import { dirname, join, resolve } from "node:path"
 import type { Tab, WorkspaceRoot } from "./model.ts"
 
 export type RootOf = (dir: string) => WorkspaceRoot | null
@@ -31,12 +31,29 @@ export function rootFinder(): RootOf {
 }
 
 /** Whether `path` (real) is one `ah view open` may serve from `cwd`: under
- * cwd or the jj workspace it's in. ah runs outside the agent's sandbox, so
- * without this an agent talked into opening ~/.ssh/id_ed25519 would serve
- * it to the pages. */
+ * cwd, the jj workspace it's in, or that repo's default workspace, where a
+ * secondary workspace's notes usually are. ah runs outside the agent's
+ * sandbox, so without this an agent talked into opening ~/.ssh/id_ed25519
+ * would serve it to the pages. */
 export function openable(path: string, cwd: string): boolean {
   const real = realpathSync(cwd)
-  return [real, rootFinder()(real)].some((dir) => dir && path.startsWith(dir + "/"))
+  const root = rootFinder()(real)
+  const dirs = [real, root, root && defaultWorkspace(root)]
+  return dirs.some((dir) => dir && path.startsWith(dir + "/"))
+}
+
+/** The default workspace of the repo `root` is a workspace of. A secondary
+ * workspace's `.jj/repo` is a file holding the path of the default one's
+ * `.jj/repo` dir, relative to `.jj`. */
+function defaultWorkspace(root: string): string | null {
+  const dotJj = join(root, ".jj")
+  try {
+    const pointer = readFileSync(join(dotJj, "repo"), "utf8").trim()
+    return dirname(dirname(realpathSync(resolve(dotJj, pointer))))
+  } catch {
+    // a directory (this is the default workspace) or no repo at all
+    return null
+  }
 }
 
 /**

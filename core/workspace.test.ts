@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
@@ -24,4 +24,13 @@ test("open serves files under the cwd or its jj workspace, and nothing else", ()
   // Outside a workspace, only the cwd
   expect(openable(join(dir, "a", "b.md"), join(dir, "a"))).toEqual(true)
   expect(openable(join(dir, "b.md"), join(dir, "a"))).toEqual(false)
+})
+
+test("from a secondary workspace, open also serves the default workspace", async () => {
+  await mkdir(join(dir, "repo", ".jj", "repo"))
+  await mkdir(join(dir, "ws", ".jj"), { recursive: true })
+  await writeFile(join(dir, "ws", ".jj", "repo"), "../../repo/.jj/repo")
+  const cwd = join(dir, "ws")
+  expect(openable(join(dir, "repo", ".claude", "notes", "a.md"), cwd)).toEqual(true)
+  expect(openable(join(dir, "repo-other", "a.md"), cwd)).toEqual(false)
 })
