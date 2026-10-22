@@ -7,9 +7,7 @@ import { resolve as resolvePath } from "node:path"
 import { styleText } from "node:util"
 import select from "@inquirer/select"
 import { callServer, die, ensureStarted, serverUrl } from "../../platform/cli.ts"
-import { focusHere, keepFocus } from "../../platform/focus.ts"
-import { openWindow, windowName } from "../../platform/window.ts"
-import { run } from "../../platform/proc.ts"
+import { showUrl, windowName } from "../../platform/window.ts"
 import { currentAgent, currentAddress } from "../../platform/session.ts"
 import { status } from "../../platform/server.ts"
 import {
@@ -118,22 +116,14 @@ export async function showPage(
 ) {
   // Its socket says so, for `ah view ls`
   url.searchParams.set("in", place)
-  const focus = await focusHere()
-  if (place === "window") {
-    const name = windowName(path)
-    const html = fileKind(path) === "html"
-    await openWindow(
-      url.href,
-      { name, badge: name.charAt(0).toUpperCase(), color: html ? "#d97706" : "#0d9488" },
-      focus,
-      shown.includes("window"),
-    )
-  } else if (focus.take) {
-    await run("open", [url.href])
-  } else {
-    await run("open", ["-g", url.href])
-    await keepFocus(focus.front)
-  }
+  const name = windowName(path)
+  const html = fileKind(path) === "html"
+  await showUrl(
+    place,
+    url.href,
+    { name, badge: name.charAt(0).toUpperCase(), color: html ? "#d97706" : "#0d9488" },
+    shown.includes("window"),
+  )
   console.log(url.href)
 }
 

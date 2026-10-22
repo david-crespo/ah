@@ -26,7 +26,7 @@ import { cpSync, existsSync, rmSync, statSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { assetPath } from "./assets.ts"
 import { die } from "./cli.ts"
-import { type Focus, activatePid } from "./focus.ts"
+import { type Focus, activatePid, focusHere, keepFocus } from "./focus.ts"
 import { ahStateDir } from "./paths.ts"
 import { processTable, run } from "./proc.ts"
 
@@ -123,6 +123,26 @@ export async function openWindow(
     ...(focus.take ? ["--focus"] : []),
     ...(options.otherDisplay ? ["--other-display"] : []),
   ])
+}
+
+/** `url` in a window of its own or a tab of the default browser, taking
+ * focus only as `focusHere` allows. With `live`, a window already showing it
+ * comes forward instead (see openWindow). */
+export async function showUrl(
+  place: "window" | "tab",
+  url: string,
+  options: WindowOptions,
+  live = false,
+) {
+  const focus = await focusHere()
+  if (place === "window") {
+    await openWindow(url, options, focus, live)
+  } else if (focus.take) {
+    await run("open", [url])
+  } else {
+    await run("open", ["-g", url])
+    await keepFocus(focus.front)
+  }
 }
 
 /** A file's window name: its own name, or its directory's for an index.html,

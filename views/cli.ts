@@ -13,6 +13,7 @@ import { Command, Option } from "@commander-js/extra-typings"
 import { threadCommands } from "../subjects/thread/cli.ts"
 import { FILE_KINDS, fileKind, type TrackerEntry } from "../core/model.ts"
 import { die, portOption, serverUrl } from "../platform/cli.ts"
+import { showUrl } from "../platform/window.ts"
 import {
   absolute,
   closeInServer,
@@ -85,18 +86,24 @@ function ensureTaskList(file: string, title?: string, goal?: string) {
 }
 
 export const view = new Command("view").description(
-  "Show a markdown or HTML file in a page you can comment on. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
+  "Show a markdown or HTML file in a page you can comment on, or any URL in a window or tab. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
 )
+
+/** Any URL, like a diff review tool's page: shown in a window or
+ * tab like a file's page, but with no subject ah knows, so nothing is bound
+ * and there's no thread. Whatever serves it can talk to agents itself, with
+ * `ah request send`. */
+const isUrl = (arg: string) => /^https?:\/\//i.test(arg) && URL.canParse(arg)
 
 view
   .command("open", { isDefault: true })
   .summary("Open a file in a page you can comment on")
   .description(
-    "Open a file in a page you can comment on; `ah view <file>` does the same. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several; the file stays bound to that agent until another opens it. HTML files are served as they are, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already shown in a window keeps that window, which comes to the front under the same rule. Prints the page's URL, which keeps working across server restarts.",
+    "Open a file in a page you can comment on; `ah view <file>` does the same. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several; the file stays bound to that agent until another opens it. HTML files are served as they are, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already shown in a window keeps that window, which comes to the front under the same rule. Prints the page's URL, which keeps working across server restarts.\n\nGiven an http(s) URL instead of a file, open it in a window named --name or a tab. Nothing is bound to it and it has no conversation. The URL can come last, so a tool can append it to `ah view open --name <name>`.",
   )
   // Optional so that `ah view` alone, which comes here as the default, shows
   // the help rather than a missing argument
-  .argument("[file]")
+  .argument("[file]", "a file, or any http(s) URL")
   .addOption(
     new Option(
       "--in <place>",
@@ -111,9 +118,26 @@ view
   )
   .option("--no-editor", "Markdown preview only, without the helix pane")
   .option("--no-chat", "Without the conversation")
+  .option(
+    "--name <name>",
+    "A URL's window: what the Dock calls it (default: the URL's hostname). Each name makes a copy of the window app, so keep it stable.",
+  )
   .addOption(portOption())
-  .action(async (file, { in: place, editor, chat, port }) => {
+  .action(async (file, { in: place, editor, chat, name, port }) => {
     if (!file) return view.help()
+    if (isUrl(file)) {
+      if (place !== "window" && place !== "tab")
+        die(`ah view open --in ${place}: files only`)
+      const dockName = name ?? new URL(file).hostname
+      await showUrl(place, file, {
+        name: dockName,
+        badge: dockName.charAt(0).toUpperCase(),
+        color: "#475569",
+      })
+      return console.log(file)
+    }
+    if (name !== undefined)
+      die("ah view open --name: URLs only; a file's window is named after it")
     const path = openablePathOrDie(file)
     const kind = fileKind(path)
     if ((place === "split" || place === "here") && kind === "html") {
