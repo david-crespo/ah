@@ -195,11 +195,14 @@ export class AhMarkdown extends HTMLElement {
 
   #render() {
     const content = this.content
+    const toggled = toggledDetails(content)
+    const embeds = hydratedEmbeds(content)
     content.innerHTML = md.render(this.#text ?? "")
+    restoreDetails(content, toggled)
     markConflictChanges(content)
     highlightCodeBlocks(content)
     rewriteLocalMedia(content, this.base)
-    hydrateEmbeds(content, this.base)
+    hydrateEmbeds(content, this.base, embeds)
     const pending = this.#pendingFlash
     this.#pendingFlash = []
     if (pending.length > 0) {
@@ -296,6 +299,40 @@ function markConflictChanges(content: HTMLElement) {
     const lines = JSON.parse(panel.dataset.changed!) as string[]
     if (wrapText(body, lines.join("\n"), cls)) continue
     for (const line of lines) wrapText(body, line, cls)
+  }
+}
+
+// A re-render replaces every <details>, so the reader's opening and closing
+// would snap back on each edit. Remember which ones they toggled away from
+// what the source says, matched across renders by summary text and
+// occurrence, and toggle them again. Ones they didn't touch follow the
+// source, so editing an `open` attribute still shows.
+const sourceOpen = new WeakMap<HTMLDetailsElement, boolean>()
+
+function keyedDetails(content: HTMLElement): [string, HTMLDetailsElement][] {
+  const seen = new Map<string, number>()
+  return [...content.querySelectorAll("details")].map((el) => {
+    const summary = el.querySelector(":scope > summary")?.textContent?.trim() ?? ""
+    const n = seen.get(summary) ?? 0
+    seen.set(summary, n + 1)
+    return [`${n}:${summary}`, el]
+  })
+}
+
+function toggledDetails(content: HTMLElement): Map<string, boolean> {
+  const toggled = new Map<string, boolean>()
+  for (const [key, el] of keyedDetails(content)) {
+    const source = sourceOpen.get(el)
+    if (source !== undefined && el.open !== source) toggled.set(key, el.open)
+  }
+  return toggled
+}
+
+function restoreDetails(content: HTMLElement, toggled: Map<string, boolean>) {
+  for (const [key, el] of keyedDetails(content)) {
+    sourceOpen.set(el, el.open)
+    const open = toggled.get(key)
+    if (open !== undefined) el.open = open
   }
 }
 
@@ -424,8 +461,37 @@ async function buildAssetEmbed(href: string, base: URL): Promise<HTMLElement> {
   return img
 }
 
-async function hydrateEmbeds(content: HTMLElement, base: URL) {
+/** The last render's loaded embeds by URL, to move into the next one. Failed
+ * ones are left out so they retry. */
+function hydratedEmbeds(content: HTMLElement): Map<string, Node[]> {
+  const embeds = new Map<string, Node[]>()
+  for (const el of content.querySelectorAll<HTMLElement>(".gh-embed.hydrated")) {
+    const child = el.firstElementChild
+    if (!child || child.classList.contains("gh-embed-error")) continue
+    embeds.set(el.dataset.src!, [...(embeds.get(el.dataset.src!) ?? []), child])
+  }
+  return embeds
+}
+
+async function hydrateEmbeds(
+  content: HTMLElement,
+  base: URL,
+  previous: Map<string, Node[]>,
+) {
+  // A fresh copy of an image or video has no size until it loads, so the
+  // page above would shrink and the view jump on every re-render. Move the
+  // loaded ones over before the browser paints.
+  const fresh: HTMLElement[] = []
   for (const el of content.querySelectorAll<HTMLElement>(".gh-embed[data-src]")) {
+    const old = previous.get(el.dataset.src!)?.shift()
+    if (!old) {
+      fresh.push(el)
+      continue
+    }
+    el.replaceChildren(old)
+    el.classList.add("hydrated")
+  }
+  for (const el of fresh) {
     const built = await buildEmbed(el.dataset.src!, base)
     if (!el.isConnected) continue // a re-render replaced this block mid-load
     el.replaceChildren(built.cloneNode(true))
