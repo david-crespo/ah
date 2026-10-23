@@ -146,6 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 
     webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
     webView.isInspectable = true
+    // Pinch to zoom, as in Safari: it magnifies without reflowing the page
+    webView.allowsMagnification = true
     webView.navigationDelegate = self
     webView.uiDelegate = self
 
@@ -241,7 +243,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     window.close()
   }
 
-  @objc func actualSize(_ sender: Any?) { webView.pageZoom = 1 }
+  @objc func actualSize(_ sender: Any?) {
+    webView.pageZoom = 1
+    webView.magnification = 1
+  }
   @objc func zoomIn(_ sender: Any?) { webView.pageZoom *= 1.1 }
   @objc func zoomOut(_ sender: Any?) { webView.pageZoom /= 1.1 }
 
