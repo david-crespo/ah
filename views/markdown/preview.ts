@@ -74,6 +74,11 @@ export class AhMarkdown extends HTMLElement {
     super.addEventListener(type, listener, options)
   }
 
+  /** The file's text as last rendered, or null before the first */
+  get text(): string | null {
+    return this.#text
+  }
+
   /** The file's page URL, which every request is relative to */
   get base(): URL {
     return new URL(this.getAttribute("src") ?? "./", document.baseURI)

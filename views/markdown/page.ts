@@ -15,7 +15,12 @@ function shortcutsDialog({ editor, chat }: { editor: boolean; chat: boolean }) {
     ["?", "Show this list"],
     ["⇧⌘C", "Copy the file's path"],
   ]
-  if (editor) rows.push(["⌘E", "Show or hide the helix editor"])
+  if (editor) {
+    rows.push(
+      ["⌘E", "Show or hide the helix editor"],
+      ["⌘-click", "Show that spot in helix"],
+    )
+  }
   if (chat) {
     rows.push(
       ["⌘I", "Open or close the conversation"],

@@ -15,6 +15,7 @@ import { threadKinds } from "../../subjects/thread/kinds.ts"
 import { setUpSelectionComments } from "../thread/selection.ts"
 import { theme } from "../theme.ts"
 import "./preview.ts"
+import { type SourcePosition, sourcePosition } from "./source_position.ts"
 
 const preview = document.querySelector("ah-markdown")!
 const content = preview.content
@@ -59,6 +60,12 @@ preview.addEventListener("closed", () => {
 // editor state.
 let term: Terminal | null = null
 let ptySock: WebSocket | null = null
+/** Types keys into helix, set once it has drawn: before that it may not have
+ * the pty in raw mode yet. What needs it sooner waits in helixWaiters. */
+let typeIntoHelix: ((keys: string) => void) | null = null
+let helixWaiters: (() => void)[] = []
+/** When helix last sent output, to tell when it's done drawing */
+let helixOutputAt = 0
 /** ⌘-chords the user's helix config binds: write, and extend the selection
  * by a line up or down */
 const HELIX_CMD_KEYS = new Set(["s", "j", "k"])
@@ -188,15 +195,24 @@ function startHelix(host: HTMLElement) {
     // go; if the size moved on since spawn, tell helix now.
     if (term!.cols !== spawnSize.cols || term!.rows !== spawnSize.rows) sendSize()
   }
+  const type = (keys: string) => send({ type: "input", data: keys })
   ws.onmessage = (e) => {
-    if (e.data instanceof ArrayBuffer) term?.write(new Uint8Array(e.data))
+    if (!(e.data instanceof ArrayBuffer)) return
+    term?.write(new Uint8Array(e.data))
+    helixOutputAt = performance.now()
+    if (typeIntoHelix !== type) {
+      typeIntoHelix = type
+      for (const wake of helixWaiters) wake()
+      helixWaiters = []
+    }
   }
   ws.onclose = () => {
     ptySock = null
+    if (typeIntoHelix === type) typeIntoHelix = null
     term?.write("\r\n\x1b[2m[helix exited — click here to restart]\x1b[0m")
     host.addEventListener("click", () => restartHelix(host), { once: true })
   }
-  term.onData((data) => send({ type: "input", data }))
+  term.onData(type)
   // Spawn counts as a resize: switching to the alternate screen, which helix
   // does at startup, also fires xterm's scroll event.
   let lastResizeAt = Date.now()
@@ -266,6 +282,100 @@ if (editorHost && editorToggle) {
       setEditorShown(!document.body.classList.contains("editor-shown"))
     }
   })
+  content.addEventListener("click", (e) => {
+    if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return
+    const target = e.target as Element
+    // ⌘-click on a link still opens it
+    if (target.closest("a")) return
+    const block = target.closest<HTMLElement>("[data-line]")
+    const text = preview.text
+    if (!block || !content.contains(block) || text === null) return
+    e.preventDefault()
+    const [start, end] = block.dataset.line!.split(":").map(Number)
+    let caret = caretAt(e.clientX, e.clientY)
+    if (caret && !block.contains(caret.node)) caret = null
+    let before = ""
+    const spot = document.createRange()
+    if (caret) {
+      const upTo = document.createRange()
+      upTo.setStart(block, 0)
+      upTo.setEnd(caret.node, caret.offset)
+      before = upTo.toString()
+      spot.setStart(caret.node, caret.offset)
+      // The character after the caret, since a collapsed range may have no
+      // box to measure
+      if (caret.node instanceof Text && caret.offset < caret.node.length)
+        spot.setEnd(caret.node, caret.offset + 1)
+    } else spot.selectNodeContents(block)
+    void showInHelix(sourcePosition(text.split("\n"), start, end, before), spot)
+  })
+}
+
+/** The caret position at (x, y) */
+function caretAt(x: number, y: number): { node: Node; offset: number } | null {
+  if (document.caretPositionFromPoint) {
+    const caret = document.caretPositionFromPoint(x, y)
+    return caret && { node: caret.offsetNode, offset: caret.offset }
+  }
+  // WebKit before Safari 26 has only the older one
+  const range = document.caretRangeFromPoint(x, y)
+  return range && { node: range.startContainer, offset: range.startOffset }
+}
+
+/** The middle of the first line `range` is on, in client coordinates */
+function middleOf(range: Range): number {
+  const box = range.getClientRects()[0] ?? range.getBoundingClientRect()
+  return box.top + box.height / 2
+}
+
+/** Type keys into helix and wait until it has drawn what they did: until its
+ * output has stopped for a moment, or a second has gone by */
+async function typeAndDraw(type: (keys: string) => void, keys: string) {
+  const sentAt = performance.now()
+  type(keys)
+  while (performance.now() - sentAt < 1000) {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    if (helixOutputAt > sentAt && performance.now() - helixOutputAt > 40) return
+  }
+}
+
+/** Show the editor with helix's cursor at `line` and `column`, as near as it
+ * goes to the row level with `spot`, the place in the preview it came from.
+ * The preview stays put, since that's where the user clicked.
+ *
+ * Escape, to get to normal mode from insert mode, a prompt or a picker, goes
+ * as a kitty keyboard protocol key (CSI 27u), which helix parses without
+ * negotiating it: a bare ESC with more keys after it in one read is Alt plus
+ * the next key. Then `:goto`, a count of `l` for the column, and `zt`, which
+ * leaves the cursor `scrolloff` rows from the top (or lower near the file's
+ * start, where the view can't scroll up). Each k in sticky view mode (Z)
+ * scrolls the view up a row and so moves the cursor down one, which it can
+ * do until it's `scrolloff` rows from the bottom of the text area, above the
+ * status and command lines. It stays a fifth of the text area from either
+ * edge, and at least helix's default scrolloff of 5 (a bigger one would move
+ * it off its line near the bottom). */
+async function showInHelix({ line, column }: SourcePosition, spot: Range) {
+  const shown = document.body.classList.contains("editor-shown")
+  const y = middleOf(spot)
+  setEditorShown(true)
+  // The preview narrows and reflows; keep the spot where it was clicked
+  if (!shown) window.scrollBy(0, middleOf(spot) - y)
+  const type =
+    typeIntoHelix ??
+    (await new Promise<(keys: string) => void>((resolve) =>
+      helixWaiters.push(() => resolve(typeIntoHelix!)),
+    ))
+  await typeAndDraw(type, `\x1b[27u:goto ${line + 1}\r${column ? `${column}l` : ""}zt`)
+  const shownTerm = term
+  const screen = shownTerm?.element?.querySelector(".xterm-screen")?.getBoundingClientRect()
+  if (!shownTerm || !screen?.height) return
+  const cell = screen.height / shownTerm.rows
+  const textRows = shownTerm.rows - 2
+  const margin = Math.max(Math.round(textRows / 5), 5)
+  const level = Math.floor((middleOf(spot) - screen.top) / cell)
+  const row = Math.max(margin, Math.min(level, textRows - 1 - margin))
+  const top = shownTerm.buffer.active.cursorY
+  if (row > top) type(`Z${"k".repeat(row - top)}\x1b[27u`)
 }
 
 // ? shows the page's shortcuts (page.ts), unless it's being typed somewhere:
