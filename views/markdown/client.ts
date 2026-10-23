@@ -74,10 +74,7 @@ const REX_CELL = { width: 8, height: 16.5 }
  * height) from what it measured. That's in xterm's private render service,
  * so without it the cells stay as they are. */
 function matchRexCells(term: Terminal) {
-  type Core = { _renderService?: { dimensions?: { device?: { char?: Size } } } }
-  type Size = { width: number; height: number }
-  const char = (term as unknown as { _core?: Core })._core?._renderService?.dimensions
-    ?.device?.char
+  const char = deviceSizes(term)?.char
   if (!char?.width || !char.height) return
   const dpr = window.devicePixelRatio
   term.options.letterSpacing = Math.round(REX_CELL.width * dpr) - char.width
@@ -86,6 +83,47 @@ function matchRexCells(term: Terminal) {
     1,
     (Math.round(REX_CELL.height * dpr) + 0.5) / char.height,
   )
+}
+
+type Size = { width: number; height: number }
+
+/** The glyph and cell sizes xterm measured, in device pixels, from its
+ * private render service */
+function deviceSizes(term: Terminal) {
+  type Core = {
+    _renderService?: { dimensions?: { device?: { char?: Size; cell?: Size } } }
+  }
+  return (term as unknown as { _core?: Core })._core?._renderService?.dimensions?.device
+}
+
+/** FitAddon's fit, at a size whose canvas comes to whole CSS pixels. The
+ * WebGL renderer sizes the canvas in device pixels and rounds its CSS size,
+ * and WebKit has no devicePixelContentBoxSize to correct that with, so at 2x
+ * an odd number of 33px rows stretches the canvas by a device pixel and one
+ * pixel row of text shows doubled. At a ratio with no such size within a few
+ * cells, it fits as FitAddon does. */
+function fitWhole(term: Terminal, fit: FitAddon) {
+  const dims = fit.proposeDimensions()
+  const cell = deviceSizes(term)?.cell
+  if (!dims || isNaN(dims.cols) || isNaN(dims.rows) || !cell?.width || !cell.height) {
+    return fit.fit()
+  }
+  const dpr = window.devicePixelRatio
+  const whole = (count: number, size: number) => {
+    for (let n = count; n > Math.max(1, count - 4); n--) {
+      const css = (n * size) / dpr
+      if (Math.abs(css - Math.round(css)) < 1e-6) return n
+    }
+    return count
+  }
+  const cols = whole(dims.cols, cell.width)
+  const rows = whole(dims.rows, cell.height)
+  if (cols === term.cols && rows === term.rows) return
+  // As FitAddon does, so the new size draws in full
+  ;(
+    term as unknown as { _core: { _renderService: { clear(): void } } }
+  )._core._renderService.clear()
+  term.resize(cols, rows)
 }
 
 function startHelix(host: HTMLElement) {
@@ -111,7 +149,7 @@ function startHelix(host: HTMLElement) {
     console.warn("ah: WebGL renderer unavailable, using DOM renderer", err)
   }
   matchRexCells(term)
-  fit.fit()
+  fitWhole(term, fit)
   // Reachable from the devtools console for debugging rendering issues
   Object.assign(globalThis, { ahTerm: term })
 
@@ -196,8 +234,10 @@ function startHelix(host: HTMLElement) {
       }, 300)
     }, 50)
   })
+  // This terminal, not whichever one a restart has put in term since
+  const started = term
   new ResizeObserver(() => {
-    if (document.body.classList.contains("editor-shown")) fit.fit()
+    if (document.body.classList.contains("editor-shown")) fitWhole(started, fit)
   }).observe(host)
   term.focus()
 }
