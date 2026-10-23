@@ -110,9 +110,12 @@ export class MarkdownBackend {
     if (sub === "") {
       const editor = searchParams.get("editor") !== "off"
       const chat = searchParams.get("chat") !== "off"
-      return new Response(page(escapeHtml(basename(path)), { editor, chat }), {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      })
+      return new Response(
+        page(escapeHtml(basename(path)), { editor, chat, path: escapeHtml(path) }),
+        {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        },
+      )
     }
     if (sub === "request") {
       return (

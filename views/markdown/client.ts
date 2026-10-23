@@ -227,3 +227,40 @@ if (editorHost && editorToggle) {
     }
   })
 }
+
+// ? shows the page's shortcuts (page.ts), unless it's being typed somewhere:
+// the comment and chat boxes, or helix, whose xterm takes keys in a textarea
+const shortcuts = document.getElementById("shortcuts") as HTMLDialogElement
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "?" || e.metaKey || e.ctrlKey || e.altKey) return
+  const target = e.target as HTMLElement
+  if (target.closest("input, textarea, select, [contenteditable]")) return
+  e.preventDefault()
+  if (shortcuts.open) shortcuts.close()
+  else shortcuts.showModal()
+})
+
+// ⇧⌘C copies the file's path, from anywhere on the page: the editor pane
+// passes it on with the other ⌘-chords helix doesn't bind. (Not VS Code's
+// ⌥⌘C, which Alfred takes for its clipboard.) In a Chrome tab, DevTools'
+// element picker may get it first.
+const copied = document.getElementById("copied")!
+let copiedTimer = 0
+async function copyPath() {
+  const path = document.body.dataset.path ?? ""
+  try {
+    await navigator.clipboard.writeText(path)
+    copied.textContent = `Copied ${path}`
+  } catch {
+    copied.textContent = "Couldn't copy the path"
+  }
+  copied.classList.add("shown")
+  clearTimeout(copiedTimer)
+  copiedTimer = window.setTimeout(() => copied.classList.remove("shown"), 1500)
+}
+document.addEventListener("keydown", (e) => {
+  if (e.code === "KeyC" && e.metaKey && e.shiftKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault()
+    void copyPath()
+  }
+})

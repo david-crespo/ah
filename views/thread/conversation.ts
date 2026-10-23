@@ -20,7 +20,7 @@ export function focusWhenRendered(element: HTMLElement) {
   requestAnimationFrame(() => requestAnimationFrame(() => element.focus()))
 }
 
-/** What the feed labels a request with, after "You", and shows for it */
+/** What the feed labels a request with and shows for it */
 function describe(request: Request, kinds: RequestKinds): { label?: string; body: string } {
   const { kind, text, args } = request
   return (
@@ -41,6 +41,7 @@ export class Conversation {
   private error: HTMLElement
   private empty: HTMLElement
   private newMessages: HTMLButtonElement
+  private dock: HTMLElement
   private offline: HTMLElement
   private snapshot: ThreadSnapshot | null = null
   private rows = new Map<string, HTMLElement>()
@@ -52,6 +53,9 @@ export class Conversation {
   private selectionActive = false
   private sending = false
   private lastTick = Date.now()
+  /** Where focus was when the shortcut opened the conversation, to go back
+   * to when it closes */
+  private returnFocus: HTMLElement | null = null
 
   private onOpen: () => void
   private kinds: RequestKinds
@@ -68,6 +72,7 @@ export class Conversation {
     this.element.setAttribute("aria-label", "Conversation")
     this.element.innerHTML = `
       <div class="conversation-feed" id="conversation-history" role="region" aria-label="Conversation history"></div>
+      <div class="conversation-dock">
       <p class="conversation-empty" hidden>Ask a question or leave a comment on the document.</p>
       <button class="conversation-new" type="button" hidden>New messages ↓</button>
       <p class="conversation-error" role="alert" hidden></p>
@@ -75,14 +80,17 @@ export class Conversation {
       <div class="conversation-controls">
         <span class="conversation-offline" hidden></span>
         <form class="conversation-compose" hidden>
-          <textarea rows="1" aria-label="Message the agent" placeholder="Message the agent…"></textarea>
-          <button class="conversation-send" type="submit">Send</button>
+          <textarea rows="1" aria-label="Message the agent" placeholder="Reply"></textarea>
+          <button class="conversation-send" type="submit" aria-label="Send" title="Send (Enter; Shift+Enter for newline)">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 3v5a2 2 0 0 1-2 2h-9m3-3-3 3 3 3"/></svg>
+          </button>
         </form>
-        <button class="conversation-toggle" type="button" aria-expanded="false" aria-controls="conversation-history" aria-label="Open conversation">
+        <button class="conversation-toggle" type="button" aria-expanded="false" aria-controls="conversation-history" aria-label="Open conversation" aria-keyshortcuts="Meta+I Control+I">
           <span class="conversation-spinner" aria-hidden="true"></span>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg>
           <span class="conversation-agent" aria-hidden="true"></span>
         </button>
+      </div>
       </div>`
     document.body.append(this.element)
     this.feed = this.element.querySelector(".conversation-feed")!
@@ -93,15 +101,22 @@ export class Conversation {
     this.error = this.element.querySelector(".conversation-error")!
     this.empty = this.element.querySelector(".conversation-empty")!
     this.newMessages = this.element.querySelector(".conversation-new")!
+    this.dock = this.element.querySelector(".conversation-dock")!
+    // Open, the dock floats over the feed's bottom, which leaves room for it
+    // to scroll the last message clear
+    new ResizeObserver(() => {
+      const bottom = this.atBottom()
+      this.element.style.setProperty("--dock-height", `${this.dock.offsetHeight}px`)
+      if (this.open && bottom) this.feed.scrollTop = this.feed.scrollHeight
+    }).observe(this.dock)
     this.offline = this.element.querySelector(".conversation-offline")!
-    this.toggle.addEventListener("click", () => this.setOpen(!this.open, true))
+    this.toggle.addEventListener("click", () => this.setOpen(!this.open))
     this.form.addEventListener("submit", (event) => {
       event.preventDefault()
       void this.submit()
     })
     this.input.addEventListener("input", () => {
-      this.input.style.height = "auto"
-      this.input.style.height = Math.min(110, this.input.scrollHeight) + "px"
+      this.fitInput()
       this.saveDraft()
     })
     this.element.addEventListener("keydown", (event) => {
@@ -109,13 +124,36 @@ export class Conversation {
         event.preventDefault()
         this.setOpen(false)
       }
+      // Enter sends and Shift+Enter is a new line, as in a chat app. Not
+      // while an IME is composing, where Enter picks the candidate.
       if (
         event.target === this.input &&
         event.key === "Enter" &&
-        (event.metaKey || event.ctrlKey)
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.isComposing
       ) {
         event.preventDefault()
         void this.submit()
+      }
+    })
+    // ⌘I toggles the conversation from anywhere on the page, the editor pane
+    // included (it passes ⌘-chords it doesn't bind to the page). Ctrl+I for
+    // terminal-browser panes, where cmd chords may not arrive.
+    document.addEventListener("keydown", (event) => {
+      if (
+        event.key.toLowerCase() === "i" &&
+        (event.metaKey || event.ctrlKey) &&
+        !event.shiftKey &&
+        !event.altKey
+      ) {
+        event.preventDefault()
+        if (!this.open) {
+          const active = document.activeElement
+          this.returnFocus =
+            active instanceof HTMLElement && active !== document.body ? active : null
+        }
+        this.setOpen(!this.open)
       }
     })
     this.feed.addEventListener("scroll", () => {
@@ -137,7 +175,7 @@ export class Conversation {
     // without moving focus to the toggle (the click already put it elsewhere).
     document.addEventListener("pointerdown", (event) => {
       if (this.open && !this.element.contains(event.target as Node)) {
-        this.setOpen(false, false, false)
+        this.setOpen(false, false)
       }
     })
     document.addEventListener("visibilitychange", () => this.markRead())
@@ -166,6 +204,12 @@ export class Conversation {
 
   private key(suffix: string) {
     return `ah-conversation:${this.snapshot?.file}:${suffix}`
+  }
+  /** Grow the compose box to its text, up to its max-height. Only while it
+   * shows: hidden, it has no scrollHeight. */
+  private fitInput() {
+    this.input.style.height = "auto"
+    this.input.style.height = this.input.scrollHeight + "px"
   }
   private saveDraft() {
     if (!this.snapshot) return
@@ -218,9 +262,12 @@ export class Conversation {
         const state = snapshot.requests.find((state) => state.id === entry.id)
         const meta = this.rows.get(entry.id)!.querySelector(".conversation-meta")!
         const { label } = describe(entry, this.kinds)
+        // The bubble says it's yours, so the meta line is only for the kind
+        // of request and its state
         const stateText =
-          state && state.status !== "done" ? ` · ${state.status.replace("-", " ")}` : ""
-        meta.textContent = `You${label ? ` · ${label}` : ""}${stateText}`
+          state && state.status !== "done" ? state.status.replace("-", " ") : ""
+        meta.textContent = [label, stateText].filter(Boolean).join(" · ")
+        meta.toggleAttribute("hidden", !meta.textContent)
       }
     }
     this.showRows()
@@ -238,6 +285,7 @@ export class Conversation {
     row.className = "conversation-message"
     row.dataset.id = entry.id
     row.dataset.from = entry.type === "activity" ? "agent" : "you"
+    row.setAttribute("aria-label", entry.type === "activity" ? "Agent" : "You")
     const meta = document.createElement("div")
     meta.className = "conversation-meta"
     meta.textContent = entry.type === "activity" ? "Agent" : "You"
@@ -355,7 +403,8 @@ export class Conversation {
       }
     }
   }
-  private setOpen(value: boolean, focus = false, refocus = true) {
+  /** Open, the compose box takes focus, since the toggle hides */
+  private setOpen(value: boolean, refocus = true) {
     this.open = value
     if (value) this.onOpen()
     this.element.classList.toggle("open", value)
@@ -364,19 +413,23 @@ export class Conversation {
     this.empty.hidden = !value || this.rows.size > 0
     this.showRows()
     if (value) {
+      // For a draft restored, or typed before it last closed
+      this.fitInput()
       this.feed.scrollTop = this.feed.scrollHeight
-      if (focus) focusWhenRendered(this.input)
-      else this.toggle.focus()
+      focusWhenRendered(this.input)
       this.markRead()
     } else {
       this.feed.scrollTop = 0
-      if (refocus) this.toggle.focus()
+      if (refocus) (this.returnFocus?.isConnected ? this.returnFocus : this.toggle).focus()
+      this.returnFocus = null
     }
     this.updateStatus()
   }
   private markRead() {
     if (!this.open || document.hidden || !this.snapshot) return
-    const bounds = this.feed.getBoundingClientRect()
+    // What shows of the feed: not under the dock
+    const feed = this.feed.getBoundingClientRect()
+    const bounds = { top: feed.top, bottom: feed.bottom - this.dock.offsetHeight }
     let changed = false
     for (const entry of this.snapshot.entries) {
       if (entry.type !== "activity" || !entry.text || this.read.has(entry.id)) continue
@@ -458,7 +511,7 @@ export class Conversation {
       unread ? ` · ${unread} unread` : ""
     }`
     this.toggle.setAttribute("aria-label", label)
-    this.toggle.title = label
+    this.toggle.title = `${label} (⌘I)`
     this.element.toggleAttribute("data-unread", unseen)
   }
 
@@ -478,18 +531,20 @@ export class Conversation {
       (state) => state.status === "needs-reply",
     )
     this.sending = true
-    const button = this.form.querySelector("button")!
+    const button = this.form.querySelector<HTMLButtonElement>(".conversation-send")!
     button.disabled = true
     this.reportError("")
     try {
       await this.send({ kind: "chat", text, args: {}, replyTo: question?.id })
       if (this.input.value.trim() === text) this.input.value = ""
-      this.input.style.height = "auto"
+      this.fitInput()
       this.saveDraft()
-      button.textContent = "Send"
+      button.setAttribute("aria-label", "Send")
+      button.removeAttribute("data-retry")
     } catch (error) {
       this.reportError(error instanceof Error ? error.message : "Could not send message")
-      button.textContent = "Retry"
+      button.setAttribute("aria-label", "Retry")
+      button.toggleAttribute("data-retry", true)
     } finally {
       this.sending = false
       button.disabled = false

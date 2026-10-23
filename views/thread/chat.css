@@ -35,7 +35,7 @@
   inset: -10px;
   z-index: -1;
   border: 1px solid var(--chat-line);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--chat-page);
   box-shadow: 0 8px 28px #0003;
   opacity: 0;
@@ -45,6 +45,10 @@
     opacity 180ms ease,
     transform 180ms ease;
   pointer-events: none;
+}
+#conversation.open {
+  width: min(560px, calc(100vw - 56px));
+  padding: 0 4px 4px;
 }
 #conversation.open::before {
   opacity: 1;
@@ -65,7 +69,6 @@
 }
 #conversation textarea:focus-visible {
   outline: none;
-  border-color: var(--chat-blue);
 }
 #conversation .conversation-feed {
   min-height: 0;
@@ -74,41 +77,51 @@
   gap: 8px;
 }
 #conversation.open .conversation-feed {
-  max-height: min(60dvh, 480px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--chat-line) transparent;
   gap: 16px;
-  padding: 4px 6px 8px 0;
+  /* Out to the panel's top and bottom edges (its ::before), so messages
+     scroll all the way up, and down behind the dock, with the padding
+     inside. On the right, into the panel's gutter, so the scrollbar runs
+     beside the dock instead of over it */
+  max-height: calc(min(65dvh, 640px) + var(--dock-height, 0px));
+  margin: -10px -12px -14px 0;
+  padding: 18px 18px calc(var(--dock-height, 0px) + 30px) 0;
 }
+/* Collapsed, agent messages show as toasts: opaque cards, since they float
+   over document text */
 #conversation .conversation-message {
   position: relative;
   flex: none;
   border: 1px solid var(--chat-line);
-  border-radius: 6px;
-  padding: 12px 14px;
+  border-radius: 10px;
+  padding: 10px 14px;
   background: var(--chat-panel);
   box-shadow: 0 5px 18px #0002;
   overflow-wrap: anywhere;
 }
+/* Open, it reads like a chat: the agent's replies on the page, the user's
+   in bubbles on the right */
 #conversation.open .conversation-message {
-  border-color: transparent;
+  border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
   padding: 0 4px;
 }
-#conversation .conversation-message[data-from="agent"],
-#conversation.open .conversation-message[data-from="agent"] {
-  border: 1px solid light-dark(#0969da55, #58a6ff66);
-  border-radius: 6px;
-  /* Opaque: as a toast this floats over document text */
-  background: color-mix(in srgb, light-dark(#0969da, #388bfd) 10%, var(--chat-page));
-  padding: 10px 12px;
+#conversation.open .conversation-message[data-from="you"] {
+  align-self: flex-end;
+  max-width: 85%;
+  border-radius: 16px 16px 4px 16px;
+  background: light-dark(#eaeef2, #262c36);
+  padding: 8px 14px;
 }
-#conversation .conversation-message[data-from="agent"] .conversation-meta {
-  color: var(--chat-blue);
+/* Open, an unboxed message on the left is the agent's; a toast keeps the
+   label, which says what it replies to */
+#conversation.open .conversation-message[data-from="agent"] .conversation-meta {
+  display: none;
 }
 #conversation .conversation-meta {
   font-size: 12px;
@@ -195,6 +208,26 @@
 #conversation.open .conversation-dismiss {
   display: none;
 }
+#conversation .conversation-dock {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+}
+#conversation.open .conversation-dock {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  left: 4px;
+}
+/* Floating over the feed's text, the status and error lines need a
+   background of their own */
+#conversation.open .conversation-status,
+#conversation.open .conversation-error {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--chat-page);
+}
 #conversation .conversation-controls {
   display: flex;
   flex: none;
@@ -208,31 +241,52 @@
   margin: 0;
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  border: 1px solid var(--chat-line);
+  border-radius: 14px;
+  background: var(--chat-panel);
 }
 #conversation textarea {
   flex: 1;
   min-width: 0;
-  width: 100%;
-  min-height: 36px;
-  max-height: 110px;
+  max-height: 40dvh;
   resize: none;
-  background: var(--chat-page);
+  background: transparent;
   color: var(--chat-ink);
-  border: 1px solid var(--chat-line);
-  border-radius: 4px;
-  padding: 7px 8px;
+  border: 0;
+  padding: 11px 0 11px 16px;
   font: inherit;
-  font-size: 13px;
-  line-height: 20px;
+  line-height: 21px;
 }
+#conversation textarea::placeholder {
+  color: var(--chat-muted);
+}
+/* The height of one line of the textarea, so it's centered beside one and
+   stays at the bottom as the text grows */
 #conversation .conversation-send {
-  height: 36px;
-  background: light-dark(#1f883d, #238636);
-  color: #fff;
-  border: 1px solid #0002;
-  border-radius: 4px;
-  padding: 0 9px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 43px;
+  border: 0;
+  background: transparent;
+  color: var(--chat-muted);
+}
+#conversation .conversation-send:hover {
+  color: var(--chat-ink);
+}
+#conversation .conversation-send[data-retry] {
+  color: light-dark(#cf222e, #ff7b72);
+}
+#conversation .conversation-send svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 #conversation .conversation-toggle {
   position: relative;
@@ -254,10 +308,10 @@
   stroke: currentColor;
   fill: none;
   stroke-width: 1.7;
-  transition: transform 180ms ease;
 }
-#conversation.open .conversation-toggle svg {
-  transform: rotate(180deg);
+/* Open, Escape, ⌘I or a click outside closes it */
+#conversation.open .conversation-toggle {
+  display: none;
 }
 /* Progress: a thin single arc turning while the agent works, and the same
    ring breathing slowly while a request waits for it. */
@@ -413,8 +467,7 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  #conversation::before,
-  #conversation .conversation-toggle svg {
+  #conversation::before {
     transition: none;
   }
   #conversation .conversation-spinner,
