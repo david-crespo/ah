@@ -249,6 +249,9 @@ export class Conversation {
       }
     }
     let added = false
+    // Your own new message takes the feed down to it, wherever it was, as in
+    // a chat app
+    let sent = false
     for (const entry of snapshot.entries) {
       if (entry.type === "activity" && !entry.text) continue
       if (!this.rows.has(entry.id)) {
@@ -257,6 +260,7 @@ export class Conversation {
         this.feed.append(row)
         added = true
         if (!replay && entry.type === "activity") this.toasts.set(entry.id, 8000)
+        if (!replay && entry.type === "request") sent = true
       }
       if (entry.type === "request") {
         const state = snapshot.requests.find((state) => state.id === entry.id)
@@ -272,8 +276,10 @@ export class Conversation {
     }
     this.showRows()
     if (this.open && added) {
-      if (bottom || first) this.feed.scrollTop = this.feed.scrollHeight
-      else this.newMessages.hidden = false
+      if (bottom || first || sent) {
+        this.feed.scrollTop = this.feed.scrollHeight
+        this.newMessages.hidden = true
+      } else this.newMessages.hidden = false
     }
     this.empty.hidden = this.rows.size > 0 || !this.open
     this.markRead()
