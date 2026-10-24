@@ -267,6 +267,16 @@ test("a pane's message goes to the agent in its tab, or waits for one", async ()
   expect(posted().at(-1)).toEqual([codex("th1"), "third"])
 })
 
+test("a message from an agent's own pane goes to that agent", async () => {
+  // A tool the agent started, like a diff review, shares its pane
+  core.onRex(rex({ t1: ["block:1", "block:2"] }))
+  await report(start("codex", "th1", undefined, "block:1"))
+  await report(start("codex", "th2", undefined, "block:2"))
+  expect(core.targetNear("block:1")).toBe("block:1")
+  expect(await (await sendFrom("block:1", "mine")).json()).toEqual({ status: "sent" })
+  expect(posted()).toEqual([[codex("th1"), "mine"]])
+})
+
 test("a message that can't be posted waits, behind the ones before it", async () => {
   core.onRex(rex({ t1: ["block:1", "block:9"] }))
   await report(start("codex", "th1", undefined, "block:1"))

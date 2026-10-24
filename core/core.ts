@@ -298,16 +298,19 @@ export class Core implements AgentDirectory {
   }
 
   /** The live agents in `block`'s tab, in its layout order, for a file
-   * opened from a shell there to pick from */
+   * opened from a shell there to pick from. That includes the agent in
+   * `block` itself, for a tool the agent started there. */
   agentsNear(block: BlockId): AgentId[] {
-    return this.#liveInTab(block, block)
+    return this.#liveInTab(block, null)
   }
 
   /** Where a shell's messages and files go without an agent named: its
-   * pick, while that's live in its tab, or else the tab's only agent */
+   * pick, while that's live in its tab; else the agent in its own pane, for
+   * a tool that agent started; else the tab's only agent */
   targetNear(block: BlockId, near = this.agentsNear(block)): AgentId | null {
     const picked = this.registry.picks.get(block)
     if (picked && near.includes(picked)) return picked
+    if (near.includes(block)) return block
     return near.length === 1 ? near[0] : null
   }
 
@@ -365,7 +368,7 @@ export class Core implements AgentDirectory {
 
   /** The live agents in `block`'s tab other than `except`, in its layout
    * order */
-  #liveInTab(block: BlockId, except: AgentId): AgentId[] {
+  #liveInTab(block: BlockId, except: AgentId | null): AgentId[] {
     const tabId = this.#tabs.get(block)
     const tab = this.#rex?.sessions.flatMap((s) => s.tabs).find((t) => t.id === tabId)
     if (!tab) return []
