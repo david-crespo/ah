@@ -87,9 +87,11 @@ function ensureTaskList(file: string, title?: string, goal?: string) {
   console.log(`wrote ${absolute(file)}`)
 }
 
-export const view = new Command("view").description(
-  "Show a markdown or HTML file in a page you can comment on, or any URL in a window or tab. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
-)
+export const view = new Command("view")
+  .summary("Show a file in a page you can comment on, or a URL in a window")
+  .description(
+    "Show a markdown or HTML file in a page you can comment on, or any URL in a window or tab. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
+  )
 
 /** Any URL, like a diff review tool's page: shown in a window or
  * tab like a file's page, but with no subject ah knows, so nothing is bound
@@ -207,6 +209,7 @@ view
   })
 
 export const message = new Command("message")
+  .summary("Exchange messages with agent sessions")
   .description(
     "Messages between the user and agents: what's waiting, and the agent's answers",
   )
