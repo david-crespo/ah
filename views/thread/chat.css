@@ -501,6 +501,7 @@
   resize: vertical;
   min-height: 60px;
   font: inherit;
+  font-size: 15px;
   line-height: 1.4;
   padding: 8px;
   border: 1px solid #d1d9e0;
