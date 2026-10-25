@@ -48,6 +48,12 @@ export class AhMarkdown extends HTMLElement {
   // Set once the server says the file was closed, so it stops reconnecting
   #closed = false
   #retry: ReturnType<typeof setTimeout> | undefined
+  #mermaid = new MermaidDiagrams()
+  // Diagrams are drawn for the color scheme, so a switch redraws them
+  #scheme = matchMedia(DARK)
+  #onScheme = () => {
+    if (this.#text !== null) this.#render()
+  }
 
   constructor() {
     super()
@@ -86,10 +92,12 @@ export class AhMarkdown extends HTMLElement {
 
   connectedCallback() {
     if (!this.content.isConnected) this.append(this.content)
+    this.#scheme.addEventListener("change", this.#onScheme)
     this.#connect()
   }
 
   disconnectedCallback() {
+    this.#scheme.removeEventListener("change", this.#onScheme)
     this.#disconnect()
   }
 
@@ -206,6 +214,7 @@ export class AhMarkdown extends HTMLElement {
     restoreDetails(content, toggled)
     markConflictChanges(content)
     highlightCodeBlocks(content)
+    this.#mermaid.render(content, this.base)
     rewriteLocalMedia(content, this.base)
     hydrateEmbeds(content, this.base, embeds)
     const pending = this.#pendingFlash
@@ -232,8 +241,6 @@ export class AhMarkdown extends HTMLElement {
     this.dispatchEvent(new Event("render"))
   }
 }
-
-customElements.define("ah-markdown", AhMarkdown)
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -517,6 +524,110 @@ function rewriteLocalMedia(content: HTMLElement, base: URL) {
   }
 }
 
+// Fenced mermaid blocks render as diagrams, as on GitHub, drawn by mermaid.js
+// (mermaid.ts), which loads the first time a file has one
+const DARK = "(prefers-color-scheme: dark)"
+type MermaidResult = { svg: string } | { error: string }
+let mermaidModule: Promise<typeof import("./mermaid.ts")> | null = null
+
+/** One <ah-markdown>'s diagrams. A render keeps the last one's drawings by
+ * theme and source, so unchanged diagrams go back before the browser paints.
+ * A diagram whose source changed shows its last drawing until the new one is
+ * ready, so editing it doesn't flash its code, and source that doesn't parse
+ * keeps the last drawing, with the error under it. */
+class MermaidDiagrams {
+  /** The latest render's drawings by key, and the draws it waits on */
+  #results = new Map<string, MermaidResult>()
+  #drawing = new Map<string, Promise<MermaidResult | null>>()
+  #wanted = new Set<string>()
+  /** Each block's last drawing, by its place among them */
+  #lastSvgs: (string | null)[] = []
+  /** Draws run one at a time, as mermaid's do anyway, so a draw for source a
+   * newer render no longer has is skipped before it starts */
+  #queue: Promise<unknown> = Promise.resolve()
+  #keys = new WeakMap<HTMLElement, string>()
+
+  /** Puts each block's code in a box that shows its drawing once there is one,
+   * keeping the block's source lines for flashing and comments */
+  render(content: HTMLElement, base: URL) {
+    const dark = matchMedia(DARK).matches
+    const blocks = [...content.querySelectorAll<HTMLElement>("pre > code.language-mermaid")]
+    const keys = blocks.map((code) => `${dark}\n${code.textContent ?? ""}`)
+    this.#wanted = new Set(keys)
+    for (const key of this.#results.keys()) {
+      if (!this.#wanted.has(key)) this.#results.delete(key)
+    }
+    const lastSvgs = this.#lastSvgs
+    this.#lastSvgs = blocks.map((_, i) => lastSvgs[i] ?? null)
+    blocks.forEach((code, i) => {
+      const key = keys[i]
+      const pre = code.parentElement!
+      const box = document.createElement("div")
+      box.className = "mermaid-diagram"
+      if (code.dataset.line) box.dataset.line = code.dataset.line
+      this.#keys.set(box, key)
+      pre.replaceWith(box)
+      box.append(pre)
+      const done = this.#results.get(key)
+      if (done) return this.#fill(box, i, done)
+      const last = lastSvgs[i]
+      if (last) this.#fill(box, i, { svg: last })
+      void this.#draw(key, code.textContent ?? "", dark, base).then((result) => {
+        if (!result) return
+        // Into this block's box in whatever render is showing now
+        content.querySelectorAll<HTMLElement>(".mermaid-diagram").forEach((el, j) => {
+          if (this.#keys.get(el) === key) this.#fill(el, j, result)
+        })
+      })
+    })
+  }
+
+  /** A drawing in place of what the box shows, or the error under it */
+  #fill(box: HTMLElement, i: number, result: MermaidResult) {
+    if ("svg" in result) {
+      box.innerHTML = result.svg
+      this.#lastSvgs[i] = result.svg
+      return
+    }
+    let error = box.querySelector(".mermaid-error")
+    if (!error) {
+      error = document.createElement("div")
+      error.className = "mermaid-error"
+      box.append(error)
+    }
+    error.textContent = result.error
+  }
+
+  /** The drawing for `key`, or null if no render wants it by its turn */
+  #draw(key: string, source: string, dark: boolean, base: URL) {
+    let drawing = this.#drawing.get(key)
+    if (drawing) return drawing
+    drawing = this.#queue
+      .then(async (): Promise<MermaidResult | null> => {
+        if (!this.#wanted.has(key)) return null
+        mermaidModule ??= import(
+          /* @vite-ignore */ new URL("../mermaid.js", base).href
+        ).catch((e) => {
+          mermaidModule = null // retry on the next draw
+          throw e
+        })
+        try {
+          return { svg: await (await mermaidModule).renderMermaid(source, dark) }
+        } catch (e) {
+          return { error: e instanceof Error ? e.message : String(e) }
+        }
+      })
+      .then((result) => {
+        this.#drawing.delete(key)
+        if (result && this.#wanted.has(key)) this.#results.set(key, result)
+        return result
+      })
+    this.#drawing.set(key, drawing)
+    this.#queue = drawing
+    return drawing
+  }
+}
+
 // Highlight fenced code blocks in the preview with lezer parsers from
 // @codemirror/language-data; classHighlighter emits tok-* classes styled in
 // markdown.css.
@@ -606,3 +717,7 @@ function wrapText(el: HTMLElement, inserted: string, className: string): boolean
   }
   return false
 }
+
+// Last, since defining it constructs the elements already on the page, and
+// their fields need the classes and constants above
+customElements.define("ah-markdown", AhMarkdown)

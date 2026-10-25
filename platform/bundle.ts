@@ -11,8 +11,13 @@ import { assetPath } from "./assets.ts"
  * is a file kind's, or the dashboard. */
 export const bundles = {
   // bundle.js for a file's page, and preview.js with just the <ah-markdown>
-  // element, for other pages that show a file
-  markdown: { "bundle.js": "client.ts", "preview.js": "preview.ts" },
+  // element, for other pages that show a file. Either loads mermaid.js when a
+  // file has a diagram.
+  markdown: {
+    "bundle.js": "client.ts",
+    "preview.js": "preview.ts",
+    "mermaid.js": "mermaid.ts",
+  },
   html: { "chat.js": "client.ts", "task_list.js": "task_list.ts" },
   dashboard: { "client.js": "client.ts" },
 } as const satisfies Record<FileKind | "dashboard", Record<string, string>>
@@ -39,8 +44,10 @@ export async function buildClientBundle(view: ViewName, name: string): Promise<s
         fileName: name.replace(/\.js$/, ""),
       },
       // One file per entry: @codemirror/language-data loads each language with
-      // a dynamic import, which would otherwise make a chunk per language
-      rolldownOptions: { output: { codeSplitting: false } },
+      // a dynamic import, which would otherwise make a chunk per language.
+      // mermaid is too big to serve as is; the rest stay readable. Vite's own
+      // minify option skips lib mode's es format.
+      rolldownOptions: { output: { codeSplitting: false, minify: name === "mermaid.js" } },
     },
   })
   const outputs = Array.isArray(result) ? result : [result]

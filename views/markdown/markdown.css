@@ -53,6 +53,15 @@ ah-markdown {
   .markdown-body ol > .task-list-item > p:first-child > .task-list-item-checkbox {
     margin: 0 0.2em 0.25em 0;
   }
+  /* markdown-it-footnote puts an <hr> before the footnotes, which
+     github-markdown.css already sets off with a top border */
+  .markdown-body .footnotes-sep {
+    display: none;
+  }
+  /* up from github-markdown.css's 12px */
+  .markdown-body .footnotes {
+    font-size: 14px;
+  }
   .flash {
     animation: ah-markdown-flash 1.8s ease-out;
   }
@@ -114,9 +123,23 @@ ah-markdown {
   .gh-embed {
     margin-bottom: 16px;
   }
-  .gh-embed-error {
+  .gh-embed-error,
+  .mermaid-error {
     color: #d1242f;
     font-size: 13px;
+  }
+  /* Mermaid diagrams, drawn in place of their code blocks (preview.ts) */
+  .mermaid-diagram {
+    margin-bottom: 16px;
+  }
+  .mermaid-diagram > svg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+  .mermaid-diagram > pre + .mermaid-error {
+    margin-top: -8px;
   }
   .gh-blob {
     border: 1px solid #d1d9e0;
@@ -204,7 +227,8 @@ ah-markdown {
       border-color: #3d444d;
       color: #f0f6fc;
     }
-    .gh-embed-error {
+    .gh-embed-error,
+    .mermaid-error {
       color: #f85149;
     }
     .conflict {
