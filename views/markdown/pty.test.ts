@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, test } from "vitest"
 import type { WebSocket } from "ws"
-import { HelixPanes, parsePtyMessage } from "./helix.ts"
+import { PtyBackend, parsePtyMessage } from "./pty.ts"
 
 test("parsePtyMessage takes only the messages the pane sends", () => {
   expect(parsePtyMessage('{"type":"input","data":"q"}')).toEqual({
@@ -22,11 +22,11 @@ test("parsePtyMessage takes only the messages the pane sends", () => {
   expect(parsePtyMessage("{")).toEqual(null)
 })
 
-test("a pane asked for after the file closed never starts helix", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ah-helix-"))
+test("a pane asked for after the file closed never starts the editor", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ah-pty-"))
   const file = join(dir, "notes.md")
   writeFileSync(file, "# notes\n")
-  const panes = new HelixPanes(file)
+  const panes = new PtyBackend(file, async () => ({ command: "hx", args: [file] }))
   panes.close()
   let closed = false
   const ws = {
@@ -34,7 +34,7 @@ test("a pane asked for after the file closed never starts helix", async () => {
     readyState: 1,
     close: () => (closed = true),
     on: () => {
-      throw new Error("helix started")
+      throw new Error("editor started")
     },
   }
   try {

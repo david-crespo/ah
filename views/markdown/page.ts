@@ -1,4 +1,4 @@
-// The file page: an <ah-markdown> preview (styled by markdown.css) with the helix pane and the thread's
+// The file page: an <ah-markdown> preview (styled by markdown.css) with the editor pane and the thread's
 // comment popover (views/thread/) around it. Its URLs are relative to
 // /view/markdown/<id>/, and the editor pane and the chat are each left out
 // when turned off.
@@ -19,8 +19,8 @@ function shortcutsDialog({ editor, chat }: { editor: boolean; chat: boolean }) {
   ]
   if (editor) {
     rows.push(
-      ["⌘E", "Show or hide the helix editor"],
-      ["⌘-click", "Show that spot in helix"],
+      ["⌘E", "Show or hide the editor"],
+      ["⌘-click", "Show that spot in the editor"],
     )
   }
   if (chat) {
@@ -238,7 +238,7 @@ ${chat ? chatStylesheet : ""}
 </div>
 ${
   editor
-    ? '<button id="editor-toggle" aria-label="Toggle helix editor" title="Toggle helix editor (⌘E)">✎</button>'
+    ? '<button id="editor-toggle" aria-label="Toggle editor" title="Toggle editor (⌘E)">✎</button>'
     : ""
 }
 ${chat ? selectionPopover : ""}

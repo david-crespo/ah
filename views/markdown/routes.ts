@@ -1,6 +1,6 @@
 // The markdown backend's routes, under /view/markdown/. Showing, listing and
 // closing files are subjects/files/routes.ts. Each file's page lives at
-// /view/markdown/<id>/, with its doc socket, helix pty socket, local media, and
+// /view/markdown/<id>/, with its doc socket, editor pane's socket, local media, and
 // the route its requests go to (subjects/thread/routes.ts). The client bundles, stylesheets,
 // and GitHub embeds are shared by every file and sit at /view/markdown/
 // itself: bundle.js for a file's page, and preview.js with just the
@@ -50,15 +50,15 @@ export class MarkdownBackend {
     return this.files.show(path)
   }
 
-  /** A file's doc socket, at <id>/doc, or its helix pane's, at <id>/pty */
+  /** A file's doc socket, at <id>/doc, or its editor pane's, at <id>/editor */
   upgrade(rest: string, query: URLSearchParams): ((ws: WebSocket) => void) | null {
-    const m = rest.match(/^([^/]+)\/(doc|pty)$/)
+    const m = rest.match(/^([^/]+)\/(doc|editor)$/)
     const path = m && pathOf(m[1])
     if (!m || !path) return null
-    if (m[2] === "pty") {
+    if (m[2] === "editor") {
       return (ws) =>
         void this.files.live(path).then(
-          (live) => live.helix.connect(ws, query),
+          (live) => live.editor.connect(ws, query),
           () => ws.close(1011, "couldn't show the file"),
         )
     }

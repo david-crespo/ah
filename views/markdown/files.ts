@@ -1,18 +1,20 @@
 // What markdown keeps live for a file while pages show it (subjects/files/):
-// the text its pages show (LiveDoc), and any helix panes.
+// the text its pages show (LiveDoc), and any editor panes.
 
 import { threadKinds } from "../../subjects/thread/kinds.ts"
 import type { FileType, Live } from "../../subjects/files/files.ts"
 import { LiveDoc } from "./doc.ts"
-import { HelixPanes } from "./helix.ts"
+import { helixCommand } from "./helix_command.ts"
+import type { EditorBackend } from "./editor.ts"
+import { PtyBackend } from "./pty.ts"
 
 export class LiveMarkdown implements Live {
   readonly doc: LiveDoc
-  readonly helix: HelixPanes
+  readonly editor: EditorBackend
 
-  constructor(doc: LiveDoc, helix: HelixPanes) {
+  constructor(doc: LiveDoc, editor: EditorBackend) {
     this.doc = doc
-    this.helix = helix
+    this.editor = editor
   }
 
   /** The edits since the last request, so the agent's picture of the file is
@@ -24,7 +26,7 @@ export class LiveMarkdown implements Live {
 
   close() {
     this.doc.close()
-    this.helix.close()
+    this.editor.close()
   }
 }
 
@@ -34,6 +36,6 @@ export const markdownFiles: FileType<LiveMarkdown> = {
   attach: async (path, pages) =>
     new LiveMarkdown(
       await LiveDoc.open(path, (message) => pages.broadcast(message)),
-      new HelixPanes(path),
+      new PtyBackend(path, helixCommand),
     ),
 }
