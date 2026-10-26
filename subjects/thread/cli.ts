@@ -70,6 +70,11 @@ export function threadCommands(
     .addOption(portOption())
     .action(async (file, phase, requests, { work, text: inlineText, textFile, port }) => {
       const path = absolute(file)
+      const text = replyText(inlineText, textFile && readFileSync(textFile, "utf8"))
+      if (text === null)
+        die(
+          "ah message respond: the text is empty; leave out --text and --text-file for none",
+        )
       const url = threadUrl(path, port)
       await ensureStarted(port)
       const workId = requests.length ? (work ?? `w-${requests[0]}`) : work
@@ -83,7 +88,6 @@ export function threadCommands(
         )
         if (!started) await post({ phase: "start", requests, workId })
       }
-      const text = textFile ? readFileSync(textFile, "utf8").trimEnd() : inlineText
       await post({ phase, requests, workId, text })
       console.log([phase, ...requests].join(" "))
     })
@@ -163,6 +167,18 @@ function linesOf(path: string, [first, last]: Lines): string {
     .slice(first - 1, last)
     .join("\n")
     .trim()
+}
+
+/** A reply's text from --text or the --text-file's contents: undefined with
+ * neither, null when one was given but is blank, which is a mistake (a file
+ * not written yet, or empty stdin) rather than a reply with no text */
+export function replyText(
+  inline: string | undefined,
+  fromFile: string | undefined,
+): string | null | undefined {
+  const text = fromFile ?? inline
+  if (text === undefined) return undefined
+  return text.trim() ? text.trimEnd() : null
 }
 
 /** What the agent reads for a comment on lines of path, or the whole file */
