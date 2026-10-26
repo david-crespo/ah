@@ -201,20 +201,43 @@ Output only the label, no punctuation, no quotes. If the messages don't
 describe any work yet (only a greeting or a test message) and there's no prior
 summary, output nothing.`
 
-/** The label, or "" if the model call failed or said nothing */
-export function generateSummary(payload: SummaryPayload): Promise<string> {
+/** The label, or why there isn't one, for the log */
+export type SummaryResult = { summary: string } | { skipped: string }
+
+// Enough of `ai`'s stderr to say why it failed
+const MAX_STDERR_CHARS = 500
+
+/** Calls `ai` with no check first: a missing `ai` fails the spawn, which says
+ * so as cheaply as a check would */
+export function generateSummary(payload: SummaryPayload): Promise<SummaryResult> {
   return new Promise((resolve) => {
     const child = spawn(
       "ai",
       ["--system", SYSTEM_PROMPT, "--model", "luna", "--raw", "--ephemeral"],
-      { stdio: ["pipe", "pipe", "ignore"] },
+      { stdio: ["pipe", "pipe", "pipe"] },
     )
     let out = ""
+    let err = ""
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => (out += chunk))
-    child.on("error", () => resolve(""))
+    child.stderr
+      .setEncoding("utf8")
+      .on("data", (chunk: string) => (err = (err + chunk).slice(-MAX_STDERR_CHARS)))
+    child.on("error", (e: NodeJS.ErrnoException) =>
+      resolve({
+        skipped: e.code === "ENOENT" ? "ai not found" : `ai didn't start: ${e.message}`,
+      }),
+    )
     // Writing to an `ai` that never started or already exited
     child.stdin.on("error", () => {})
-    child.on("close", (code) => resolve(code === 0 ? sanitizeTitle(out).slice(0, 100) : ""))
+    child.on("close", (code, signal) => {
+      if (code !== 0) {
+        const why = sanitizeTitle(err)
+        const status = code === null ? `ai killed by ${signal}` : `ai exited ${code}`
+        return resolve({ skipped: why ? `${status}: ${why}` : status })
+      }
+      const summary = sanitizeTitle(out).slice(0, 100)
+      resolve(summary ? { summary } : { skipped: "ai returned nothing" })
+    })
     child.stdin.end(JSON.stringify(payload))
   })
 }

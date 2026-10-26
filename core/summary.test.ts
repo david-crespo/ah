@@ -1,8 +1,13 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, expect, test } from "vitest"
-import { buildSummaryPayload, readTranscript, sanitizeTitle } from "./summary.ts"
+import {
+  buildSummaryPayload,
+  generateSummary,
+  readTranscript,
+  sanitizeTitle,
+} from "./summary.ts"
 
 const dirs: string[] = []
 afterEach(() => {
@@ -149,4 +154,49 @@ test("nothing to summarize when every message is short", async () => {
 
 test("sanitizeTitle", () => {
   expect(sanitizeTitle(" a\n\tb\x1b[0m ")).toBe("a b[0m")
+})
+
+const payload = {
+  priorSummary: "",
+  firstMessage: "Fix the tab titles",
+  recentMessages: [],
+  lastReply: "",
+}
+
+/** Runs `run` with PATH holding only an `ai` that runs `script`, or no `ai` */
+async function withAi<T>(script: string | null, run: () => Promise<T>): Promise<T> {
+  const dir = mkdtempSync(join(tmpdir(), "summary-ai-"))
+  dirs.push(dir)
+  if (script !== null) {
+    writeFileSync(join(dir, "ai"), `#!/bin/sh\n${script}\n`)
+    chmodSync(join(dir, "ai"), 0o755)
+  }
+  const path = process.env.PATH
+  process.env.PATH = dir
+  try {
+    return await run()
+  } finally {
+    process.env.PATH = path
+  }
+}
+
+test("generateSummary returns the label", async () => {
+  const result = await withAi("/bin/cat > /dev/null; echo ' Tab titles '", () =>
+    generateSummary(payload),
+  )
+  expect(result).toEqual({ summary: "Tab titles" })
+})
+
+test("generateSummary says why there's no label", async () => {
+  expect(await withAi(null, () => generateSummary(payload))).toEqual({
+    skipped: "ai not found",
+  })
+  expect(
+    await withAi("/bin/cat > /dev/null; echo 'no key for luna' >&2; exit 3", () =>
+      generateSummary(payload),
+    ),
+  ).toEqual({ skipped: "ai exited 3: no key for luna" })
+  expect(await withAi("/bin/cat > /dev/null", () => generateSummary(payload))).toEqual({
+    skipped: "ai returned nothing",
+  })
 })

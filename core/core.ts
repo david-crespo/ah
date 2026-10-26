@@ -485,8 +485,10 @@ export class Core implements AgentDirectory {
     const fields = { agent: job.agent, session: job.session, sequence: job.sequence }
     if (!payload)
       return this.#write("summary-skipped", { ...fields, reason: "no messages" })
-    const summary = await generateSummary(payload)
-    if (!summary) return this.#write("summary-skipped", { ...fields, reason: "empty" })
+    const result = await generateSummary(payload)
+    if ("skipped" in result)
+      return this.#write("summary-skipped", { ...fields, reason: result.skipped })
+    const { summary } = result
     this.#write("summary", { ...fields, summary })
     const block = applySummary(this.registry, job, summary)
     if (block) this.#changed([block])
