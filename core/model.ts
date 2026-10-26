@@ -81,6 +81,36 @@ export interface AgentRef {
   process: string | null
 }
 
+/** A harness running in a block, across the sessions it goes through, and
+ * ah's bookkeeping for it (registry.ts) */
+export interface AgentRecord {
+  /** null for one reported by a harness's shared server (Codex's daemon,
+   * opencode's service) that ah couldn't place */
+  home: Home | null
+  harness: Harness
+  /** The harness's current session id. Changes on /clear, /new, /resume. */
+  session: string
+  cwd: string | null
+  /** The shell's label for the cwd, for the tab title */
+  label: string
+  /** A prompt is running */
+  busy: boolean
+  /** A one-line summary of what it's doing, for the tab title */
+  summary: string | null
+  /** Its pane shows it: false once the shell there changed directory, or the
+   * session moved to another pane */
+  shown: boolean
+  /** Its session ended (SessionEnd) and no other has started in the pane */
+  ended: boolean
+  /** Bumped by every prompt, so a slow summary can't replace a newer one */
+  promptSequence: number
+  /** The prompt the summary is for. The title shows the summary while the
+   * current prompt's is still being written. */
+  summarySequence: number
+  /** ms since the epoch: last event for this agent */
+  updatedAt: number
+}
+
 /** A live agent in a shell's tab, as `/core/agents-near` lists it for the
  * shell to pick from */
 export interface NearbyAgent {

@@ -12,7 +12,8 @@
 //   ah | Port tab titles | Refocus the README
 //   └label └summary  └second block's summary, same label so not repeated
 
-import type { AgentRecord, Registry } from "../registry.ts"
+import type { AgentRecord } from "../model.ts"
+import type { Registry } from "../registry.ts"
 
 export function tabTitle(blockIds: string[], r: Registry): string | undefined {
   const shown = blockIds.flatMap((block) => {

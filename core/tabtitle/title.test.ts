@@ -1,5 +1,6 @@
 import { expect, test } from "vitest"
-import { type AgentRecord, blockOf, type Registry } from "../registry.ts"
+import type { AgentRecord } from "../model.ts"
+import { blockOf, type Registry } from "../registry.ts"
 import { tabTitle } from "./title.ts"
 
 const agent = (
