@@ -102,8 +102,8 @@ export class Conversation {
     this.empty = this.element.querySelector(".conversation-empty")!
     this.newMessages = this.element.querySelector(".conversation-new")!
     this.dock = this.element.querySelector(".conversation-dock")!
-    // Open, the dock floats over the feed's bottom, which leaves room for it
-    // to scroll the last message clear
+    // Open, the dock is out of the flow, under the feed, which leaves room
+    // for it
     new ResizeObserver(() => {
       const bottom = this.atBottom()
       this.element.style.setProperty("--dock-height", `${this.dock.offsetHeight}px`)
@@ -409,7 +409,7 @@ export class Conversation {
       }
     }
   }
-  /** Open, the compose box takes focus, since the toggle hides */
+  /** Open, the compose box takes focus */
   private setOpen(value: boolean, refocus = true) {
     this.open = value
     if (value) this.onOpen()
@@ -433,9 +433,7 @@ export class Conversation {
   }
   private markRead() {
     if (!this.open || document.hidden || !this.snapshot) return
-    // What shows of the feed: not under the dock
-    const feed = this.feed.getBoundingClientRect()
-    const bounds = { top: feed.top, bottom: feed.bottom - this.dock.offsetHeight }
+    const bounds = this.feed.getBoundingClientRect()
     let changed = false
     for (const entry of this.snapshot.entries) {
       if (entry.type !== "activity" || !entry.text || this.read.has(entry.id)) continue

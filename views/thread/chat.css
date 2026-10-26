@@ -6,9 +6,12 @@
   --chat-muted: light-dark(#59636e, #9198a1);
   --chat-line: light-dark(#d1d9e0, #3d444d);
   --chat-blue: light-dark(#0969da, #58a6ff);
+  /* 4px in from 20px, the padding the open panel needs, so the toggle stays
+     put when it opens */
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 16px;
+  bottom: 16px;
+  padding: 0 4px 4px;
   width: min(380px, calc(100vw - 40px));
   max-height: calc(100dvh - 56px);
   display: flex;
@@ -48,7 +51,6 @@
 }
 #conversation.open {
   width: min(560px, calc(100vw - 56px));
-  padding: 0 4px 4px;
 }
 #conversation.open::before {
   opacity: 1;
@@ -82,13 +84,13 @@
   scrollbar-width: thin;
   scrollbar-color: var(--chat-line) transparent;
   gap: 16px;
-  /* Out to the panel's top and bottom edges (its ::before), so messages
-     scroll all the way up, and down behind the dock, with the padding
-     inside. On the right, into the panel's gutter, so the scrollbar runs
-     beside the dock instead of over it */
-  max-height: calc(min(65dvh, 640px) + var(--dock-height, 0px));
-  margin: -10px -12px -14px 0;
-  padding: 18px 18px calc(var(--dock-height, 0px) + 30px) 0;
+  /* Out to the panel's top edge (its ::before), so messages scroll all the
+     way up, with the padding inside, and down to the dock's top, which the
+     bottom margin leaves room for. On the right, into the panel's gutter,
+     so the scrollbar runs beside the messages */
+  max-height: min(65dvh, 640px);
+  margin: -10px -12px var(--dock-height, 0px) 0;
+  padding: 18px 18px 16px 0;
 }
 /* Collapsed, agent messages show as toasts: opaque cards, since they float
    over document text */
@@ -219,15 +221,6 @@
   bottom: 4px;
   left: 4px;
 }
-/* Floating over the feed's text, the status and error lines need a
-   background of their own */
-#conversation.open .conversation-status,
-#conversation.open .conversation-error {
-  align-self: flex-start;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--chat-page);
-}
 #conversation .conversation-controls {
   display: flex;
   flex: none;
@@ -242,7 +235,7 @@
   display: flex;
   align-items: flex-end;
   border: 1px solid var(--chat-line);
-  border-radius: 14px;
+  border-radius: 6px;
   background: var(--chat-panel);
 }
 #conversation textarea {
@@ -253,9 +246,9 @@
   background: transparent;
   color: var(--chat-ink);
   border: 0;
-  padding: 11px 0 11px 16px;
+  padding: 7px 0 7px 12px;
   font: inherit;
-  line-height: 21px;
+  line-height: 20px;
 }
 #conversation textarea::placeholder {
   color: var(--chat-muted);
@@ -267,8 +260,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 43px;
+  width: 36px;
+  height: 34px;
   border: 0;
   background: transparent;
   color: var(--chat-muted);
@@ -298,7 +291,7 @@
   width: 36px;
   height: 36px;
   border: 1px solid var(--chat-line);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--chat-panel);
   box-shadow: 0 4px 12px #0002;
 }
@@ -309,9 +302,10 @@
   fill: none;
   stroke-width: 1.7;
 }
-/* Open, Escape, ⌘I or a click outside closes it */
-#conversation.open .conversation-toggle {
-  display: none;
+/* Open, it stays where it was, pointing down, beside the compose box. It,
+   Escape, ⌘I or a click outside closes it */
+#conversation.open .conversation-toggle svg {
+  transform: rotate(180deg);
 }
 /* Progress: a thin single arc turning while the agent works, and the same
    ring breathing slowly while a request waits for it. */
