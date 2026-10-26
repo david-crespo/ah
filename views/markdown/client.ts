@@ -3,9 +3,10 @@
 // Browser half of ah's markdown file page, served as /view/markdown/bundle.js
 // (see platform/bundle.ts). The preview itself is the <ah-markdown>
 // element (preview.ts); this adds what only the file page has: real helix in
-// a collapsible xterm.js pane wired to pty, and the thread's conversation
-// and selection comment popover (views/thread/). The page leaves out the editor
-// pane with ?editor=off and the chat with ?chat=off.
+// a collapsible xterm.js pane wired to pty, the thread's conversation and
+// selection comment popover (views/thread/), and ⌘F's find bar (find.ts).
+// The page leaves out the editor pane with ?editor=off and the chat with
+// ?chat=off.
 
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
@@ -13,6 +14,7 @@ import { WebglAddon } from "@xterm/addon-webgl"
 import { Conversation } from "../thread/conversation.ts"
 import { threadKinds } from "../../subjects/thread/kinds.ts"
 import { setUpSelectionComments } from "../thread/selection.ts"
+import { setUpFind } from "./find.ts"
 import { theme } from "../theme.ts"
 import "./preview.ts"
 import { type SourcePosition, sourcePosition } from "./source_position.ts"
@@ -27,6 +29,7 @@ const chat = document.getElementById("popover") !== null
 let hidePopover = () => {}
 const conversation = chat ? new Conversation(() => hidePopover(), threadKinds) : null
 if (conversation) hidePopover = setUpSelectionComments(content, conversation)
+setUpFind(content)
 
 /** A WebSocket URL relative to the file's page */
 function wsUrl(path: string): string {

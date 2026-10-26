@@ -13,6 +13,8 @@ const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'se
 function shortcutsDialog({ editor, chat }: { editor: boolean; chat: boolean }) {
   const rows: [string, string][] = [
     ["?", "Show this list"],
+    ["⌘F", "Find in the document"],
+    ["⌘G", "Next match (⇧⌘G previous)"],
     ["⇧⌘C", "Copy the file's path"],
   ]
   if (editor) {
@@ -163,6 +165,61 @@ ${chat ? chatStylesheet : ""}
     pointer-events: none;
   }
   #copied.shown { opacity: 1; transform: translate(-50%, 0); }
+  /* ⌘F's find bar (find.ts), as tall as the conversation's toggle */
+  #find {
+    position: fixed;
+    bottom: 20px;
+    left: 20px;
+    z-index: 11;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    height: 36px;
+    padding: 0 10px 0 0;
+    border: 1px solid light-dark(#d1d9e0, #3d444d);
+    border-radius: 6px;
+    background: light-dark(#ffffff, #151b23);
+    box-shadow: 0 4px 16px #0003;
+    color: light-dark(#59636e, #9198a1);
+    color-scheme: light dark;
+    font: 12px -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  #find[hidden] { display: none; }
+  /* Bottom left of the preview, across from the conversation's toggle */
+  body.editor-shown #find { left: calc(45% + 20px); }
+  #find input {
+    width: 200px;
+    padding: 0 8px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: light-dark(#1f2328, #e6edf3);
+    font: 14px -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  #find-count { min-width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
+  /* Its marks sit over the text, see-through so the text shows. (Blending
+     them with the text instead fails in WebKit once the helix pane's canvas
+     is on the page.) */
+  #find-marks { position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
+  #find-marks > div {
+    position: absolute;
+    border-radius: 2px;
+    background: rgba(255, 230, 0, 0.5);
+  }
+  /* The current match in the page's link blue, ringed, so it stands apart
+     from the yellow of the rest */
+  #find-marks > .current {
+    background: rgba(9, 105, 218, 0.3);
+    box-shadow: 0 0 0 2px #0969da;
+  }
+  @media (prefers-color-scheme: dark) {
+    #find-marks > div { background: rgba(255, 225, 0, 0.42); }
+    #find-marks > .current {
+      background: rgba(88, 166, 255, 0.4);
+      box-shadow: 0 0 0 2px #58a6ff;
+    }
+  }
   #shortcuts kbd {
     padding: 1px 6px;
     border: 1px solid light-dark(#d1d9e0, #3d444d);
@@ -185,6 +242,11 @@ ${
     : ""
 }
 ${chat ? selectionPopover : ""}
+<div id="find-marks"></div>
+<div id="find" role="search" hidden>
+  <input aria-label="Find in the document" placeholder="Find" autocomplete="off" spellcheck="false">
+  <span id="find-count" role="status"></span>
+</div>
 ${shortcutsDialog({ editor, chat })}
 <div id="copied" role="status"></div>
 <script type="module" src="../bundle.js"></script>
