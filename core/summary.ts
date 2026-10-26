@@ -1,10 +1,24 @@
 // A short summary of what a session is working on, for its tab title. Read
 // the user's messages from the transcript (Claude's or Codex's format; pi's
-// extension writes a Claude-shaped one), and ask a small model, through the
-// `ai` CLI, for a label that keeps the previous one unless the work changed.
+// extension writes a Claude-shaped one), and ask a small model, through an
+// LLM CLI, for a label that keeps the previous one unless the work changed.
 
 import { spawn } from "node:child_process"
 import { readFile } from "node:fs/promises"
+
+/** The LLM CLI that writes the summary, with the system prompt in it. It gets
+ * the payload as JSON on stdin and prints the label as plain text. Any CLI
+ * that does that works, like
+ * `["claude", "-p", "--model", "haiku", "--system-prompt", system]`. */
+const summaryCommand = (system: string) => [
+  "ai",
+  "--system",
+  system,
+  "--model",
+  "luna",
+  "--raw",
+  "--ephemeral",
+]
 
 const MESSAGE_WINDOW = 5
 const MAX_MESSAGE_CHARS = 2000
@@ -204,18 +218,15 @@ summary, output nothing.`
 /** The label, or why there isn't one, for the log */
 export type SummaryResult = { summary: string } | { skipped: string }
 
-// Enough of `ai`'s stderr to say why it failed
+// Enough of the CLI's stderr to say why it failed
 const MAX_STDERR_CHARS = 500
 
-/** Calls `ai` with no check first: a missing `ai` fails the spawn, which says
- * so as cheaply as a check would */
+/** Calls the CLI with no check first: a missing CLI fails the spawn, which
+ * says so as cheaply as a check would */
 export function generateSummary(payload: SummaryPayload): Promise<SummaryResult> {
   return new Promise((resolve) => {
-    const child = spawn(
-      "ai",
-      ["--system", SYSTEM_PROMPT, "--model", "luna", "--raw", "--ephemeral"],
-      { stdio: ["pipe", "pipe", "pipe"] },
-    )
+    const [cli, ...args] = summaryCommand(SYSTEM_PROMPT)
+    const child = spawn(cli, args, { stdio: ["pipe", "pipe", "pipe"] })
     let out = ""
     let err = ""
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => (out += chunk))
@@ -224,19 +235,21 @@ export function generateSummary(payload: SummaryPayload): Promise<SummaryResult>
       .on("data", (chunk: string) => (err = (err + chunk).slice(-MAX_STDERR_CHARS)))
     child.on("error", (e: NodeJS.ErrnoException) =>
       resolve({
-        skipped: e.code === "ENOENT" ? "ai not found" : `ai didn't start: ${e.message}`,
+        skipped:
+          e.code === "ENOENT" ? `${cli} not found` : `${cli} didn't start: ${e.message}`,
       }),
     )
-    // Writing to an `ai` that never started or already exited
+    // Writing to a CLI that never started or already exited
     child.stdin.on("error", () => {})
     child.on("close", (code, signal) => {
       if (code !== 0) {
         const why = sanitizeTitle(err)
-        const status = code === null ? `ai killed by ${signal}` : `ai exited ${code}`
+        const status =
+          code === null ? `${cli} killed by ${signal}` : `${cli} exited ${code}`
         return resolve({ skipped: why ? `${status}: ${why}` : status })
       }
       const summary = sanitizeTitle(out).slice(0, 100)
-      resolve(summary ? { summary } : { skipped: "ai returned nothing" })
+      resolve(summary ? { summary } : { skipped: `${cli} returned nothing` })
     })
     child.stdin.end(JSON.stringify(payload))
   })
