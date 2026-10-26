@@ -1,15 +1,14 @@
-// The file page's editor pane, next to the preview. It runs Helix in a
-// terminal, and there's no setting to pick another editor; these interfaces
-// are where one would go. There are two levels:
+// The file page's editor pane, next to the preview. There's no setting to
+// pick the editor; these interfaces are where one goes. There are two levels:
 //
 // - What fills the pane, here: an EditorBackend on the server, one per open
 //   file, and an EditorPane in the page. The backend gets every socket the
 //   pane opens, at <id>/editor, and the two speak whatever protocol they
-//   like on it. The pane that's there now is a terminal (pty.ts and
-//   terminal_pane.ts). An editor that runs in the page, like CodeMirror,
-//   would be another pair.
+//   like on it. One pair is a terminal (pty.ts and terminal_pane.ts). The
+//   other is CodeMirror, running in the page (codemirror_backend.ts and
+//   codemirror_pane.ts), an example the user is trying out.
 // - Which editor runs in that terminal: terminal_editor.ts, with Helix
-//   (helix.ts and helix_command.ts) as the one implementation.
+//   (helix.ts and helix_command.ts) as the one in use.
 //
 // Both are chosen in files.ts (the backend) and client.ts (the pane).
 //
@@ -20,9 +19,9 @@
 // - Never write over a version of the file newer than the one it last loaded
 //   or saved, which may be the agent's edit.
 // - Take the agent's edits: reload when nothing is unsaved, and otherwise
-//   merge the file on disk into the unsaved text. Helix's fork does a
-//   three-way merge against the last save and leaves overlaps as conflict
-//   markers, which the preview renders.
+//   merge the file on disk into the unsaved text. Helix's fork and the
+//   CodeMirror pane do a three-way merge against the last save and leave
+//   overlaps as conflict markers, which the preview renders.
 //
 // A page-side editor has the file's text already: the doc socket pushes it on
 // every change (doc.ts), and the preview element holds it (preview.ts).
