@@ -306,6 +306,38 @@ export async function selectTab(session: string, tab: string): Promise<void> {
   if (!success) throw new Error(`rex do session.select: ${stderr.trim()}`)
 }
 
+/** Run `command` in a floating pane over most of the tab with `block`, which
+ * closes when the command exits. The tab is named because Rex otherwise puts
+ * the float in its active tab, which may be another. Rex runs the command
+ * through a login shell, which can skip PATH setup an interactive shell does,
+ * so it gets this process's PATH in front. */
+export async function openFloat(
+  session: string,
+  block: string,
+  { label, command, focus }: { label: string; command: string[]; focus: boolean },
+): Promise<void> {
+  const view = parseView(await call("session.view", { session_id: session }))
+  const tab = view?.windows.find((w) => w.blocks.includes(block))
+  if (!tab) throw new Error(`no tab in ${session} has ${block}`)
+  await call("session.new_layer", {
+    session_id: session,
+    window_id: tab.id,
+    bounds: [0.05, 0.05, 0.9, 0.9],
+    focus,
+    layout: {
+      block: {
+        flavor: "com.superlogical.terminal.shell",
+        label,
+        options: {
+          cwd: process.cwd(),
+          path_prepend: process.env.PATH?.split(":") ?? [],
+          command,
+        },
+      },
+    },
+  })
+}
+
 /** A block's directory from a `process` result or `process_changed` event:
  * the foreground process's, which follows cds without shell integration */
 const cwdOf = (p: unknown) =>

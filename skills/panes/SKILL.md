@@ -61,7 +61,8 @@ To block until a pane's command exits, `rex wait --for 10m <id>` returns that
 command's exit status. It works on `--keep-open` panes too, since it waits for
 the command, not the pane. For long waits, run it as a background command so
 you're told when it ends. For a markdown file, `ah view open <file> --in
-split` opens it in `glow` above you.
+split` opens it in `glow` above you, and `--in float` in a floating pane over
+your tab that closes when the user quits `glow`.
 
 ## Sandbox
 

@@ -24,6 +24,8 @@ import {
 } from "../subjects/files/cli.ts"
 import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
+import { focusHere } from "../platform/focus.ts"
+import { openFloat } from "../platform/rex.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
 import { sendToTab } from "../core/send.ts"
@@ -114,10 +116,11 @@ view
       [
         "window: a window of its own, with its own Dock tile; tab: the default browser;",
         "split (markdown only): glow in a new Rex split 35% above this terminal, focus staying put;",
+        "float (markdown only): glow in a Rex float over this terminal's tab, closing when glow quits;",
         "here (markdown only): glow in this terminal",
       ].join(" "),
     )
-      .choices(["window", "tab", "split", "here"] as const)
+      .choices(["window", "tab", "split", "float", "here"] as const)
       .default("window" as const),
   )
   .option("--no-editor", "Markdown preview only, without the helix pane")
@@ -144,7 +147,7 @@ view
       die("ah view open --name: URLs only; a file's window is named after it")
     const path = openablePathOrDie(file)
     const kind = fileKind(path)
-    if ((place === "split" || place === "here") && kind === "html") {
+    if ((place === "split" || place === "float" || place === "here") && kind === "html") {
       die(`ah view open --in ${place}: glow only shows markdown`)
     }
     // glow's TUI watches the file itself and keeps scroll position across reloads
@@ -167,6 +170,20 @@ view
         "--tui",
         path,
       ])
+    }
+    if (place === "float") {
+      const session =
+        process.env.REX_SESSION ?? die("ah view open --in float: not running in Rex")
+      const block =
+        process.env.REX_BLOCK ?? die("ah view open --in float: not running in Rex")
+      // It covers the caller's pane, so it takes focus by the same rule as a
+      // window: when the person is looking at that pane
+      const { take } = await focusHere()
+      return await openFloat(session, block, {
+        label: basename(path),
+        command: ["glow", "--tui", path],
+        focus: take,
+      })
     }
     if (place === "here") return await runInherited("glow", ["--tui", path])
     const { url, views } = await showInServer(kind, port, path)
