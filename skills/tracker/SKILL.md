@@ -152,6 +152,11 @@ spinner and states as Go until then. A comment is not a Go: don't start the
 item's work unless the comment asks for it. Selection comments on an item's
 text work the same way.
 
+Clicking an item's or step's status icon opens a menu of statuses, and a
+pick arrives as `set item <id> to <status>: <title>` (or `step 3B`). Set
+that status in the file, as the user's own change, and post `done` for the
+request. The icon shows a spinner until then.
+
 ## Finishing
 
 The user usually parks or finishes a tracker with the buttons by its title.

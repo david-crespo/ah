@@ -19,7 +19,8 @@
 // which posts a `go` request with the item's id and title into the page's
 // thread (views/html/requests.ts); a question item waits for the user's
 // answer instead. Every item gets a comment button, which opens a box for an
-// `item-comment` request. Each button shows its last request's state from
+// `item-comment` request. Each status icon opens a menu of statuses, and a
+// pick posts a `status` request for the agent to set it. Each button shows its last request's state from
 // the thread the page's socket carries (chat.js re-dispatches it as `ah-thread` on
 // the document). The page reloads on every edit, so which items are open,
 // and an unsent comment, are kept across reloads.
@@ -83,8 +84,12 @@ const draftKey = `ah-tracker-draft:${location.pathname}`
 
 let thread: ThreadSnapshot | null = null
 
-/** A button that posts a request of its kind about an item into the thread,
- * showing the state of the last one */
+/** An item, or one of its steps by letter: item 3's second step is
+ * { item: "3", step: "B" } */
+type Target = { item: string; step?: string }
+
+/** A button that posts a request of its kind about an item or step into the
+ * thread, showing the state of the last one */
 class RequestButton {
   el = document.createElement("button")
   /** A post whose request the thread hasn't shown yet */
@@ -93,19 +98,24 @@ class RequestButton {
   #error: string | null = null
 
   readonly kind: string
-  readonly item: () => string
+  readonly target: () => Target
 
-  constructor(className: string, kind: string, item: () => string) {
+  constructor(className: string, kind: string, target: () => Target) {
     this.kind = kind
-    this.item = item
-    this.el.className = `ah-item-action ${className}`
+    this.target = target
+    this.el.className = className
     this.el.type = "button"
   }
 
   get state(): ButtonState {
     if (this.#error) return "error"
+    const { item, step = "" } = this.target()
     const sent = thread?.entries.findLast(
-      (e) => e.type === "request" && e.kind === this.kind && e.args.item === this.item(),
+      (e) =>
+        e.type === "request" &&
+        e.kind === this.kind &&
+        e.args.item === item &&
+        (e.args.step ?? "") === step,
     )
     const request = sent && thread?.requests.find((r) => r.id === sent.id)
     switch (request?.status) {
@@ -141,6 +151,7 @@ class RequestButton {
     text: string | undefined,
     title: string,
     rerender: () => void,
+    args: Record<string, string> = {},
   ): Promise<boolean> {
     if (!threadUrl || this.#sending) return false
     this.#sending = true
@@ -150,7 +161,7 @@ class RequestButton {
       const request: RequestInput = {
         kind: this.kind,
         text,
-        args: { item: this.item(), title },
+        args: { ...this.target(), title, ...args },
       }
       const response = await fetch(new URL("request", threadUrl), {
         method: "POST",
@@ -252,6 +263,92 @@ class CommentBox {
 
 const commentBox = new CommentBox()
 
+/** The statuses the user can pick: a question is the agent's */
+const PICKABLE = ["todo", "doing", "done", "dropped", "hold"] as const
+
+/** The page's one status menu, under the status icon it's for. A pick posts
+ * a `status` request: the agent sets it in the file. */
+class StatusMenu {
+  el = document.createElement("div")
+  #button: RequestButton | null = null
+  #pick: ((status: string) => void) | null = null
+
+  constructor() {
+    this.el.className = "ah-status-menu"
+    this.el.setAttribute("role", "menu")
+    this.el.hidden = true
+    for (const status of PICKABLE) {
+      const option = document.createElement("button")
+      option.type = "button"
+      option.setAttribute("role", "menuitem")
+      option.dataset.status = status
+      option.innerHTML = `${STATUS_ICONS[status]}<span>${status}</span>`
+      option.addEventListener("click", () => {
+        const pick = this.#pick
+        this.close()
+        pick?.(status)
+      })
+      this.el.append(option)
+    }
+    document.addEventListener("mousedown", (e) => {
+      const target = e.target as Node
+      if (this.#button && !this.el.contains(target) && !this.#button.el.contains(target))
+        this.close()
+    })
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.#button) this.close()
+    })
+  }
+
+  /** Open it under `button`, or close it if it's already there. Not while
+   * the last status sent is still with the agent. */
+  toggle(button: RequestButton, current: Status, pick: (status: string) => void) {
+    if (this.#button === button) return this.close()
+    if (button.state === "pending") return
+    if (!this.el.isConnected) document.body.append(this.el)
+    this.#button = button
+    this.#pick = pick
+    for (const option of this.el.querySelectorAll<HTMLButtonElement>("button")) {
+      option.disabled = option.dataset.status === current
+    }
+    this.el.hidden = false
+    const anchor = button.el.getBoundingClientRect()
+    const maxLeft = document.documentElement.clientWidth - this.el.offsetWidth - 8
+    this.el.style.left = `${window.scrollX + Math.max(8, Math.min(anchor.left - 6, maxLeft))}px`
+    this.el.style.top = `${window.scrollY + anchor.bottom + 6}px`
+    this.el.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus()
+  }
+
+  close() {
+    this.#button = null
+    this.#pick = null
+    this.el.hidden = true
+  }
+}
+
+const statusMenu = new StatusMenu()
+
+/** An item's or step's status icon: a button that opens the status menu
+ * when the page has a thread */
+function statusButton(className: string, host: HTMLElement, target: () => Target) {
+  const button = new RequestButton(className, "status", target)
+  button.el.disabled = !threadUrl
+  return {
+    el: button.el,
+    open: (title: string) =>
+      statusMenu.toggle(
+        button,
+        statusOf(host),
+        (status) => void button.post(undefined, title, () => render(), { status }),
+      ),
+    render: () => render(),
+  }
+  function render() {
+    const status = statusOf(host)
+    button.render(STATUS_ICONS[status], threadUrl ? `${status}: change` : status)
+  }
+}
+
 const statusOf = (el: HTMLElement): Status => {
   const s = el.getAttribute("status") ?? "todo"
   return (STATUSES as readonly string[]).includes(s) ? (s as Status) : "todo"
@@ -260,11 +357,13 @@ const statusOf = (el: HTMLElement): Status => {
 export class AhItem extends HTMLElement {
   static observedAttributes = ["status", "rev"]
   #built = false
-  #icon = document.createElement("span")
+  #status = statusButton("ah-item-status", this, () => ({ item: this.id }))
   #progress = document.createElement("span")
   #rev = document.createElement("code")
-  #go = new RequestButton("ah-item-go", "go", () => this.id)
-  #comment = new RequestButton("ah-item-chat", "item-comment", () => this.id)
+  #go = new RequestButton("ah-item-action ah-item-go", "go", () => ({ item: this.id }))
+  #comment = new RequestButton("ah-item-action ah-item-chat", "item-comment", () => ({
+    item: this.id,
+  }))
   #title = ""
 
   get status(): Status {
@@ -273,6 +372,11 @@ export class AhItem extends HTMLElement {
 
   get commentButton(): HTMLElement {
     return this.#comment.el
+  }
+
+  /** The title as the page shows it */
+  get itemTitle(): string {
+    return this.#title
   }
 
   connectedCallback() {
@@ -286,7 +390,6 @@ export class AhItem extends HTMLElement {
 
     const head = document.createElement(rest.length ? "summary" : "div")
     head.className = "ah-item-head"
-    this.#icon.className = "ah-item-status"
     const id = document.createElement("span")
     id.className = "ah-item-id"
     id.textContent = this.id
@@ -305,7 +408,8 @@ export class AhItem extends HTMLElement {
       () => void this.#go.post(undefined, this.#title, () => this.#render()),
     )
     onClick(this.#comment.el, () => commentBox.toggle(this))
-    head.append(this.#icon, id, title)
+    if (threadUrl) onClick(this.#status.el, () => this.#status.open(this.#title))
+    head.append(this.#status.el, id, title)
     if (rest.length) {
       const chevron = document.createElement("span")
       chevron.className = "ah-item-chevron"
@@ -374,8 +478,7 @@ export class AhItem extends HTMLElement {
 
   #render() {
     const status = this.status
-    this.#icon.innerHTML = STATUS_ICONS[status]
-    this.#icon.title = status
+    this.#status.render()
     const rev = this.getAttribute("rev")
     this.#rev.textContent = rev ?? ""
     this.#rev.hidden = !rev
@@ -389,7 +492,8 @@ export class AhItem extends HTMLElement {
 
 document.addEventListener("ah-thread", (e) => {
   thread = (e as CustomEvent<ThreadSnapshot>).detail
-  for (const item of document.querySelectorAll<AhItem>("ah-item")) item.update()
+  for (const el of document.querySelectorAll<AhItem | AhStep>("ah-item, ah-step"))
+    el.update()
 })
 
 customElements.define("ah-item", AhItem)
@@ -398,8 +502,14 @@ customElements.define("ah-item", AhItem)
 export class AhStep extends HTMLElement {
   static observedAttributes = ["status", "rev"]
   #built = false
-  #icon = document.createElement("span")
+  #letter = ""
+  #status = statusButton("ah-step-status", this, () => ({
+    item: this.#item()?.id ?? "",
+    step: this.#letter,
+  }))
   #rev = document.createElement("code")
+
+  #item = () => this.closest<AhItem>("ah-item")
 
   connectedCallback() {
     if (this.#built) return
@@ -410,13 +520,17 @@ export class AhStep extends HTMLElement {
     // Dropped steps keep their letter, so the later ones don't shift
     const letter = document.createElement("span")
     letter.className = "ah-step-letter"
-    const index = [...(this.closest("ah-item")?.querySelectorAll("ah-step") ?? [])].indexOf(
-      this,
-    )
-    letter.textContent = String.fromCharCode(65 + Math.max(index, 0))
-    this.#icon.className = "ah-step-status"
+    const index = [...(this.#item()?.querySelectorAll("ah-step") ?? [])].indexOf(this)
+    this.#letter = String.fromCharCode(65 + Math.max(index, 0))
+    letter.textContent = this.#letter
+    // Only a step in an item, lettered A to Z, can be named in a request
+    if (threadUrl && index >= 0 && index < 26) {
+      this.#status.el.addEventListener("click", () =>
+        this.#status.open(this.#item()?.itemTitle ?? ""),
+      )
+    } else this.#status.el.disabled = true
     this.#rev.className = "ah-item-rev"
-    this.replaceChildren(this.#icon, letter, text, this.#rev)
+    this.replaceChildren(this.#status.el, letter, text, this.#rev)
     this.#render()
   }
 
@@ -424,10 +538,13 @@ export class AhStep extends HTMLElement {
     if (this.#built) this.#render()
   }
 
+  /** Update the status icon from the thread */
+  update() {
+    if (this.#built) this.#render()
+  }
+
   #render() {
-    const status = statusOf(this)
-    this.#icon.innerHTML = STATUS_ICONS[status]
-    this.#icon.title = status
+    this.#status.render()
     const rev = this.getAttribute("rev")
     this.#rev.textContent = rev ?? ""
     this.#rev.hidden = !rev

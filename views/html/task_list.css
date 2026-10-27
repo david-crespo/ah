@@ -567,3 +567,107 @@ ah-step .ah-item-rev {
     margin: 0 0 6px;
   }
 }
+
+/* An item's or step's status icon is a button that opens the status menu,
+   and shows the state of the status request it sent */
+.ah-item-status,
+.ah-step-status {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+}
+
+.ah-item-status:not(:disabled),
+.ah-step-status:not(:disabled) {
+  cursor: pointer;
+}
+
+:is(.ah-item-status, .ah-step-status):hover:not(:disabled) svg {
+  border-radius: 50%;
+  background: var(--t-hover);
+  box-shadow: 0 0 0 2px var(--t-hover);
+}
+
+ah-item :is(.ah-item-status, .ah-step-status)[data-state="pending"] {
+  color: var(--t-blue);
+}
+
+ah-item :is(.ah-item-status, .ah-step-status)[data-state="error"] {
+  color: var(--t-red);
+}
+
+:is(.ah-item-status, .ah-step-status) .spin {
+  stroke-dasharray: 70 30;
+  transform-origin: 8px 8px;
+  animation: ah-item-spin 0.9s linear infinite;
+}
+
+/* The status menu (task_list.ts), under the icon it's for */
+.ah-status-menu {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border: 1px solid var(--t-line);
+  border-radius: 8px;
+  background: var(--t-page);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+
+.ah-status-menu[hidden] {
+  display: none;
+}
+
+.ah-status-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--t-ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ah-status-menu button:hover:not(:disabled),
+.ah-status-menu button:focus-visible {
+  background: var(--t-hover);
+  outline: none;
+}
+
+.ah-status-menu button:disabled {
+  color: var(--t-muted);
+  cursor: default;
+}
+
+.ah-status-menu svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ah-status-menu svg .fill {
+  fill: currentColor;
+  stroke: none;
+}
+
+.ah-status-menu [data-status="doing"] svg {
+  color: var(--t-blue);
+}
+
+.ah-status-menu [data-status="done"] svg {
+  color: var(--t-green);
+}
+
+.ah-status-menu [data-status="hold"] svg {
+  color: var(--t-yellow);
+}

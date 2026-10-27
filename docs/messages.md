@@ -31,6 +31,7 @@ The rest of the request depends on its kind (`subjects/thread/kinds.ts`, `views/
 | `dellm`        | a selection's de-LLM button     | `de-LLM the passage "<selection>" (...): rewrite it to sound like a person`, then `. Guidance: <text>` if there is any |
 | `go`           | a tracker item's Go button      | `Go ahead with item <id>: <title>`                                                                                     |
 | `item-comment` | a tracker item's comment button | `a comment on item <id>: <title>`, a blank line, then the text                                                         |
+| `status`       | a tracker status icon's menu    | `set item <id> to <status>: <title>`, or `step <id><letter>`                                                           |
 
 Selections are quoted from the rendered text, not the source, with up to 60 characters of surrounding context (`<prefix>` and `<suffix>`) on each side to tell repeated passages apart. If the selection is inside an embed, like a code snippet from a GitHub permalink, the request adds `in the embed of <url>` after the passage.
 
@@ -185,7 +186,7 @@ Both request endpoints take chat messages and selection comments. For example:
 }
 ```
 
-`kind` is required. `chat` requires `text`, and `comment` also requires `args.selection`. The other request kinds are listed under [Requests from a page](#requests-from-a-page); `go` and `item-comment` only work on HTML pages. `replyTo` is optional and names the earlier request you're answering. Successful requests return `request` and `agentConnected`, just like in the button example.
+`kind` is required. `chat` requires `text`, and `comment` also requires `args.selection`. The other request kinds are listed under [Requests from a page](#requests-from-a-page); `go`, `item-comment` and `status` only work on HTML pages. `replyTo` is optional and names the earlier request you're answering. Successful requests return `request` and `agentConnected`, just like in the button example.
 
 The WebSockets send a snapshot on connect and whenever the thread changes: `type` is `"thread"`, `file` is the absolute path, `entries` is the conversation history, and `requests` holds the current request states. `agentConnected` indicates whether the bound agent is reachable, and `replay` is true on the initial snapshot. On HTML pages, `ah`'s injected script already listens to this socket and dispatches an `ah-thread` event on `document` with the snapshot in `event.detail`.
 
