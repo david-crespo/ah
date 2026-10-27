@@ -30,16 +30,23 @@ function logPath(kind: FileKind, file: string): string {
   return join(dir, file.replaceAll("/", "-") + ".comments.jsonl")
 }
 
-/** The one line before the requests in every post. The skill explains how
- * to answer, so the header only says where they're from. */
+/** The one line before the requests in every post: where they're from,
+ * and the command that answers them, so the agent doesn't have to work out
+ * the file's path or the server's port. The skill explains the rest. */
 export function header(
   { kind, title }: Pick<ThreadOptions, "kind" | "title">,
   file: string,
   port: number,
 ): string {
-  const where = port === DEFAULT_PORT ? "" : `, port ${port}`
+  const portFlag = port === DEFAULT_PORT ? "" : ` -p ${port}`
   const tool = title ?? kind[0].toUpperCase() + kind.slice(1)
-  return `${tool} requests for ${file} (handle per /${kind} skill${where}):`
+  const respond = `ah message respond${portFlag} ${shellWord(file)} <phase> <request ids>`
+  return `${tool} requests for ${file} (handle per /${kind} skill, answer with ${respond}):`
+}
+
+/** A path as one shell word, single-quoted only if it needs to be */
+function shellWord(path: string): string {
+  return /^[\w./~+-]+$/.test(path) ? path : `'${path.replaceAll("'", `'\\''`)}'`
 }
 
 /** A request as the agent reads it */

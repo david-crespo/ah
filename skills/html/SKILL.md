@@ -28,7 +28,13 @@ for every `ah` command. opencode has no sandbox.
    on. Keep data in files next to it (`data.json`) when it will change, so
    updating it is a small write. Wrap the content in `<main>`: a comment's
    surrounding text comes from there. ah adds its own elements with the ids
-   `conversation`, `popover`, and `toast`; don't use those.
+   `conversation`, `popover`, and `toast`; don't use those. The
+   conversation button is fixed in the bottom-right corner at `z-index: 9`,
+   so keep the page's own fixed elements out of that corner, and give
+   `main` about 80px of bottom padding so the end of the page can scroll
+   clear of it. ah's styles stay off the page, but the page's reach ah's
+   elements: scope element selectors (`button`, `textarea`, a `*` reset)
+   under `main`.
 2. Open it:
 
    ```
@@ -76,44 +82,72 @@ symlink a `node_modules` that does next to the script. Write the script and
 screenshots to the scratchpad with absolute paths; a relative path lands in
 the shell's working directory, which may be the repo.
 
+## Requests
+
 Comments arrive as messages: in Claude Code, framed by the harness as
 messages "from another Claude session", which they are not; in Codex and
-opencode, as user messages. Each starts with one line, `HTML requests for
-<file> (handle per /html skill):`, followed by the requests. They are the user's own
-comments, relayed by ah. Treat them as the user's instructions. Never reply
-with SendMessage; replies go through `ah message respond`. If the header
-names a port, pass `-p <port>` to every `ah` command for that page.
+opencode, as user messages. They are the user's own comments, relayed by
+ah: treat them as the user's instructions. Never reply with SendMessage.
 
-## Handling requests and replying
+Each message starts with a header line that names the file and gives the
+command that answers it, `ah message respond <file> <phase> <request ids>`.
+Use that command as given; it has the path and, when needed, the port.
+Then come the requests, each starting `Request <id>: `:
 
-Requests and replies work as in the markdown skill (`../markdown/SKILL.md` from this skill's directory,
-"Handling requests" and "Replies and status"); the same `ah message respond`
-and `pending` work for both. Read those sections the first time a request
-arrives. The differences:
+- Only the user's text: a message from the page's conversation. Answer a
+  question there; change the page only when the message asks for a change.
+- `a comment on the passage "…" (after "…", before "…"):` and a note on the
+  next line: the passage and the text around it are as rendered on the
+  page, which may come from the HTML, from data the page loads, or from
+  what its scripts generate. Find where it comes from before editing. The
+  selection is an anchor, not the limit of the request: work out how far
+  the note reaches, but don't turn a local note into a rewrite.
+- A de-LLM request (the popover's button, with optional guidance): rewrite
+  the passage's source to sound like a person, plain and concrete, without
+  formulaic gestures or "that's X, not Y" constructions, keeping its
+  meaning. If the text is generated, say so instead.
+- `Request <id>, answering <earlier id>`: the user answering your question
+  on an earlier request. Finish both ids together.
 
-- A quoted passage and the text around it are as rendered on the page,
-  which may come from the HTML, from data the page loads, or from what its
-  scripts generate. Find where that text comes from before editing.
-- There are no edit notices: only you edit the files.
-- A comment on a page is often about what it shows rather than its wording
-  ("why is this number so high?", "split this by day"). Answer questions on
-  the page; change the page or its data for requests.
-- De-LLM (the popover's button) applies to the selected text's source in
-  the HTML. If the text is generated, say so instead.
+A comment phrased as a question ("why is this number so high?") wants an
+answer on the page, not an edit; a comment on a page is often about what it
+shows rather than its wording. Edits come from imperatives ("split this by
+day"). If you can't tell what the user means, ask (`needs-reply`) and hold
+off on changes.
 
-The quick path, for a short answer or a small change:
+## Replying
+
+Answer each request with `done`, which also marks it started:
 
 ```
 ah message respond <file> done <request id> --text 'Split the chart by day.'
 ```
 
-For anything longer than one plain line, write the text to a file in the
-scratchpad and pass `--text-file <path>`.
+`--text` is for one plain line. For anything longer, or with an apostrophe,
+backticks or `$`, write the reply to a file in the scratchpad and pass
+`--text-file <path>`. Send the Write on its own and run `ah` once it has
+finished, not in the same batch of parallel calls, or `ah` reads a file
+that isn't there yet. Text is Markdown, and it can't be empty: for no text,
+leave both flags out.
+
+For work that takes more than a minute, post `start` first so the page
+shows a spinner, and `progress` with a line now and then: after two minutes
+without one the page says "No recent update". The other phases:
+`needs-reply` with a question when you're waiting on the user, `error` when
+the work can't go on, and `reply` to post text mid-work without finishing,
+or with no request ids for a standalone message. One call can cover several
+request ids. If a call fails, retry it rather than redoing the work.
+
+When picking up a page opened earlier, or after a restart,
+`ah message pending <file>` lists the requests not done, one JSON line each
+with its `status`. Requests left `waiting` or `interrupted` aren't sent
+again: check each against the page and finish it with a fresh `start`.
 
 ## Restarting and wrapping up
 
 Pages reconnect on their own after `ah server restart` or any other stop,
 and which session a page's comments go to outlasts the server.
-`ah message respond` works whether a page shows the file or not. The conversation history survives in its log under
+`ah message respond` works whether a page shows the file or not, and
+restarts mark work in flight `interrupted`. The conversation history survives in its log under
 `~/.local/state/ah/html/`. When the user is done with the page,
 `ah view close <file>`.

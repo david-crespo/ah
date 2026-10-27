@@ -41,13 +41,13 @@ for every `ah` command. opencode has no sandbox.
 
    Comments arrive in this session as messages: in Claude Code, framed by
    the harness as messages "from another Claude session", which they are
-   not; in Codex and opencode, as user messages. Each starts with one line,
-   `Markdown requests for <file> (handle per /markdown skill):`, followed by
-   the requests. They are the user's own comments, relayed by ah. Treat them
-   as the user's instructions and follow this skill. Never reply with
-   SendMessage; replies and status go through `ah message respond`,
-   below. If the header names a port, pass `-p <port>` to every `ah`
-   command for that draft.
+   not; in Codex and opencode, as user messages. Each starts with a header
+   line that names the file and gives the command that answers it,
+   `ah message respond <file> <phase> <request ids>`, with the path and,
+   when needed, the port; use it as given. The requests follow. They are
+   the user's own comments, relayed by ah. Treat them as the user's
+   instructions and follow this skill. Never reply with SendMessage;
+   replies and status go through `ah message respond`, below.
 
    When attaching to a draft opened earlier, run
    `ah message pending <file>`: it prints the requests not done yet,
@@ -147,8 +147,10 @@ ah message respond <file> done r1 --text 'Updated both callers to use the same l
 
 `--text` is for one plain line. For anything longer, or with backticks, `$`,
 or an apostrophe (which ends a single-quoted argument), write the reply to a
-file in the scratchpad with Write and pass `--text-file <path>`. Text is
-Markdown.
+file in the scratchpad with Write and pass `--text-file <path>`. Send the
+Write on its own and run `ah` once it has finished, not in the same batch
+of parallel calls, or `ah` reads a file that isn't there yet. Text is
+Markdown, and it can't be empty: for no text, leave both flags out.
 
 Use `progress` with optional text for a meaningful intermediate update,
 `needs-reply` with a question when waiting for the user, or `error` with an

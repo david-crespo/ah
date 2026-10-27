@@ -13,12 +13,12 @@ Everything `ah` sends an agent is plain text. It appears to the agent as if you 
 Requests from a page (comments, chat messages, Go buttons) belong to a thread, with one thread per file. Each message sent to the agent has a header line, any context lines, and then one line per request:
 
 ```
-Markdown requests for /Users/david/repos/ah/README.md (handle per /markdown skill):
+Markdown requests for /Users/david/repos/ah/README.md (handle per /markdown skill, answer with ah message respond /Users/david/repos/ah/README.md <phase> <request ids>):
 Request 22e00d40-34dd-4d34-a7f7-1f04315e1416: a comment on the passage "a session ID":
 accurate?
 ```
 
-The header tells the agent which file the message is for and which agent skill says how to handle it. The header starts with `Markdown` for a markdown file or `HTML` for an HTML page or task tracker. It appends `, port <n>` inside the parentheses when the server isn't on the default port (`subjects/thread/thread.ts`).
+The header tells the agent which file the message is for, which agent skill says how to handle it, and the command that answers it. The header starts with `Markdown` for a markdown file or `HTML` for an HTML page or task tracker. The command has `-p <n>` when the server isn't on the default port, and the path is quoted if it isn't one shell word (`subjects/thread/thread.ts`).
 
 Each request starts with `Request <id>: `, or `Request <id>, answering <earlier id>: ` when you're replying to a question from the agent. The agent passes that request ID back to `ah message respond`.
 
@@ -156,7 +156,7 @@ This registers the file, binds it to that agent, and opens the page. The printed
 Click **Say hello**. The POST returns a `request` object with an `id`, along with `agentConnected` to indicate whether it reached the agent. The agent receives:
 
 ```text
-HTML requests for /path/to/workspace/hello/index.html (handle per /html skill):
+HTML requests for /path/to/workspace/hello/index.html (handle per /html skill, answer with ah message respond /path/to/workspace/hello/index.html <phase> <request ids>):
 Request <request-id>: Say hello in this page's chat.
 ```
 

@@ -214,15 +214,23 @@ test("a held request keeps the edit notice it came with", async () => {
   }
 })
 
-test("the header names the port only when it isn't the default", () => {
+test("the header gives the reply command, with the port only when it isn't the default", () => {
   expect(header({ kind: "markdown" }, "/d.md", 7420)).toEqual(
-    "Markdown requests for /d.md (handle per /markdown skill):",
+    "Markdown requests for /d.md (handle per /markdown skill, answer with ah message respond /d.md <phase> <request ids>):",
   )
-  expect(header({ kind: "markdown" }, "/d.md", 7499)).toContain("port 7499")
+  expect(header({ kind: "markdown" }, "/d.md", 7499)).toContain(
+    "ah message respond -p 7499 /d.md <phase>",
+  )
+})
+
+test("the header quotes a path that isn't one shell word", () => {
+  expect(header({ kind: "markdown" }, "/my notes/it's.md", 7420)).toContain(
+    "ah message respond '/my notes/it'\\''s.md' <phase>",
+  )
 })
 
 test("a type can title itself in the header", () => {
-  expect(header({ kind: "html", title: "HTML" }, "/d.html", 7420)).toEqual(
-    "HTML requests for /d.html (handle per /html skill):",
+  expect(header({ kind: "html", title: "HTML" }, "/d.html", 7420)).toMatch(
+    /^HTML requests for \/d\.html \(handle per \/html skill, /,
   )
 })
