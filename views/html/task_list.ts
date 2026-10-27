@@ -14,7 +14,7 @@
 //
 //   <ah-step status="done" rev="pqqsyksr">What the step does</ah-step>
 //
-// and its title line counts the ones done. Steps are lettered in order, so
+// and its title line shows a dot per step in its status's color. Steps are lettered in order, so
 // the second step of item 3 is 3B. Open and hold items get a Go button,
 // which posts a `go` request with the item's id and title into the page's
 // thread (views/html/requests.ts); a question item waits for the user's
@@ -312,13 +312,25 @@ export class AhItem extends HTMLElement {
       chevron.innerHTML = svg(`<path d="m6 4.5 3.5 3.5L6 11.5"/>`)
       head.append(chevron)
     }
-    // The page reloads on every edit, so the steps are counted once
+    // A dot per step beside the title, so an item with steps stands out while
+    // it's closed. The page reloads on every edit, so they're made once.
     const steps = [...this.querySelectorAll<HTMLElement>("ah-step")]
       .map(statusOf)
       .filter((s) => s !== "dropped")
     this.#progress.className = "ah-item-progress"
     this.#progress.hidden = !steps.length
-    this.#progress.textContent = `${steps.filter((s) => s === "done").length}/${steps.length}`
+    const label = `${steps.filter((s) => s === "done").length} of ${steps.length} steps done`
+    this.#progress.title = label
+    this.#progress.setAttribute("role", "img")
+    this.#progress.setAttribute("aria-label", label)
+    this.#progress.replaceChildren(
+      ...steps.map((s) => {
+        const dot = document.createElement("span")
+        dot.className = "ah-item-dot"
+        dot.dataset.status = s
+        return dot
+      }),
+    )
     head.append(this.#progress, this.#rev, this.#comment.el, this.#go.el)
 
     if (rest.length) {

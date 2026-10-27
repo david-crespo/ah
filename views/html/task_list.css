@@ -312,25 +312,43 @@ ah-item:hover .ah-item-action,
   }
 }
 
-/* Steps done of the item's steps, right-aligned like the rev */
+/* A dot per step, after the chevron on the title's first line: filled in
+   its status's color once started, an outline while todo */
 .ah-item-progress {
   flex: none;
-  margin-left: auto;
-  color: var(--t-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 1lh;
 }
 
 .ah-item-progress[hidden] {
   display: none;
 }
 
-.ah-item-progress:not([hidden]) + .ah-item-rev {
-  margin-left: 0;
+.ah-item-dot {
+  width: 7px;
+  height: 7px;
+  box-sizing: border-box;
+  border: 1.2px solid var(--t-muted);
+  border-radius: 50%;
 }
 
-.ah-item-progress:not([hidden]) ~ .ah-item-chat {
-  margin-left: 0;
+.ah-item-dot[data-status="done"] {
+  border-color: var(--t-green);
+  background: var(--t-green);
+}
+
+.ah-item-dot[data-status="doing"] {
+  border-color: var(--t-blue);
+  background: var(--t-blue);
+}
+
+.ah-item-dot[data-status="hold"],
+.ah-item-dot[data-status="question"] {
+  border-color: var(--t-yellow);
+  background: var(--t-yellow);
 }
 
 .ah-item-rev:not([hidden]) + .ah-item-chat {

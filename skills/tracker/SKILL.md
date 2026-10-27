@@ -78,8 +78,9 @@ item in the one that fits:
   file. Use `<p>`, `<ul>`, `<code>`, `<a>`. The detail should be enough to act
   on without the conversation.
 - Work that takes more than one rev gets steps, in order, each with its own
-  `status` and `rev`. The page shows each step's status icon and counts the
-  done ones on the item's title line, so the user can see where things are.
+  `status` and `rev`. The page shows each step's status icon, and a dot per
+  step in its status's color on the item's title line, so the user can see
+  where things are.
   Update a step's status as you go, like an item's. Steps are lettered in
   order, so the second step of item 3 is 3B; refer to them that way in chat.
   Mark a step dropped rather than deleting it, so the letters don't shift.
