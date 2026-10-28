@@ -75,13 +75,6 @@ skill's LAN proxy), so make it work at 390px wide:
   the first line: `align-self: flex-start; height: 1lh` with the icon
   centered in that box.
 
-Check it before telling the user: screenshot it with Playwright's WebKit as
-`devices['iPhone 13']` with `colorScheme: 'dark'`, and screenshot each
-`svg` element on its own to read its labels. If the repo has no Playwright,
-symlink a `node_modules` that does next to the script. Write the script and
-screenshots to the scratchpad with absolute paths; a relative path lands in
-the shell's working directory, which may be the repo.
-
 ## Requests
 
 Comments arrive as messages: in Claude Code, framed by the harness as
