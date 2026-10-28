@@ -41,7 +41,7 @@ export function header(
   const portFlag = port === DEFAULT_PORT ? "" : ` -p ${port}`
   const tool = title ?? kind[0].toUpperCase() + kind.slice(1)
   const respond = `ah message respond${portFlag} ${shellWord(file)} <phase> <request ids>`
-  return `${tool} requests for ${file} (handle per /${kind} skill, answer with ${respond}):`
+  return `${tool} requests for ${file} (load the /${kind} skill before handling these, and answer on the page with ${respond}):`
 }
 
 /** A path as one shell word, single-quoted only if it needs to be */

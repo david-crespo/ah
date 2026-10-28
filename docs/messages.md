@@ -13,7 +13,7 @@ Everything `ah` sends an agent is plain text. It appears to the agent as if you 
 Requests from a page (comments, chat messages, Go buttons) belong to a thread, with one thread per file. Each message sent to the agent has a header line, any context lines, and then one line per request:
 
 ```
-Markdown requests for /Users/david/repos/ah/README.md (handle per /markdown skill, answer with ah message respond /Users/david/repos/ah/README.md <phase> <request ids>):
+Markdown requests for /Users/david/repos/ah/README.md (load the /markdown skill before handling these, and answer on the page with ah message respond /Users/david/repos/ah/README.md <phase> <request ids>):
 Request 22e00d40-34dd-4d34-a7f7-1f04315e1416: a comment on the passage "a session ID":
 accurate?
 ```
@@ -157,7 +157,7 @@ This registers the file, binds it to that agent, and opens the page. The printed
 Click **Say hello**. The POST returns a `request` object with an `id`, along with `agentConnected` to indicate whether it reached the agent. The agent receives:
 
 ```text
-HTML requests for /path/to/workspace/hello/index.html (handle per /html skill, answer with ah message respond /path/to/workspace/hello/index.html <phase> <request ids>):
+HTML requests for /path/to/workspace/hello/index.html (load the /html skill before handling these, and answer on the page with ah message respond /path/to/workspace/hello/index.html <phase> <request ids>):
 Request <request-id>: Say hello in this page's chat.
 ```
 
