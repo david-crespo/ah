@@ -139,9 +139,10 @@ export function setUpSelectionComments(
   document.getElementById("send")!.addEventListener("click", () => submit("comment"))
   document.getElementById("dellm")!.addEventListener("click", () => submit("dellm"))
   commentText.addEventListener("keydown", (e) => {
-    // ctrl+enter for terminal-browser panes, where cmd chords may not arrive
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      // Unhandled, macOS beeps at the chord
+    // Enter sends and Shift+Enter is a new line, as in the conversation.
+    // Not while an IME is composing, where Enter picks the candidate.
+    if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.isComposing) {
+      // With ⌘, unhandled, macOS beeps at the chord
       e.preventDefault()
       void submit("comment")
     }

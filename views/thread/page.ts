@@ -8,7 +8,7 @@ export const selectionPopover = `<div id="popover">
   <textarea id="comment-text" placeholder="Comment for the agent…"></textarea>
   <div class="row">
     <button id="dellm" title="Rewrite the selection to sound like a person; comment text (if any) is extra guidance">de-LLM</button>
-    <span class="hint">⌘⏎ to send · esc to cancel</span>
+    <span class="hint">⏎ to send · ⇧⏎ new line · esc to cancel</span>
     <button id="send">Send</button>
   </div>
 </div>

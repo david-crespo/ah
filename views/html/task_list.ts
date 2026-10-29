@@ -190,7 +190,7 @@ class CommentBox {
     const row = document.createElement("div")
     row.className = "ah-item-comment-row"
     const hint = document.createElement("span")
-    hint.textContent = "⌘⏎ to send · esc to close"
+    hint.textContent = "⏎ to send · ⇧⏎ new line · esc to close"
     const send = document.createElement("button")
     send.type = "button"
     send.textContent = "Send"
@@ -199,9 +199,10 @@ class CommentBox {
     this.el.append(this.#text, row)
     this.#text.addEventListener("input", () => this.#saveDraft())
     this.#text.addEventListener("keydown", (e) => {
-      // ctrl+enter for terminal-browser panes, where cmd chords may not arrive
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-        // Unhandled, macOS beeps at the chord
+      // Enter sends and Shift+Enter is a new line, as in the conversation.
+      // Not while an IME is composing, where Enter picks the candidate.
+      if (e.key === "Enter" && !e.shiftKey && !e.altKey && !e.isComposing) {
+        // With ⌘, unhandled, macOS beeps at the chord
         e.preventDefault()
         void this.#send()
       }

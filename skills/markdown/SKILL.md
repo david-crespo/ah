@@ -198,7 +198,7 @@ PR" is a request to change the source, not the draft).
 
 ## User-facing gestures (for reference, not to recite)
 
-- Select text → popover → type comment → ⌘⏎ or Send
+- Select text → popover → type comment → ⏎ or Send (⇧⏎ for a new line)
 - Bottom-right button opens conversation history and a general-message input.
   It spins while the agent is working. Collapsing hides the input and keeps
   unsent text; incoming replies appear as toasts without stealing focus.
