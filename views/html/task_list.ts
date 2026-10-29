@@ -498,6 +498,14 @@ document.addEventListener("ah-thread", (e) => {
 
 customElements.define("ah-item", AhItem)
 
+// Links to other sites open in a new tab: the dashboard shows the page in a
+// frame, and its frame-src keeps that frame on ah's pages. A module runs
+// after the page is parsed, and the page reloads on every edit, so one pass
+// sees every link.
+for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
+  if (!link.target && link.origin !== location.origin) link.target = "_blank"
+}
+
 /** One step of an item: a status icon, its letter, what it does, and its rev */
 export class AhStep extends HTMLElement {
   static observedAttributes = ["status", "rev"]
