@@ -121,6 +121,20 @@ document.addEventListener("keydown", (e) => {
   if (tabs[i].id !== state.focused) void focus(tabs[i].id)
 })
 
+// ⌘I (Ctrl+I in terminal-browser panes) toggles the conversation of the
+// tracker in view, as in its own page; the frame only gets the keys itself
+// once it has been clicked
+document.addEventListener("keydown", (e) => {
+  if (e.key.toLowerCase() !== "i" || !(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey)
+    return
+  const view = state.focused ? docs.get(state.focused)?.view : null
+  if (!(view instanceof HTMLIFrameElement) || !view.contentWindow) return
+  e.preventDefault()
+  // So the compose box it opens takes the keys
+  view.focus()
+  view.contentWindow.postMessage("ah-toggle-conversation", new URL(view.src).origin)
+})
+
 /** The focused workspace's trackers to switch between, and a menu of the
  * parked ones; picking a parked one resumes it */
 function renderTrackers(tab: string | null) {

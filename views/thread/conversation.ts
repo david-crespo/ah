@@ -148,12 +148,7 @@ export class Conversation {
         !event.altKey
       ) {
         event.preventDefault()
-        if (!this.open) {
-          const active = document.activeElement
-          this.returnFocus =
-            active instanceof HTMLElement && active !== document.body ? active : null
-        }
-        this.setOpen(!this.open)
+        this.toggleFromShortcut()
       }
     })
     this.feed.addEventListener("scroll", () => {
@@ -408,6 +403,15 @@ export class Conversation {
         if (available < 0) row.hidden = true
       }
     }
+  }
+  /** ⌘I: open, remembering what had focus to return to it, or close */
+  toggleFromShortcut() {
+    if (!this.open) {
+      const active = document.activeElement
+      this.returnFocus =
+        active instanceof HTMLElement && active !== document.body ? active : null
+    }
+    this.setOpen(!this.open)
   }
   /** Open, the compose box takes focus */
   private setOpen(value: boolean, refocus = true) {

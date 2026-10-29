@@ -48,6 +48,13 @@ if (chat) {
   hidePopover = setUpSelectionComments(content, conversation)
 }
 
+// The dashboard's ⌘I, which only reaches it while its frame of this page
+// isn't focused (views/dashboard/client.ts)
+window.addEventListener("message", (e) => {
+  if (e.source === window.parent && e.data === "ah-toggle-conversation")
+    conversation?.toggleFromShortcut()
+})
+
 // One socket for reloads and the conversation. After a restart the server
 // has forgotten the file until an agent opens it again, so keep retrying.
 let closed = false
