@@ -11,7 +11,8 @@
 // /new, and a restart in its pane. The binding is the directory's (the core
 // keeps it in the registry, on disk), and the directory resolves the agent's
 // address when a comment is posted. If the agent is gone, comments go to
-// another live agent in its tab, which is working from the same tracker. A
+// another live agent in its tab, which is working from the same tracker, or
+// failing that, to one working in the file's workspace. A
 // file shown from a shell in Rex, in no agent session, is bound to an agent in
 // the shell's tab, picked by the user if there are several.
 //
@@ -43,7 +44,7 @@ export interface AgentDirectory {
   binding(path: string): AgentId | null
   /** Where the file's requests go now: `target` if given, else the agent
    * it's bound to; if that one can't be reached, another live agent in its
-   * tab */
+   * tab, else one in the file's workspace */
   route(path: string, target?: AgentId | null): Address | null
   /** Note whether the file's thread holds requests no agent has taken */
   hold(path: string, held: boolean): void

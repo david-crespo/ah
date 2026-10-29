@@ -232,7 +232,25 @@ export class Core implements AgentDirectory {
 
   route(path: string, target: AgentId | null = null): Address | null {
     const agent = target ?? this.binding(path)
-    return agent ? this.reach(agent) : null
+    const address = agent ? this.reach(agent) : null
+    if (target || addressAlive(address)) return address
+    return this.#liveInWorkspace(path) ?? address
+  }
+
+  /** The live agent working in the workspace `path` is in that last did
+   * something, for a file whose own agent and its tab are gone: a tracker
+   * whose session closed, or a draft from one */
+  #liveInWorkspace(path: string): Address | null {
+    const rootOf = rootFinder()
+    const root = rootOf(dirname(path))
+    if (!root) return null
+    let best: AgentId | null = null
+    for (const [id, record] of this.registry.agents) {
+      if (!record.shown || !record.cwd || rootOf(record.cwd) !== root) continue
+      if (!addressAlive(this.address(id))) continue
+      if (!best || record.updatedAt > this.registry.agents.get(best)!.updatedAt) best = id
+    }
+    return best ? this.address(best) : null
   }
 
   /** Where to post to `agent` now: its own address while that's alive, else

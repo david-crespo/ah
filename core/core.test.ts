@@ -161,6 +161,27 @@ test("a file's requests go to the agent it's bound to, or that agent's stand-in"
   })
 })
 
+test("with its agent's tab gone, a file's requests go to an agent in its workspace", async () => {
+  const repo = join(dir, "repo")
+  mkdirSync(join(repo, ".jj"), { recursive: true })
+  mkdirSync(join(repo, "notes"))
+  const path = join(repo, "notes", "tracker.html")
+  core.onRex(rex({ t2: ["block:2"], t3: ["block:3"] }))
+  // block:1's pane, and with it its tab, closed long ago
+  core.bindFile(path, "block:1")
+  await report({ ...start("codex", "th2", undefined, "block:2"), cwd: join(repo, "src") })
+  vi.advanceTimersByTime(1000)
+  // More recent, but in another directory
+  await report({ ...start("codex", "th3", undefined, "block:3"), cwd: join(dir, "other") })
+  const th2 = { harness: "codex", thread: "th2", pid: null }
+  expect(core.route(path)).toEqual(th2)
+  // A file never bound goes there too
+  expect(core.route(join(repo, "notes", "draft.md"))).toEqual(th2)
+  // But not one outside any workspace, or one a sender named the agent for
+  expect(core.route(join(dir, "loose.md"))).toEqual(null)
+  expect(core.route(path, "block:1")).toEqual(null)
+})
+
 test("bindings and held files outlast the server, while their files do", () => {
   const kept = join(dir, "kept.md")
   const gone = join(dir, "gone.md")
