@@ -119,6 +119,20 @@ around the items; the stylesheet and `task_list.js` own all of that.
   said to run through several. Keep items in separate revs where practical,
   and keep tracker IDs out of rev descriptions.
 
+## Where answers go
+
+The tracker has the html skill's conversation panel, in the dashboard too.
+The user reads it either beside the terminal or on another screen, so every
+answer goes in both places, in full where the request came from and as a
+summary of a line or two in the other:
+
+- A message from the conversation panel, an item comment, or a selection
+  comment: the full answer in the page (`done` with the text), and a
+  summary in the terminal ("Answered in the tracker: …").
+- Go: the work and the full account of it in the terminal, and a one-line
+  summary in the page (`done` with what was done and the rev).
+- A status pick needs no answer: the icon shows the new status.
+
 ## The Go button
 
 Each `todo` and `hold` item has a Go button; a `question` item doesn't, since
@@ -131,26 +145,24 @@ the request:
 
 1. `ah message respond <file> start <request id>`, and set the item to
    `status="doing"`.
-2. Do the work and answer in the terminal, as for any request. The dashboard
-   is a companion to the terminal, and its conversation panel is hidden.
-3. `ah message respond <file> done <request id>`, with no text, and update
-   the item (`done`, `rev`). The spinner clears.
+2. Do the work and report it in the terminal, as for any request.
+3. `ah message respond <file> done <request id> --text '<one line>'`, and
+   update the item (`done`, `rev`). The spinner clears.
 
 If you need to ask before going ahead, ask in the terminal and post
-`needs-reply` for the request: the button shows a question mark. `error`
-shows a warning sign.
+`needs-reply` for the request with the question in a line: the button
+shows a question mark. `error` shows a warning sign.
 
 ## Comments
 
 Each item also has a comment button, left of Go, that opens a box for a note
 about that item. It arrives the same way, as
 `a comment on item <id>: <title>`, a blank line, then the user's text. Treat it like
-a message typed in the terminal about that item: answer a question in the
-terminal, make a requested change to the item or the work, and post `done`
-for the request (no text) when finished. The comment button shows the same
-spinner and states as Go until then. A comment is not a Go: don't start the
-item's work unless the comment asks for it. Selection comments on an item's
-text work the same way.
+a message about that item: answer a question, make a requested change to the
+item or the work, and post `done` with the answer when finished. The comment
+button shows the same spinner and states as Go until then. A comment is not a
+Go: don't start the item's work unless the comment asks for it. Selection
+comments on an item's text work the same way.
 
 Clicking an item's or step's status icon opens a menu of statuses, and a
 pick arrives as `set item <id> to <status>: <title>` (or `step 3B`). Set

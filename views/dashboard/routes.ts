@@ -157,13 +157,12 @@ export class Dashboard {
     this.#files = next
   }
 
-  /** Open the file in the backend that shows it. An html page's conversation is
-   * hidden: its buttons and comments wake the agent, which answers in the
-   * terminal. And it's dark and see-through, to match the dashboard. */
+  /** Open the file in the backend that shows it. An html page is dark and
+   * see-through, to match the dashboard. */
   async #show(path: string): Promise<ShownDoc | null> {
     if (fileKind(path) === "html") {
       const info = await this.options.html.show(path)
-      return info && { path, url: `${info.url}?chat=off&in=dashboard`, frame: true }
+      return info && { path, url: `${info.url}?in=dashboard`, frame: true }
     }
     const info = await this.options.markdown.show(path)
     return info && { path, url: info.url, frame: false }
