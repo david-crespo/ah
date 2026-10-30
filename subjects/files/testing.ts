@@ -2,7 +2,7 @@
 // registry behind it
 
 import { addressAlive } from "../../platform/session.ts"
-import type { Address, AgentId } from "../../core/model.ts"
+import type { Address, AgentId, Route } from "../../core/model.ts"
 import type { AgentDirectory } from "./files.ts"
 
 export class MemoryDirectory implements AgentDirectory {
@@ -22,11 +22,12 @@ export class MemoryDirectory implements AgentDirectory {
   binding(path: string) {
     return this.bindings.get(path) ?? null
   }
-  route(path: string, target: AgentId | null = null): Address | null {
+  route(path: string, target: AgentId | null = null): Route | null {
     const agent = target ?? this.binding(path)
-    if (!agent) return null
-    const own = this.addresses.get(agent) ?? null
-    return addressAlive(own) ? own : (this.standIn ?? own)
+    const own = agent && this.addresses.get(agent)
+    if (own && addressAlive(own)) return { address: own, via: "agent" }
+    if (agent && this.standIn) return { address: this.standIn, via: "tab" }
+    return own ? { address: own, via: "agent" } : null
   }
   hold(path: string, held: boolean) {
     if (held) this.held.add(path)

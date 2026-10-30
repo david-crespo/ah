@@ -28,7 +28,7 @@ import { isOneOf } from "../../platform/guards.ts"
 import { fileId } from "../id.ts"
 import { GRACE_MS, Presence } from "../../platform/presence.ts"
 import { describeAddress, addressAlive } from "../../platform/session.ts"
-import type { Address, AgentId, AgentRef, FileKind } from "../../core/model.ts"
+import type { Address, AgentId, AgentRef, FileKind, Route } from "../../core/model.ts"
 
 /** Which agent each file's requests go to, and where agents can be reached,
  * which changes as they go through sessions. The server's is the core, which
@@ -45,7 +45,7 @@ export interface AgentDirectory {
   /** Where the file's requests go now: `target` if given, else the agent
    * it's bound to; if that one can't be reached, another live agent in its
    * tab, else one in the file's workspace */
-  route(path: string, target?: AgentId | null): Address | null
+  route(path: string, target?: AgentId | null): Route | null
   /** Note whether the file's thread holds requests no agent has taken */
   hold(path: string, held: boolean): void
 }
@@ -161,6 +161,8 @@ export interface FileInfo {
   /** The harness and where posts go now */
   address: string | null
   addressAlive: boolean
+  /** Why posts go there */
+  via: Route["via"] | null
   /** Where its connected pages are */
   views: Location[]
 }
@@ -297,7 +299,7 @@ export class Files<L extends Live> {
     if (!thread) {
       // The thread asks for the address each time, so a rebind, or the
       // agent moving to another session, reaches it
-      const bound = { path, address: () => this.#directory.route(path) }
+      const bound = { path, address: () => this.#directory.route(path)?.address ?? null }
       thread = Thread.open(bound, {
         kind: this.type.kind,
         title: this.type.title,
@@ -351,15 +353,16 @@ export class Files<L extends Live> {
   }
 
   info(path: string): FileInfo {
-    const address = this.#directory.route(path)
+    const route = this.#directory.route(path)
     const id = fileId(path)
     return {
       id,
       path,
       url: `${this.#pageOrigin}/view/${this.type.kind}/${id}/`,
       agent: this.binding(path),
-      address: address ? describeAddress(address) : null,
-      addressAlive: addressAlive(address),
+      address: route ? describeAddress(route.address) : null,
+      addressAlive: addressAlive(route?.address ?? null),
+      via: route?.via ?? null,
       views: this.#pages.get(path)?.locations ?? [],
     }
   }

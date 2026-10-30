@@ -71,6 +71,14 @@ export type Home = { kind: "block"; block: BlockId } | { kind: "process"; proces
  * with no home has `<harness>:<session>`. */
 export type AgentId = string
 
+/** Where a file's requests go now, and why: the agent named for them or the
+ * one it's bound to, or with that one gone, a live agent in its tab or in the
+ * file's workspace. With none live, the gone agent's own address. */
+export interface Route {
+  address: Address
+  via: "agent" | "tab" | "workspace"
+}
+
 /** What a command or hook run by an agent knows about which one it is */
 export interface AgentRef {
   harness: Harness

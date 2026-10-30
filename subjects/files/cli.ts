@@ -39,11 +39,33 @@ export async function showInServer(
 ): Promise<{ url: URL; views: Location[] }> {
   const address = currentAddress()
   await ensureStarted(port)
+  const agentId = address ? null : await pickAgentNear(port)
   const request: ShowRequest = address
     ? { path, address, agent: currentAgent(address) }
-    : { path, address, agentId: await pickAgentNear(port) }
+    : { path, address, agentId }
   const opened = await callServer<FileInfo>(filesUrl(kind, port), { body: request })
+  if (!address && !agentId) {
+    console.error(
+      `ah: not in an agent session or a tab with one; ${whereCommentsGo(opened)}`,
+    )
+  }
   return { url: new URL(opened.url, serverUrl(port, "")), views: opened.views }
+}
+
+/** Where the server routes a file's comments, for one shown with no agent
+ * to bind it to */
+function whereCommentsGo({ address, addressAlive, via }: FileInfo): string {
+  // A live address always has a route
+  if (!addressAlive || !via)
+    return "no agent can take comments now, so they queue for the next one"
+  switch (via) {
+    case "agent":
+      return `comments go to ${address}, the agent this file is bound to`
+    case "tab":
+      return `this file's agent is gone, so comments go to ${address} in its tab`
+    case "workspace":
+      return `comments go to ${address}, an agent in this file's workspace`
+  }
 }
 
 /** A nearby agent as its tab's title has it */
@@ -65,18 +87,15 @@ export async function pickAgent(port: number, block: string, agent: AgentId) {
 
 /** From a shell in no agent session: the agent its comments go to (its
  * pick, or its Rex tab's only agent), or else the one the user picks, which
- * becomes the pane's pick. Picking takes a terminal, so without one, several
- * is an error. */
+ * becomes the pane's pick; null with no agent in its tab. Picking takes a
+ * terminal, so without one, several is an error. */
 async function pickAgentNear(port: number): Promise<AgentId | null> {
   const block = process.env.REX_BLOCK
-  const none = "ah: not in an agent session or a tab with one; comments won't go anywhere"
-  if (!block) return (console.error(none), null)
+  if (!block) return null
   const agents = await agentsNear(port, block)
   const target = agents.find((a) => a.target)
-  if (target || !agents.length) {
-    console.error(target ? `ah: comments go to ${agentLine(target)}` : none)
-    return target?.id ?? null
-  }
+  if (target) console.error(`ah: comments go to ${agentLine(target)}`)
+  if (target || !agents.length) return target?.id ?? null
   if (!process.stdin.isTTY) {
     const list = agents.map((a) => `  ${agentLine(a)}`).join("\n")
     die(`ah: this tab has ${agents.length} agents; run in a terminal to pick one:\n${list}`)

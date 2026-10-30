@@ -151,14 +151,11 @@ test("a file's requests go to the agent it's bound to, or that agent's stand-in"
   const path = join(dir, "notes.md")
   expect(core.route(path)).toEqual(null)
   core.bindFile(path, "block:1")
+  const th2 = { harness: "codex", thread: "th2", pid: null }
   // block:1's socket isn't live, so the tab's other agent takes it
-  expect(core.route(path)).toEqual({ harness: "codex", thread: "th2", pid: null })
+  expect(core.route(path)).toEqual({ address: th2, via: "tab" })
   // A sender can name its own agent
-  expect(core.route(path, "block:2")).toEqual({
-    harness: "codex",
-    thread: "th2",
-    pid: null,
-  })
+  expect(core.route(path, "block:2")).toEqual({ address: th2, via: "agent" })
 })
 
 test("with its agent's tab gone, a file's requests go to an agent in its workspace", async () => {
@@ -174,9 +171,12 @@ test("with its agent's tab gone, a file's requests go to an agent in its workspa
   // More recent, but in another directory
   await report({ ...start("codex", "th3", undefined, "block:3"), cwd: join(dir, "other") })
   const th2 = { harness: "codex", thread: "th2", pid: null }
-  expect(core.route(path)).toEqual(th2)
+  expect(core.route(path)).toEqual({ address: th2, via: "workspace" })
   // A file never bound goes there too
-  expect(core.route(join(repo, "notes", "draft.md"))).toEqual(th2)
+  expect(core.route(join(repo, "notes", "draft.md"))).toEqual({
+    address: th2,
+    via: "workspace",
+  })
   // But not one outside any workspace, or one a sender named the agent for
   expect(core.route(join(dir, "loose.md"))).toEqual(null)
   expect(core.route(path, "block:1")).toEqual(null)

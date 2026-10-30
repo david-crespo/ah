@@ -69,7 +69,7 @@ test("binding a file again moves it to the new agent", async () => {
   const codex = { harness: "codex" as const, thread: "t1", pid: process.pid }
   const info = await files.bind(a, codex, "block:2")
   expect(files.binding(a)).toEqual("block:2")
-  expect(directory.route(a)).toEqual(codex)
+  expect(directory.route(a)).toEqual({ address: codex, via: "agent" })
   expect(info).toMatchObject({ path: a, agent: "block:2", views: [] })
   // The URL names the file
   expect(pathOf(info.id)).toEqual(a)

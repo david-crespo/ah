@@ -42,6 +42,7 @@ import {
   HARNESSES,
   type NearbyAgent,
   type RexState,
+  type Route,
 } from "./model.ts"
 import { Notices, type Showing, startContext } from "./notices.ts"
 import { Trackers } from "./trackers.ts"
@@ -230,11 +231,15 @@ export class Core implements AgentDirectory {
     return this.registry.bindings.get(path) ?? null
   }
 
-  route(path: string, target: AgentId | null = null): Address | null {
+  route(path: string, target: AgentId | null = null): Route | null {
     const agent = target ?? this.binding(path)
-    const address = agent ? this.reach(agent) : null
-    if (target || addressAlive(address)) return address
-    return this.#liveInWorkspace(path) ?? address
+    const own = agent && this.address(agent)
+    if (own && addressAlive(own)) return { address: own, via: "agent" }
+    const standIn = agent && this.standIn(agent)
+    if (standIn) return { address: standIn, via: "tab" }
+    const workspace = target ? null : this.#liveInWorkspace(path)
+    if (workspace) return { address: workspace, via: "workspace" }
+    return own ? { address: own, via: "agent" } : null
   }
 
   /** The live agent working in the workspace `path` is in that last did
