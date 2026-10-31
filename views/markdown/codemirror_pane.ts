@@ -12,10 +12,9 @@
 //
 //   npm install --no-save codemirror@6.0.2 @codemirror/lang-markdown@6.5.2 \
 //     @codemirror/view@6.43.15 @codemirror/state@6.7.6 \
-//     @codemirror/theme-one-dark@6.1.3 node-diff3@3.2.1
+//     @codemirror/theme-one-dark@6.1.3
 //
-// tsconfig.json leaves this file and merge.ts out, so ah typechecks without
-// them.
+// tsconfig.json leaves this file out, so ah typechecks without them.
 //
 // How it keeps to editor.ts's rules:
 //
@@ -25,9 +24,9 @@
 // - The file on disk comes from the doc socket, by way of the preview
 //   element, and from a save's reply when the file had moved on. With nothing
 //   unsaved, the editor reloads. Otherwise it merges the file into the
-//   unsaved text against the base (merge.ts), leaving overlaps as conflict
-//   markers, and saves the result. While a save is out, a change on disk
-//   waits for its reply, since it's most likely that save coming back.
+//   unsaved text against the base (merge.ts) and saves the result. While a
+//   save is out, a change on disk waits for its reply, since it's most likely
+//   that save coming back.
 // - The agent's edits don't go on the undo history, so ⌘Z only takes back
 //   the user's own.
 
@@ -214,9 +213,7 @@ export class CodeMirrorPane implements EditorPane {
     const doc = view.state.doc.toString()
     let next = disk
     if (doc !== this.#base) {
-      const merged = mergeDisk(this.#base, doc, disk)
-      if (merged.conflict) console.warn("ah: merged the file on disk, with conflicts")
-      next = merged.text
+      next = mergeDisk(this.#base, doc, disk)
     }
     this.#base = disk
     if (next !== doc) {
