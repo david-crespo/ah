@@ -20,10 +20,10 @@
 // - Never write over a version of the file newer than the one it last loaded
 //   or saved, which may be the agent's edit.
 // - Take the agent's edits: reload when nothing is unsaved, and otherwise
-//   merge the file on disk into the unsaved text. The CodeMirror pane does a
-//   three-way merge against the last save, word by word, with no conflict
-//   markers (merge.ts). Helix's fork merges by line and leaves overlaps as
-//   conflict markers, which the preview renders.
+//   merge the file on disk into the unsaved text: a three-way merge against
+//   the last save, word by word, with no conflict markers (merge.ts). The
+//   CodeMirror pane runs it in the page, and terminal editors call the
+//   server's merge route (routes.ts), Helix from editors/helix/auto-merge.scm.
 //
 // A page-side editor has the file's text already: the doc socket pushes it on
 // every change (doc.ts), and the preview element holds it (preview.ts).

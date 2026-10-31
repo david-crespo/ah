@@ -2,9 +2,9 @@
 // closing files are subjects/files/routes.ts. Each file's page lives at
 // /view/markdown/<id>/, with its doc socket, editor pane's socket, local media, and
 // the route its requests go to (subjects/thread/routes.ts). The client bundles, stylesheets,
-// and GitHub embeds are shared by every file and sit at /view/markdown/
-// itself: bundle.js for a file's page, and preview.js with just the
-// <ah-markdown> element, for other pages that show a file.
+// GitHub embeds, and the terminal editors' merge are shared by every file and
+// sit at /view/markdown/ itself: bundle.js for a file's page, and preview.js
+// with just the <ah-markdown> element, for other pages that show a file.
 
 import { createReadStream } from "node:fs"
 import { readFile, realpath } from "node:fs/promises"
@@ -26,6 +26,7 @@ import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
 import { type LiveMarkdown, markdownFiles } from "./files.ts"
 import { fetchBlob, resolveAsset } from "./github.ts"
+import { mergeDisk } from "./merge.ts"
 import { indexPage, page } from "./page.ts"
 import { escapeHtml } from "../escape.ts"
 import { mediaType } from "../mime.ts"
@@ -40,7 +41,7 @@ export class MarkdownBackend {
   /** `port` is the server's, for telling the agent which one to answer, and
    * `directory` where the agents its files are bound to are now */
   constructor(port: number, directory: AgentDirectory) {
-    this.files = new Files(port, markdownFiles, directory)
+    this.files = new Files(port, markdownFiles(port), directory)
   }
 
   /** `path` for another view's page to show with <ah-markdown>, without
@@ -92,6 +93,7 @@ export class MarkdownBackend {
       const text = await readFile(assetPath(`views/markdown/${rest}`), "utf8")
       return new Response(text, { headers: css })
     }
+    if (rest === "merge" && req.method === "POST") return await merge(req)
     if (rest === "gh/blob") return await ghBlob(searchParams)
     if (rest === "gh/asset") {
       try {
@@ -126,6 +128,27 @@ export class MarkdownBackend {
     if (sub === "local") return await localMedia(path, searchParams.get("path") ?? "")
     return new Response("not found", { status: 404 })
   }
+}
+
+/** For the editor pane's terminal editors, which can't run merge.ts
+ * themselves: the form's `disk` merged into `unsaved`, both edits of `base`,
+ * as plain text. Each comes as a file (`curl --form base=@path`), since a
+ * plain field's line endings may be changed to CRLF on the way. */
+export async function merge(req: Request): Promise<Response> {
+  const form = await req.formData().catch(() => null)
+  const texts = await Promise.all(
+    ["base", "unsaved", "disk"].map((k) => {
+      const part = form?.get(k)
+      return part instanceof File ? part.text() : null
+    }),
+  )
+  const [base, unsaved, disk] = texts
+  if (base === null || unsaved === null || disk === null) {
+    return new Response("expected files base, unsaved and disk", { status: 400 })
+  }
+  return new Response(mergeDisk(base, unsaved, disk), {
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  })
 }
 
 async function ghBlob(q: URLSearchParams): Promise<Response> {

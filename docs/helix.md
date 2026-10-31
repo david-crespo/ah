@@ -7,37 +7,36 @@ First of all, Helix is not tied to `ah` in any deep way. You can have your codin
 - The Helix pane in the markdown editor, which runs a real `hx` process in a pty next to the markdown preview. The pane isn't tied to Helix. [`views/markdown/editor.ts`](../views/markdown/editor.ts) describes what fills the pane, so you could swap the terminal for an editor that runs in the page, like CodeMirror. [`codemirror_backend.ts`](../views/markdown/codemirror_backend.ts) and [`codemirror_pane.ts`](../views/markdown/codemirror_pane.ts) are an example of that. I left its npm packages out of `package.json`, so you'll need to add the ones listed at the top of `codemirror_pane.ts`. [`terminal_editor.ts`](../views/markdown/terminal_editor.ts) describes what the terminal needs from the editor running in it. To use a different terminal editor, implement its server and page halves and pick them in `files.ts` and `client.ts`. [`neovim.ts`](../views/markdown/neovim.ts) and [`neovim_command.ts`](../views/markdown/neovim_command.ts) do this for Neovim as an example (only very lightly tested).
 - Comments sent from Helix to an agent (`editors/helix/`). You select lines and write a comment in a box under them, and `ah` posts it to an agent running in the same Rex terminal tab.
 
-Both need my Helix fork. The comment commands also need some Steel config to load `ah`'s commands and bind keys to them.
+Both need Helix with Steel scripting, which isn't in a Helix release yet, and Steel config that loads `ah`'s modules.
 
-## The fork
+## Helix with Steel
 
-My fork is [david-crespo/helix](https://github.com/david-crespo/helix). The [`auto-reload`](https://github.com/david-crespo/helix/tree/auto-reload) branch has the full build, which is upstream `master` with two branches merged in and my own commits on top:
-
-- `steel-event-system` from [mattwparas/helix](https://github.com/mattwparas/helix) for Steel scripting, including the components API that draws the comment box.
-- `search_position` from [useche/helix](https://github.com/useche/helix) to put a limit on the search match counter. `ah` doesn't need this.
-- The `auto-reload` commits, which are a port of [helix-editor/helix#13963](https://github.com/helix-editor/helix/pull/13963). This polls for changes on disk and reloads unmodified buffers, and adds an option to three-way merge disk changes into modified buffers.
-
-In the markdown editor, `ah` starts the Helix pane with a copy of your `~/.config/helix/config.toml` that has two sections added. `[editor.auto-save]` saves 650ms after you stop typing, so the preview keeps up. `[editor.auto-reload]` checks the file every 300ms, so the pane picks up the agent's edits. If your config already has one of those sections, `ah` uses yours and doesn't add its own. Helix outside the pane still uses your config as it is. Upstream Helix rejects the `[editor.auto-reload]` config section, so the Helix pane won't start without the fork. If you're using upstream Helix, open pages with `ah view open --no-editor` instead.
-
-To debug a three-way merge that went wrong, check `~/.cache/helix/helix.log`. It logs a line for each merge with the sizes of the base, the buffer, and the file on disk. If a merge leaves conflicts, it also saves all three versions and the result under `~/.cache/helix/auto-reload-merges/<unix ms>-<file name>/`.
-
-Build Helix with the `steel` feature, then generate the Steel modules like `helix/components.scm` that the config requires:
+Steel lives on the `steel-event-system` branch of [mattwparas/helix](https://github.com/mattwparas/helix), which also has the components API that draws the comment box. Build it with the `steel` feature, then generate the Steel modules like `helix/components.scm` that the config requires:
 
 ```sh
-git clone --branch auto-reload https://github.com/david-crespo/helix ~/repos/helix
+git clone --branch steel-event-system https://github.com/mattwparas/helix ~/repos/helix
 cd ~/repos/helix
 cargo install --path helix-term --locked --features steel
 cargo xtask steel
 ```
 
-I have a `helix-update` skill in my dotfiles that rebases this stack onto new upstream tips and pushes it back to the fork.
+(I use my own fork, [david-crespo/helix](https://github.com/david-crespo/helix), which is that branch plus a couple of things `ah` doesn't need.)
 
-## Comment commands
+## The pane
 
-`editors/helix/` has two Steel modules:
+In the markdown editor, `ah` starts the Helix pane with a copy of your `~/.config/helix/config.toml` with `[editor.auto-save]` added, which saves 650ms after you stop typing, so the preview keeps up. If your config already has that section, `ah` uses yours. Helix outside the pane still uses your config as it is.
+
+The pane picks up the agent's edits with `editors/helix/auto-merge.scm`, which `ah.scm` loads (see [Steel config](#steel-config)). It checks the files Helix has open every 300ms. A file with no unsaved edits is reloaded. Otherwise Helix sends the texts to the `ah` server with `curl`, the server merges the file on disk into the unsaved text word by word, and Helix writes the result and reloads it, so both your edits and the agent's are in the buffer and on disk. Where the two overlap, both versions go in, yours first. While you're in insert mode, it waits until you leave it.
+
+It only runs in the pane, where `ah` sets `AH_MERGE_URL` to the server's merge route. Without the Steel config, the pane still works but doesn't take the agent's edits until you `:reload`. Without Steel, open pages with `ah view open --no-editor` instead.
+
+## Steel config
+
+`editors/helix/` has three Steel modules:
 
 - `ah.scm` defines the commands `:ah-comment` for the selected lines and `:ah-comment-file` for the whole file. They shell out to the `ah` CLI, which has to be on Helix's `PATH`.
 - `comment-box.scm` draws the UI component: a text input under the selected lines with an optional list underneath. It doesn't know anything about `ah`.
+- `auto-merge.scm` takes the agent's edits in the pane (above). `ah.scm` requires it.
 
 Symlink the `editors/helix` directory into Helix's config directory (`~/.config/helix`), which is on Steel's module search path:
 

@@ -2,7 +2,8 @@
 ; an agent in the Rex tab, in a box under the lines. helix.scm requires this
 ; (as ah/ah.scm, with this directory linked into helix's config directory)
 ; and re-exports the commands, since helix only offers what helix.scm
-; provides.
+; provides. Requiring it also loads auto-merge.scm, which the markdown
+; editor's helix pane needs to take the agent's edits.
 
 (require (prefix-in helix. "helix/commands.scm"))
 (require (prefix-in helix.static. "helix/static.scm"))
@@ -10,6 +11,7 @@
 (require (prefix-in helix.editor. "helix/editor.scm"))
 (require "helix/ext.scm")
 (require "comment-box.scm")
+(require "auto-merge.scm")
 (require-builtin helix/core/text as text.)
 
 (provide ah-comment

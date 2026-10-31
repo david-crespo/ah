@@ -44,12 +44,15 @@ export function parsePtyMessage(text: string): PtyMessage | null {
 export class PtyBackend implements EditorBackend {
   readonly file: string
   readonly #command: TerminalCommand
+  readonly #env: Record<string, string>
   #ptys = new Set<IPty>()
   #closed = false
 
-  constructor(file: string, command: TerminalCommand) {
+  /** `env` is added to the editor's environment */
+  constructor(file: string, command: TerminalCommand, env: Record<string, string> = {}) {
     this.file = file
     this.#command = command
+    this.#env = env
   }
 
   /** A pty socket: the editor at the page's terminal size, given in the query */
@@ -58,6 +61,7 @@ export class PtyBackend implements EditorBackend {
     let rows = Math.max(5, Number(query.get("rows")) || 24)
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      ...this.#env,
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
     }

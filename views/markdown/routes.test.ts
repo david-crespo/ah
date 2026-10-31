@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
-import { localMedia } from "./routes.ts"
+import { localMedia, merge } from "./routes.ts"
 
 let dir: string
 beforeEach(async () => {
@@ -31,4 +31,17 @@ test("local media: images and video next to the file, outside dot directories", 
   ]) {
     expect((await localMedia(draft, p)).status, p).toEqual(404)
   }
+})
+
+test("merge: the form's disk merged into unsaved", async () => {
+  const form = new FormData()
+  form.set("base", new Blob(["One two three.\n"]))
+  form.set("unsaved", new Blob(["One two three four.\n"]))
+  form.set("disk", new Blob(["Zero one two three.\n"]))
+  const res = await merge(new Request("http://x/", { method: "POST", body: form }))
+  expect(await res.text()).toEqual("Zero one two three four.\n")
+
+  form.delete("disk")
+  const missing = await merge(new Request("http://x/", { method: "POST", body: form }))
+  expect(missing.status).toEqual(400)
 })

@@ -11,11 +11,11 @@
 // - Save 650ms after typing stops, and when the pane loses focus.
 // - Check the file on disk every 300ms and when the pane gains focus
 //   (`checktime`). An unmodified buffer reloads. A modified one gets the
-//   file on disk merged into it with `git merge-file`, with the text as of
-//   the last read or save as the base. The agent's edits and the unsaved
-//   typing both survive, and overlaps are left as conflict markers labelled
-//   `buffer (unsaved)` and `disk`, as in Helix's fork. Every save checks
+//   file on disk merged into it by the server's merge route (routes.ts, at
+//   AH_MERGE_URL), with the text as of the last read or save as the base.
+//   The agent's edits and the unsaved typing both survive. Every save checks
 //   first, so it writes the merged text and never writes over the agent's.
+//   If a merge fails, saves stop until the next change on disk merges.
 // - ⌘S saves: the page sends it as a kitty keyboard protocol super chord,
 //   which Neovim reads as <D-s>.
 
@@ -29,6 +29,8 @@ local SAVE_DELAY, CHECK_EVERY = 650, 300
 
 -- The file's text as of the last read or save, per buffer: the merge base
 local base = {}
+-- Buffers whose last merge failed, which mustn't be saved over the file
+local unmerged = {}
 
 local function read(path)
   local f = io.open(path, "rb")
@@ -57,30 +59,29 @@ end
 vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost" }, { callback = remember })
 
 local function merge(buf)
-  local theirs = read(vim.api.nvim_buf_get_name(buf))
-  if not theirs then return end
+  local disk = read(vim.api.nvim_buf_get_name(buf))
+  if not disk then return end
   local dir = vim.fn.tempname()
   vim.fn.mkdir(dir, "p")
-  local files = { ours = dir .. "/ours", base = dir .. "/base", theirs = dir .. "/theirs" }
-  local texts = { ours = text_of(buf), base = base[buf] or theirs, theirs = theirs }
-  for name, path in pairs(files) do
-    local f = assert(io.open(path, "wb"))
-    f:write(texts[name])
+  local args = { "curl", "--silent", "--fail", "--max-time", "5" }
+  local texts = { base = base[buf] or disk, unsaved = text_of(buf), disk = disk }
+  for name, text in pairs(texts) do
+    local f = assert(io.open(dir .. "/" .. name, "wb"))
+    f:write(text)
     f:close()
+    vim.list_extend(args, { "--form", name .. "=@" .. dir .. "/" .. name })
   end
-  local result = vim.system({
-    "git", "merge-file", "-p",
-    "-L", "buffer (unsaved)", "-L", "base", "-L", "disk",
-    files.ours, files.base, files.theirs,
-  }, { text = true }):wait()
+  table.insert(args, vim.env.AH_MERGE_URL)
+  local result = vim.system(args, { text = true }):wait()
   vim.fn.delete(dir, "rf")
-  -- The exit code is the number of conflicts, or negative on an error
-  if result.code < 0 or not result.stdout then return end
-  set_text(buf, result.stdout)
-  base[buf] = theirs
-  if result.code > 0 then
-    vim.notify(("ah: merged the file on disk, %d conflict(s)"):format(result.code), vim.log.levels.WARN)
+  if result.code ~= 0 then
+    unmerged[buf] = true
+    vim.notify("ah: couldn't merge the file on disk, not saving: is ah running?", vim.log.levels.ERROR)
+    return
   end
+  unmerged[buf] = nil
+  set_text(buf, result.stdout)
+  base[buf] = disk
 end
 
 vim.api.nvim_create_autocmd("FileChangedShell", {
@@ -106,7 +107,8 @@ end
 -- whatever is on disk
 local function save()
   check()
-  if vim.bo.modified and vim.bo.buftype == "" and vim.api.nvim_buf_get_name(0) ~= "" then
+  local buf = vim.api.nvim_get_current_buf()
+  if vim.bo.modified and vim.bo.buftype == "" and vim.api.nvim_buf_get_name(0) ~= "" and not unmerged[buf] then
     vim.cmd("silent! update!")
   end
 end

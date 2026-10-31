@@ -9,7 +9,7 @@
 | [Rex](https://www.superlogical.com/updates/public-testing-beginning) | Dashboard, tab titles, and finding agents in terminal tabs. | Pages opened directly by an agent work without Rex. Supporting another terminal or multiplexer takes new integration code.                                                           |
 | Xcode Command Line Tools                                             | Native windows.                                             | Optional for file views: pass `--in tab` to open in a browser tab and skip building the native window app.                                                                           |
 | jj                                                                   | Dashboard workspace discovery and commit log.               | File views work without it. Replacing it with git requires reworking the dashboard's workspace and log queries.                                                                      |
-| [My Helix fork](helix.md)                                            | The embedded Helix editor and its comment commands.         | Optional. `--no-editor` keeps the preview and commenting working, or you can switch the editor pane to the included CodeMirror or Neovim sample adapters; see [Helix](#helix) below. |
+| [Helix with Steel](helix.md)                                         | The embedded Helix editor and its comment commands.         | Optional. `--no-editor` keeps the preview and commenting working, or you can switch the editor pane to the included CodeMirror or Neovim sample adapters; see [Helix](#helix) below. |
 | skepsis and jq                                                       | Diff review.                                                | Optional. Another diff viewer can be connected by having it call `ah message send`. The [skepsis skill](../skills/skepsis/SKILL.md) needs the path to your local checkout.           |
 | An LLM CLI                                                           | Tab-title summaries for Claude Code and Codex.              | Optional. Without it, tab titles fall back to the directory name. Easy to swap for another command ([Tab titles](#tab-titles)); OpenCode generates its own summaries.                |
 
@@ -47,9 +47,9 @@ Codex fires `SessionStart` on the first prompt rather than at launch, so a Codex
 
 ## Helix
 
-The embedded editor uses my Helix fork by default, but you can switch to the included CodeMirror or Neovim adapters with a small code change: select the backend in [`views/markdown/files.ts`](../views/markdown/files.ts) and the page component in [`views/markdown/client.ts`](../views/markdown/client.ts). [`editor.ts`](../views/markdown/editor.ts) describes the interface and sample adapters, which are starting points with limited testing. I left CodeMirror's npm packages out of `package.json`, so you'll need to add them. They're listed at the top of [`codemirror_pane.ts`](../views/markdown/codemirror_pane.ts).
+The embedded editor uses Helix with Steel by default, but you can switch to the included CodeMirror or Neovim adapters with a small code change: select the backend in [`views/markdown/files.ts`](../views/markdown/files.ts) and the page component in [`views/markdown/client.ts`](../views/markdown/client.ts). [`editor.ts`](../views/markdown/editor.ts) describes the interface and sample adapters, which are starting points with limited testing. I left CodeMirror's npm packages out of `package.json`, so you'll need to add them. They're listed at the top of [`codemirror_pane.ts`](../views/markdown/codemirror_pane.ts).
 
-You can also pass `--no-editor` to skip the embedded editor and edit the file in your usual editor; the preview and commenting still work. If you want the embedded Helix pane or commenting from inside Helix, see [helix.md](helix.md) for the fork and Steel config.
+You can also pass `--no-editor` to skip the embedded editor and edit the file in your usual editor; the preview and commenting still work. If you want the embedded Helix pane or commenting from inside Helix, see [helix.md](helix.md) for building Helix with Steel and its config.
 
 ## Tab titles
 

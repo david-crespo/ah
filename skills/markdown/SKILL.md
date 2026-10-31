@@ -116,9 +116,11 @@ the id is what `ah message respond` takes.
   reply. If an Edit fails to match afterwards, re-read the file. Edit notices
   never arrive on their own: they share a message with the request they are
   context for, on the line before it.
-- ah configures helix (the page's editor pane) to auto-reload external
-  edits and merge them with unsaved text. If a pane remains stale, `:reload`
-  is the manual fallback. Do not force-write over the user's unsaved changes.
+- ah configures helix (the page's editor pane) to reload external edits and
+  merge them word by word into unsaved text. Where both changed the same
+  words, both versions end up in the file, the user's first; leave tidying
+  that up to the user unless asked. If a pane remains stale, `:reload` is the
+  manual fallback. Do not force-write over the user's unsaved changes.
 - After editing the file, the page live-updates on its own and flashes the
   changed blocks. Post a short completion summary to the page. General
   answers can be longer and use Markdown. Keep draft-related replies in the
