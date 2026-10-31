@@ -26,3 +26,24 @@ test("other links keep their text", () => {
     ">https://github.com/o/r/issues</a>",
   )
 })
+
+test("a merge conflict shows both versions, each as markdown", () => {
+  const pick = (side: string) => `<button class="merge-pick" data-side="${side}"></button>`
+  expect(inline("Merges are {~~**fast**~>`inexpensive`~~}, so")).toBe(
+    `Merges are <span class="merge-conflict" data-source="{~~**fast**~&gt;\`inexpensive\`~~}" data-nth="0"><span class="merge-mine">${pick("mine")}<strong>fast</strong></span><span class="merge-agent">${pick("agent")}<code>inexpensive</code></span></span>, so`,
+  )
+  expect(inline("one {~~two.~>~~} three")).toContain(
+    `<span class="merge-agent" data-empty>${pick("agent")}</span>`,
+  )
+  expect(md.render("# {~~Saved~>Stored~~} sessions")).toContain(
+    `<span class="merge-mine">${pick("mine")}Saved</span>`,
+  )
+  expect(inline("~~struck~~ and {~~unclosed")).toBe("<s>struck</s> and {~~unclosed")
+})
+
+test("a merge conflict says which of the same ones it is", () => {
+  const nths = [
+    ...md.render("{~~a~>b~~} {~~c~>d~~}\n\n{~~a~>b~~}").matchAll(/data-nth="(\d)"/g),
+  ]
+  expect(nths.map((m) => m[1])).toEqual(["0", "0", "1"])
+})

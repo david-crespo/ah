@@ -4,7 +4,7 @@
 // and is tested without a browser.
 //
 // The merge is word by word, since a markdown paragraph is often one long
-// line, and it never leaves conflict markers. See mergeDisk.
+// line, and marks only the words both sides changed. See mergeDisk.
 
 import { diffArrays } from "diff"
 
@@ -116,18 +116,24 @@ function apply(base: string[], { start, end, hunks }: Region, ours: boolean): st
 
 const words = (text: string) => text.match(/[\p{L}\p{N}_'’]+/gu)?.length ?? 0
 
-/** `disk` merged into `unsaved`, where both are edits of `base`, word by word.
+/** `disk` merged into `unsaved`, where both are edits of `base`, word by word,
+ * and how many conflicts it marked.
  *
  * Edits that only touch (a word added right after a word the other side
- * changed) both go in. Where the edits overlap:
+ * changed) both go in, and so do lines both added at one spot, unsaved
+ * first. The same change on both sides goes in once. Any other overlap is a
+ * conflict, marked with both versions, unsaved first:
  *
- * - The same change on both sides goes in once.
- * - An edit wins over a deletion of the text around it.
- * - Otherwise both versions go in, unsaved first: side by side when every
- *   version of the overlap is at most two words ("fast inexpensive"), and
- *   else as both versions of the whole sentence, one after the other (one
- *   line each for a heading or list item). */
-export function mergeDisk(base: string, unsaved: string, disk: string): string {
+ * - Within a line, as CriticMarkup's substitution, `{~~unsaved~>disk~~}`,
+ *   around the words that conflict when every version is at most two words,
+ *   and else around the whole sentences.
+ * - Across lines, as git's markers around the whole lines,
+ *   `<<<<<<< mine`, `=======`, `>>>>>>> agent`. */
+export function mergeDisk(
+  base: string,
+  unsaved: string,
+  disk: string,
+): { text: string; conflicts: number } {
   const o = tokens(base)
   const all = [...hunks(o, tokens(unsaved), true), ...hunks(o, tokens(disk), false)].sort(
     // At one start, an insertion goes before a replacement
@@ -143,28 +149,61 @@ export function mergeDisk(base: string, unsaved: string, disk: string): string {
     } else regions.push({ start: h.start, end: h.end, hunks: [h] })
   }
 
-  // Conflicts bigger than a couple of words widen to whole sentences
-  const widened = new Set<Region>()
-  for (const r of regions) {
-    if (new Set(r.hunks.map((h) => h.ours)).size < 2 || r.start === r.end) continue
-    const ours = apply(o, r, true)
-    const theirs = apply(o, r, false)
-    if (ours === theirs) continue
-    const orig = o.slice(r.start, r.end).join("")
-    if ([orig, ours, theirs].some((t) => words(t) > 2)) widened.add(r)
+  const lineStart = (i: number) => i === 0 || o[i - 1] === "\n"
+  /** The base's version of a region and each side's */
+  const versions = (r: Region) => ({
+    orig: o.slice(r.start, r.end).join(""),
+    ours: apply(o, r, true),
+    theirs: apply(o, r, false),
+  })
+  /** A region merged, or null when it's a conflict */
+  const merged = (r: Region) => {
+    const { orig, ours, theirs } = versions(r)
+    if (ours === theirs || theirs === orig) return ours
+    if (ours === orig) return theirs
+    // Lines both added at one spot
+    if (
+      r.start === r.end &&
+      lineStart(r.start) &&
+      ours.endsWith("\n") &&
+      theirs.endsWith("\n")
+    )
+      return ours + theirs
+    return null
   }
-  // Whether a sentence or line ends right before token i
+
+  // Conflicts across lines widen to whole lines, and ones bigger than a
+  // couple of words to whole sentences
+  const widen = new Map<Region, "line" | "sentence">()
+  for (const r of regions) {
+    if (merged(r) !== null) continue
+    const all = Object.values(versions(r))
+    if (all.some((t) => t.includes("\n"))) widen.set(r, "line")
+    else if (r.start < r.end && all.some((t) => words(t) > 2)) widen.set(r, "sentence")
+  }
+  // Whether a sentence ends right before token i, or a line or the marker
+  // that starts a heading, list item or quote
   const boundary = (i: number) => {
-    if (i <= 0 || i >= o.length || o[i] === "\n" || o[i - 1] === "\n") return true
+    if (i <= 0 || i >= o.length || o[i] === "\n" || lineStart(i)) return true
+    let start = i
+    while (!lineStart(start)) start--
+    if (
+      /^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?$/.test(o.slice(start, i).join(""))
+    )
+      return true
     const before = o.slice(Math.max(0, i - 4), i).join("")
     return (
       /[.!?]["')\]*_]*$/.test(before.trimEnd()) && (/\s$/.test(before) || /^\s/.test(o[i]))
     )
   }
-  if (widened.size) {
+  if (widen.size) {
     const out: Region[] = []
     for (const r of regions) {
-      if (widened.has(r)) {
+      const to = widen.get(r)
+      if (to === "line") {
+        while (!lineStart(r.start)) r.start--
+        while (r.end < o.length && o[r.end - 1] !== "\n") r.end++
+      } else if (to === "sentence") {
         while (!boundary(r.start)) r.start--
         while (!boundary(r.end)) r.end++
       }
@@ -174,7 +213,8 @@ export function mergeDisk(base: string, unsaved: string, disk: string): string {
         r.hunks = [...prev.hunks, ...r.hunks]
         r.start = Math.min(r.start, prev.start)
         r.end = Math.max(r.end, prev.end)
-        if (widened.has(prev)) widened.add(r)
+        if (widen.get(prev) === "line" || widen.get(r) === "line") widen.set(r, "line")
+        else if (widen.has(prev)) widen.set(r, "sentence")
       }
       out.push(r)
     }
@@ -183,27 +223,62 @@ export function mergeDisk(base: string, unsaved: string, disk: string): string {
 
   let text = ""
   let at = 0
+  let conflicts = 0
   for (const r of regions) {
     text += o.slice(at, r.start).join("")
-    const ours = apply(o, r, true)
-    const theirs = apply(o, r, false)
-    const orig = o.slice(r.start, r.end).join("")
-    if (ours === theirs || theirs === orig) text += ours
-    else if (ours === orig) text += theirs
+    const m = merged(r)
+    if (m !== null) text += m
     else {
-      const block = widened.has(r) && /^\s*(?:#|>|\||[-*+]\s|\d+[.)]\s)/.test(ours)
-      text += join(ours, theirs, block ? "\n" : " ")
+      conflicts++
+      const { ours, theirs } = versions(r)
+      text +=
+        widen.get(r) === "line" ? lineMarkers(ours, theirs) : inlineMarkers(ours, theirs)
     }
     at = r.end
   }
-  return text + o.slice(at).join("")
+  return { text: text + o.slice(at).join(""), conflicts }
 }
 
-/** Two versions one after the other, with `sep` between if they'd otherwise
- * run together */
-function join(a: string, b: string, sep: string) {
-  if (!a || !b) return a + b
-  return /\s$/.test(a) || /^[\s,.;:!?)\]]/.test(b) ? a + b : a + sep + b
+/** `{~~ours~>theirs~~}`, with the spaces both start or end with outside */
+function inlineMarkers(ours: string, theirs: string) {
+  const sides = [ours, theirs].filter(Boolean)
+  const same = (re: RegExp) => {
+    const ws = sides.map((s) => re.exec(s)![0])
+    return ws.every((w) => w === ws[0]) ? ws[0] : ""
+  }
+  const head = same(/^\s*/)
+  const tail = same(/\s*$/)
+  const strip = (s: string) => (s ? s.slice(head.length, s.length - tail.length) : s)
+  return `${head}{~~${strip(ours)}~>${strip(theirs)}~~}${tail}`
+}
+
+/** The labels on git's markers, which the preview styles like the inline
+ * markers and makes buttons that pick a side (preview.ts) */
+export const MINE = "mine"
+export const AGENT = "agent"
+
+/** Whole lines of each side between git's markers */
+function lineMarkers(ours: string, theirs: string) {
+  const lines = (s: string) => (s && !s.endsWith("\n") ? s + "\n" : s)
+  return `<<<<<<< ${MINE}\n${lines(ours)}=======\n${lines(theirs)}>>>>>>> ${AGENT}\n`
+}
+
+const INLINE = /\{~~([\s\S]*?)~>([\s\S]*?)~~\}/y
+const LINES = new RegExp(
+  String.raw`<<<<<<< ${MINE}\n([\s\S]*?)^=======\n([\s\S]*?)^>>>>>>> ${AGENT}(?:\n|$)`,
+  "my",
+)
+
+/** `text` with the conflict a merge marked at `at` resolved to one side's
+ * version, or null if none starts there */
+export function pick(text: string, at: number, side: typeof MINE | typeof AGENT) {
+  for (const re of [INLINE, LINES]) {
+    re.lastIndex = at
+    const m = re.exec(text)
+    if (m)
+      return text.slice(0, at) + m[side === MINE ? 1 : 2] + text.slice(at + m[0].length)
+  }
+  return null
 }
 
 type Change = { from: number; to: number; insert: string }

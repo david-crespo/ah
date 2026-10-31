@@ -13,7 +13,8 @@
 //   (`checktime`). An unmodified buffer reloads. A modified one gets the
 //   file on disk merged into it by the server's merge route (routes.ts, at
 //   AH_MERGE_URL), with the text as of the last read or save as the base.
-//   The agent's edits and the unsaved typing both survive. Every save checks
+//   The agent's edits and the unsaved typing both survive, with both
+//   versions marked where they overlap (merge.ts). Every save checks
 //   first, so it writes the merged text and never writes over the agent's.
 //   If a merge fails, saves stop until the next change on disk merges.
 // - ⌘S saves: the page sends it as a kitty keyboard protocol super chord,
@@ -71,17 +72,24 @@ local function merge(buf)
     f:close()
     vim.list_extend(args, { "--form", name .. "=@" .. dir .. "/" .. name })
   end
+  -- The merged text to a file, and the number of conflicts it marked to stdout
+  vim.list_extend(args, { "--output", dir .. "/merged", "--write-out", "%header{ah-conflicts}" })
   table.insert(args, vim.env.AH_MERGE_URL)
   local result = vim.system(args, { text = true }):wait()
+  local merged = read(dir .. "/merged")
   vim.fn.delete(dir, "rf")
-  if result.code ~= 0 then
+  if result.code ~= 0 or not merged then
     unmerged[buf] = true
     vim.notify("ah: couldn't merge the file on disk, not saving: is ah running?", vim.log.levels.ERROR)
     return
   end
   unmerged[buf] = nil
-  set_text(buf, result.stdout)
+  set_text(buf, merged)
   base[buf] = disk
+  local conflicts = tonumber(result.stdout) or 0
+  if conflicts > 0 then
+    vim.notify("ah: merged the file on disk, with " .. conflicts .. (conflicts == 1 and " conflict" or " conflicts") .. " marked", vim.log.levels.WARN)
+  end
 end
 
 vim.api.nvim_create_autocmd("FileChangedShell", {

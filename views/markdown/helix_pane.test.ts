@@ -94,7 +94,9 @@ describe.skipIf(!hx)(
             body: Buffer.concat(chunks),
           }),
         )
-        res.writeHead(reply.status).end(await reply.text())
+        res
+          .writeHead(reply.status, Object.fromEntries(reply.headers))
+          .end(await reply.text())
       })
       await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
       const { port } = server.address() as AddressInfo
@@ -143,7 +145,7 @@ describe.skipIf(!hx)(
       expect(text).toContain("when it starts")
     })
 
-    test("keeps both versions of a sentence both sides changed", async () => {
+    test("marks both versions of a sentence both sides changed", async () => {
       socket.type("/a restart\r")
       await sleep(200)
       socket.type("iserver ")
@@ -151,8 +153,10 @@ describe.skipIf(!hx)(
       await sleep(50)
       await agent("so it does not survive a restart", "and is lost when the server stops")
       const text = await disk("server a restart")
+      await sleep(300)
+      expect(socket.output).toContain("with 1 conflict marked")
       expect(text).toContain(
-        "Scrollback is kept in memory only, so it does not survive server a restart. Scrollback is kept in memory only, and is lost when the server stops.",
+        "{~~Scrollback is kept in memory only, so it does not survive server a restart.~>Scrollback is kept in memory only, and is lost when the server stops.~~}",
       )
     })
 

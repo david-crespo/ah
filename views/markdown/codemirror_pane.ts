@@ -213,7 +213,7 @@ export class CodeMirrorPane implements EditorPane {
     const doc = view.state.doc.toString()
     let next = disk
     if (doc !== this.#base) {
-      next = mergeDisk(this.#base, doc, disk)
+      next = mergeDisk(this.#base, doc, disk).text
     }
     this.#base = disk
     if (next !== doc) {

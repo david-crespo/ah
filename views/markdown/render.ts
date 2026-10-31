@@ -2,6 +2,7 @@
 // adds its own rules on top, like conflict panels and GitHub embeds.
 
 import MarkdownExit from "markdown-exit"
+import { AGENT, MINE } from "./merge.ts"
 // @ts-expect-error no type declarations
 import footnote from "markdown-it-footnote"
 // @ts-expect-error no type declarations
@@ -21,6 +22,37 @@ export function createMarkdown() {
     }
     return true
   })
+  // Both versions of text the user and the agent both changed, as the editor
+  // pane's merge marks them (merge.ts): CriticMarkup's substitution,
+  // {~~mine~>agent's~~}. Before strikethrough, which would take the ~~.
+  md.inline.ruler.before("strikethrough", "merge_conflict", (state, silent) => {
+    const { src, pos } = state
+    if (!src.startsWith("{~~", pos)) return false
+    const mid = src.indexOf("~>", pos + 3)
+    const end = mid < 0 ? -1 : src.indexOf("~~}", mid + 2)
+    if (end < 0) return false
+    if (!silent) {
+      state.push("merge_conflict", "", 0).meta = {
+        source: src.slice(pos, end + 3),
+        mine: src.slice(pos + 3, mid),
+        agent: src.slice(mid + 2, end),
+      }
+    }
+    state.pos = end + 3
+    return true
+  })
+  // Each side's label is a button that picks it (preview.ts), labelled by
+  // CSS so the label isn't in the text. The marker's source, and which of the
+  // markers with that source it is, say where it is in the file.
+  md.renderer.rules.merge_conflict = (tokens, idx, _opts, env) => {
+    const { source, mine, agent } = tokens[idx].meta
+    const seen: Map<string, number> = (env.mergeConflicts ??= new Map())
+    const nth = seen.get(source) ?? 0
+    seen.set(source, nth + 1)
+    const side = (name: string, text: string) =>
+      `<span class="merge-${name}"${text ? "" : " data-empty"}><button class="merge-pick" data-side="${name}"></button>${md.renderInline(text, env)}</span>`
+    return `<span class="merge-conflict" data-source="${md.utils.escapeHtml(source)}" data-nth="${nth}">${side(MINE, mine)}${side(AGENT, agent)}</span>`
+  }
   md.core.ruler.push("gh_issue_ref", (state) => {
     for (const tok of state.tokens) {
       const kids = tok.children ?? []

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { lineChanges, mergeDisk } from "./merge.ts"
+import { AGENT, lineChanges, MINE, mergeDisk, pick } from "./merge.ts"
 
 const apply = (text: string, changes: ReturnType<typeof lineChanges>) => {
   let out = ""
@@ -15,14 +15,18 @@ const apply = (text: string, changes: ReturnType<typeof lineChanges>) => {
 /** Paragraphs of unwrapped markdown */
 const p = (...paras: string[]) => paras.join("\n\n") + "\n"
 
-/** mergeDisk with each side given as edits of `base`, `[before, after]` */
+/** mergeDisk's text */
+const merged = (base: string, unsaved: string, disk: string) =>
+  mergeDisk(base, unsaved, disk).text
+
+/** mergeDisk's text with each side given as edits of `base`, `[before, after]` */
 const merge = (base: string, unsaved: [string, string][], disk: [string, string][]) => {
   const edit = (edits: [string, string][]) =>
     edits.reduce((text, [before, after]) => {
       expect(text).toContain(before)
       return text.replace(before, after)
     }, base)
-  return mergeDisk(base, edit(unsaved), edit(disk))
+  return merged(base, edit(unsaved), edit(disk))
 }
 
 describe("mergeDisk", () => {
@@ -95,18 +99,24 @@ describe("mergeDisk", () => {
 
   test("leaves the rest of the file alone when neither side changed it", () => {
     const edited = session.replace("startup", "launch")
-    expect(mergeDisk(session, edited, session)).toBe(edited)
-    expect(mergeDisk(session, session, edited)).toBe(edited)
+    expect(merged(session, edited, session)).toBe(edited)
+    expect(merged(session, session, edited)).toBe(edited)
   })
 
-  test("puts both versions of a word or two side by side, unsaved first", () => {
+  test("marks both versions of a word or two, unsaved first", () => {
     const base = p("Merges are cheap, so we run them on every write.")
-    expect(merge(base, [["cheap", "fast"]], [["cheap", "inexpensive"]])).toBe(
-      p("Merges are fast inexpensive, so we run them on every write."),
-    )
+    const fast = base.replace("cheap", "fast")
+    expect(mergeDisk(base, fast, base.replace("cheap", "inexpensive"))).toEqual({
+      text: p("Merges are {~~fast~>inexpensive~~}, so we run them on every write."),
+      conflicts: 1,
+    })
+    expect(mergeDisk(base, fast, fast).conflicts).toBe(0)
+    expect(
+      merge(base, [["are cheap", "are very cheap"]], [["are cheap", "are quite cheap"]]),
+    ).toBe(p("Merges are {~~very~>quite~~} cheap, so we run them on every write."))
   })
 
-  test("puts both versions of a bigger overlap as whole sentences", () => {
+  test("marks both versions of a bigger overlap as whole sentences", () => {
     expect(
       merge(
         session,
@@ -116,30 +126,54 @@ describe("mergeDisk", () => {
     ).toBe(
       session.replace(
         "Scrollback is kept in memory only, so it doesn't survive a restart.",
-        "Scrollback is kept in memory only, so it doesn't survive a server restart. Scrollback is kept in memory only, and is lost when the server stops.",
+        "{~~Scrollback is kept in memory only, so it doesn't survive a server restart.~>Scrollback is kept in memory only, and is lost when the server stops.~~}",
       ),
     )
   })
 
-  test("keeps an edit to a sentence the other side deleted", () => {
+  test("marks an edit to a sentence the other side deleted", () => {
     expect(
       merge(
         session,
         [["a restart", "a server restart"]],
         [["Scrollback is kept in memory only, so it doesn't survive a restart. ", ""]],
       ),
-    ).toBe(session.replace("a restart", "a server restart"))
+    ).toBe(
+      session.replace(
+        "Scrollback is kept in memory only, so it doesn't survive a restart.",
+        "{~~Scrollback is kept in memory only, so it doesn't survive a server restart.~>~~}",
+      ),
+    )
   })
 
-  test("puts both versions of a heading or list item on lines of their own", () => {
+  test("marks edits across lines with git's markers around the lines", () => {
+    const paragraph = session.split("\n\n")[2].trimEnd()
+    expect(
+      merge(session, [["a restart", "a server restart"]], [["\n\n" + paragraph, ""]]),
+    ).toBe(
+      session.replace(
+        "\n\n" + paragraph,
+        `\n<<<<<<< mine\n\n${paragraph.replace("a restart", "a server restart")}\n=======\n>>>>>>> agent`,
+      ),
+    )
+  })
+
+  test("marks only the text after a heading or list item's marker", () => {
     expect(
       merge(
         session,
         [["# Sessions", "# Saved sessions"]],
         [["# Sessions", "# Where sessions live on disk"]],
       ),
-    ).toBe(session.replace("# Sessions", "# Saved sessions\n# Where sessions live on disk"))
+    ).toBe(
+      session.replace("# Sessions", "# {~~Saved sessions~>Where sessions live on disk~~}"),
+    )
+    expect(
+      merged("- one task\n- two\n", "- one big task\n- two\n", "- one small task\n- two\n"),
+    ).toBe("- one {~~big~>small~~} task\n- two\n")
+  })
 
+  test("keeps lines both added at one spot, unsaved first", () => {
     const list = p("Questions:", "- Run on every write?\n- What about undo?")
     expect(
       merge(
@@ -155,15 +189,15 @@ describe("mergeDisk", () => {
 
 describe("mergeDisk edge cases", () => {
   test("keeps the file's line endings and a missing last newline", () => {
-    expect(mergeDisk("one two", "one two three", "zero one two")).toBe("zero one two three")
-    expect(mergeDisk("a b\r\nc d\r\n", "a B\r\nc d\r\n", "a b\r\nc D\r\n")).toBe(
+    expect(merged("one two", "one two three", "zero one two")).toBe("zero one two three")
+    expect(merged("a b\r\nc d\r\n", "a B\r\nc d\r\n", "a b\r\nc D\r\n")).toBe(
       "a B\r\nc D\r\n",
     )
   })
 
   test("merges words outside ASCII", () => {
     expect(
-      mergeDisk(
+      merged(
         "Café naïve 日本語 test.\n",
         "Café très naïve 日本語 test.\n",
         "Café naïve 日本語 test 🎉.\n",
@@ -172,25 +206,26 @@ describe("mergeDisk edge cases", () => {
   })
 
   test("keeps both when both write a file that was empty", () => {
-    expect(mergeDisk("", "mine\n", "theirs\n")).toBe("mine\ntheirs\n")
-    expect(mergeDisk("", "same\n", "same\n")).toBe("same\n")
+    expect(merged("", "mine\n", "theirs\n")).toBe("mine\ntheirs\n")
+    expect(merged("", "same\n", "same\n")).toBe("same\n")
   })
 
-  test("keeps an edit to a file the other side emptied", () => {
-    expect(mergeDisk("a b c\n", "a B c\n", "")).toBe("a B c\n")
+  test("marks an edit to a file the other side emptied", () => {
+    expect(merged("a b c\n", "a B c\n", "")).toBe(
+      "<<<<<<< mine\na B c\n=======\n>>>>>>> agent\n",
+    )
   })
 
-  test("keeps both whole versions when both rewrote a long line", () => {
+  test("marks both whole versions when both rewrote a long line", () => {
     // Past the diff's limit on edits, so each side is one replacement
     const line = (seed: number) =>
       Array.from({ length: 3000 }, (_, i) => `w${(i * seed) % 997}`).join(" ") + "\n"
     const [base, unsaved, disk] = [line(1), line(7), line(13)]
-    expect(mergeDisk(base, unsaved, base)).toBe(unsaved)
-    expect(mergeDisk(base, base, disk)).toBe(disk)
-    const merged = mergeDisk(base, unsaved, disk)
-    expect(merged.length).toBe(unsaved.length + disk.length)
-    expect(merged.startsWith(unsaved.trimEnd())).toBe(true)
-    expect(merged.endsWith(disk)).toBe(true)
+    expect(merged(base, unsaved, base)).toBe(unsaved)
+    expect(merged(base, base, disk)).toBe(disk)
+    expect(merged(base, unsaved, disk)).toBe(
+      `{~~${unsaved.trimEnd()}~>${disk.trimEnd()}~~}\n`,
+    )
   })
 })
 
@@ -234,9 +269,9 @@ describe("mergeDisk on random edits", () => {
       const paras = base.split("\n\n").length
       let edited = base
       for (let n = 1 + random(3); n > 0; n--) edited = edit(edited, random(paras))
-      expect(mergeDisk(base, edited, base)).toBe(edited)
-      expect(mergeDisk(base, base, edited)).toBe(edited)
-      expect(mergeDisk(base, edited, edited)).toBe(edited)
+      expect(merged(base, edited, base)).toBe(edited)
+      expect(merged(base, base, edited)).toBe(edited)
+      expect(merged(base, edited, edited)).toBe(edited)
     }
   })
 
@@ -249,7 +284,7 @@ describe("mergeDisk on random edits", () => {
       const unsaved = edit(base, i)
       const disk = edit(base, j)
       const both = disk.split("\n\n").with(i, unsaved.split("\n\n")[i]).join("\n\n")
-      expect(mergeDisk(base, unsaved, disk)).toBe(both)
+      expect(mergeDisk(base, unsaved, disk)).toEqual({ text: both, conflicts: 0 })
     }
   })
 })
@@ -281,5 +316,32 @@ describe("lineChanges", () => {
     expect(lineChanges("one\ntwo\nthree\n", "one\n2\nthree\n")).toEqual([
       { from: 4, to: 7, insert: "2" },
     ])
+  })
+})
+
+describe("pick", () => {
+  const text = "One {~~two~>2~~} three.\n<<<<<<< mine\nfour\n=======\n>>>>>>> agent\nfive\n"
+  test("resolves the conflict at an offset to one side", () => {
+    expect(pick(text, 4, MINE)).toBe(text.replace("{~~two~>2~~}", "two"))
+    expect(pick(text, 4, AGENT)).toBe(text.replace("{~~two~>2~~}", "2"))
+    const lines = text.indexOf("<<<<<<<")
+    expect(pick(text, lines, MINE)).toBe("One {~~two~>2~~} three.\nfour\nfive\n")
+    expect(pick(text, lines, AGENT)).toBe("One {~~two~>2~~} three.\nfive\n")
+  })
+
+  test("finds none anywhere else", () => {
+    expect(pick(text, 0, MINE)).toBeNull()
+    expect(pick(text, 5, MINE)).toBeNull()
+    expect(pick("<<<<<<< HEAD\na\n=======\nb\n>>>>>>> x\n", 0, MINE)).toBeNull()
+  })
+
+  test("undoes what the merge marked", () => {
+    const base = "Merges are cheap.\n\nThey run on every write.\n"
+    const unsaved = "Merges are fast.\n\nThey run on every save.\n"
+    const disk = "Merges are inexpensive.\n"
+    let { text } = mergeDisk(base, unsaved, disk)
+    for (let at = text.search(/\{~~|<<<<<<</); at >= 0; at = text.search(/\{~~|<<<<<<</))
+      text = pick(text, at, MINE)!
+    expect(text).toBe(unsaved)
   })
 })

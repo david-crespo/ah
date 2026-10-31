@@ -118,9 +118,14 @@ the id is what `ah message respond` takes.
   context for, on the line before it.
 - ah configures helix (the page's editor pane) to reload external edits and
   merge them word by word into unsaved text. Where both changed the same
-  words, both versions end up in the file, the user's first; leave tidying
-  that up to the user unless asked. If a pane remains stale, `:reload` is the
-  manual fallback. Do not force-write over the user's unsaved changes.
+  words, the merge marks both versions, the user's first: within a line as
+  `{~~user's~>yours~~}`, and across lines as git conflict markers labelled
+  `mine` and `agent`. Leave resolving them to the user unless asked, and
+  edit around them. Without ah's Steel modules (stock Helix), the pane
+  doesn't reload: once you edit the file, its saves fail until the user runs
+  `:reload`, and a `:w!` writes back the old text. So an edit notice that
+  exactly undoes a recent edit of yours may be a stale pane rather than a
+  decision. Ask before redoing it or accepting it.
 - After editing the file, the page live-updates on its own and flashes the
   changed blocks. Post a short completion summary to the page. General
   answers can be longer and use Markdown. Keep draft-related replies in the

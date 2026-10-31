@@ -115,6 +115,73 @@ ah-markdown {
     background: #ffebe9;
     border-radius: 2px;
   }
+  /* Text the user and the agent both changed, as the editor pane's merge
+     marks it: both versions, labelled (render.ts) */
+  .merge-mine,
+  .merge-agent {
+    padding: 0 3px;
+    border-bottom: 2px solid #bf8700;
+  }
+  .merge-mine {
+    background: #ddf4ff;
+    border-radius: 3px 0 0 3px;
+  }
+  .merge-agent {
+    background: #dafbe1;
+    border-radius: 0 3px 3px 0;
+  }
+  /* Each side's label, a button that keeps that side (preview.ts). The text
+     is the side's name, in CSS so it isn't in the rendered text. */
+  .merge-pick {
+    margin-right: 4px;
+    padding: 0 3px;
+    border: 0;
+    border-radius: 3px;
+    background: none;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    vertical-align: 1px;
+    color: #0969da;
+    cursor: pointer;
+  }
+  .merge-pick[data-side="agent"] {
+    color: #1a7f37;
+  }
+  .merge-pick::before {
+    content: attr(data-side);
+  }
+  .merge-pick:hover::before {
+    content: "keep " attr(data-side);
+    color: #fff;
+  }
+  .merge-pick:hover {
+    background: #0969da;
+  }
+  .merge-pick[data-side="agent"]:hover {
+    background: #1a7f37;
+  }
+  .merge-pick:disabled {
+    opacity: 0.5;
+    cursor: progress;
+  }
+  .merge-agent[data-empty]::after,
+  .conflict-panel[data-side="agent"] .conflict-body:empty::after {
+    content: "deleted";
+    font-style: italic;
+    color: #59636e;
+  }
+  /* The same merge's conflicts across lines (preview.ts) */
+  .conflict-panel[data-side="mine"] {
+    background: #ddf4ff;
+  }
+  .conflict-panel[data-side="agent"] {
+    background: #dafbe1;
+  }
+  .conflict-panel[data-side="agent"] .conflict-label {
+    color: #1a7f37;
+  }
   /* GitHub-style embeds (permalink snippets, assets) */
   .gh-embed img,
   .gh-embed video {
@@ -258,6 +325,44 @@ ah-markdown {
     }
     .conflict-removed {
       background: #f8514933;
+    }
+    .merge-mine,
+    .merge-agent {
+      border-color: #9e6a03;
+    }
+    .merge-mine {
+      background: #388bfd26;
+    }
+    .merge-agent {
+      background: #2ea04326;
+    }
+    .merge-pick {
+      color: #58a6ff;
+    }
+    .merge-pick[data-side="agent"] {
+      color: #3fb950;
+    }
+    .merge-pick:hover::before {
+      color: #0d1117;
+    }
+    .merge-pick:hover {
+      background: #58a6ff;
+    }
+    .merge-pick[data-side="agent"]:hover {
+      background: #3fb950;
+    }
+    .merge-agent[data-empty]::after,
+    .conflict-panel[data-side="agent"] .conflict-body:empty::after {
+      color: #9198a1;
+    }
+    .conflict-panel[data-side="mine"] {
+      background: #388bfd26;
+    }
+    .conflict-panel[data-side="agent"] {
+      background: #2ea04326;
+    }
+    .conflict-panel[data-side="agent"] .conflict-label {
+      color: #3fb950;
     }
     .gh-blob {
       border-color: #3d444d;

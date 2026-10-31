@@ -21,6 +21,7 @@ import { LanguageDescription } from "@codemirror/language"
 import { classHighlighter, highlightCode } from "@lezer/highlight"
 import { createMarkdown } from "./render.ts"
 import { type Conflict, findConflictEnd, parseConflict } from "./conflict.ts"
+import { AGENT, MINE } from "./merge.ts"
 import type { ThreadSnapshot } from "../../subjects/thread/events.ts"
 import { splice } from "./splice.ts"
 
@@ -58,6 +59,10 @@ export class AhMarkdown extends HTMLElement {
   constructor() {
     super()
     this.content.className = "markdown-body"
+    this.content.addEventListener("click", (e) => {
+      const button = (e.target as Element).closest<HTMLButtonElement>(".merge-pick")
+      if (button) void this.#pick(button)
+    })
   }
 
   // Gives `doc-message` listeners a typed event, as lib.dom does for its own
@@ -163,6 +168,38 @@ export class AhMarkdown extends HTMLElement {
       )
     } else if (status === 0) {
       this.#note("Can't reach ah. Retrying…")
+    }
+  }
+
+  /** Resolve the conflict the editor pane's merge marked to the side whose
+   * label `button` is. If the file changed since it rendered, nothing
+   * happens, and the new text arrives to pick from again. */
+  async #pick(button: HTMLButtonElement) {
+    const text = this.#text
+    if (text === null) return
+    let at = -1
+    const inline = button.closest<HTMLElement>(".merge-conflict")
+    const lines = button.closest<HTMLElement>(".conflict[data-line]")
+    if (inline) {
+      // The nth marker with this source
+      const source = inline.dataset.source!
+      for (let n = Number(inline.dataset.nth); n >= 0; n--) {
+        at = text.indexOf(source, at + 1)
+        if (at < 0) return
+      }
+    } else if (lines) {
+      const line = Number(lines.dataset.line!.split(":")[0])
+      at = text.split("\n").slice(0, line).join("\n").length + (line ? 1 : 0)
+    } else return
+    button.disabled = true
+    const res = await fetch(new URL("pick", this.base), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, at, side: button.dataset.side }),
+    }).catch(() => null)
+    if (!res?.ok) {
+      button.disabled = false
+      console.warn("ah: couldn't pick a side:", res ? await res.text() : "no server")
     }
   }
 
@@ -289,9 +326,16 @@ md.renderer.rules.conflict = (tokens, idx, _opts, _env, self) => {
     const changed = p.changed?.length
       ? ` data-changed="${esc(JSON.stringify(p.changed))}"`
       : ""
+    // The editor pane's merge's sides look like its inline markers, with
+    // their label a button that picks the side
+    const merged = p.label === MINE || p.label === AGENT
+    const side = merged ? ` data-side="${p.label}"` : ""
+    const label = merged
+      ? `<button class="conflict-label merge-pick" data-side="${p.label}"></button>`
+      : `<div class="conflict-label">${esc(p.label)}</div>`
     return (
-      `<section class="conflict-panel" data-kind="${p.kind}"${changed}>` +
-      `<div class="conflict-label">${esc(p.label)}</div>` +
+      `<section class="conflict-panel" data-kind="${p.kind}"${side}${changed}>` +
+      label +
       `<div class="conflict-body">${md.render(p.text, { nested: true })}</div></section>`
     )
   })
@@ -691,9 +735,9 @@ function wrapText(el: HTMLElement, inserted: string, className: string): boolean
       positions.push({ node, offset: i })
     }
   }
-  const candidates = [inserted, inserted.replace(/[*_`~[\]]/g, "")].map((s) =>
-    s.replace(/\s+/g, ""),
-  )
+  // The second without markup, including the merge's {~~mine~>agent~~}
+  const bare = inserted.replace(/\{~~|~>|~~\}/g, "").replace(/[*_`~[\]]/g, "")
+  const candidates = [inserted, bare].map((s) => s.replace(/\s+/g, ""))
   for (const needle of candidates) {
     // too short to locate reliably, or a rewrite of most of the block
     if (needle.length < 3 || needle.length >= 0.6 * haystack.length) return false

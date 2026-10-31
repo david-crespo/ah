@@ -11,8 +11,8 @@
 ;
 ; - reloaded, if the buffer is unmodified
 ; - merged, if it's modified: ah's server merges the file on disk into the
-;   buffer, against the file as helix last read or saved it (the base). The
-;   result is written to the file and the buffer reloaded from it, so the
+;   buffer, against the file as helix last read or saved it (the base),
+;   marking the text both changed with both versions. The result is written to the file and the buffer reloaded from it, so the
 ;   buffer ends unmodified with the merged text, and helix's last-saved time
 ;   is the merged write's mtime, so its next save goes through.
 ;
@@ -77,29 +77,35 @@
     (string-append (if (Ok? v) (Ok->value v) "/tmp") "/ah-hx-merge-"
                    (number->string (current-milliseconds)))))
 
-; disk merged into unsaved, both edits of base, by the ah server; #f if that
-; failed. Runs on the editor's thread, which waits for it, so the buffer
-; can't change in the meantime.
+; disk merged into unsaved, both edits of base, by the ah server, and how
+; many conflicts it marked in it: (text . conflicts), or #f if that failed.
+; Runs on the editor's thread, which waits for it, so the buffer can't change
+; in the meantime.
 (define (ah-merge base unsaved disk)
   (create-directory! *scratch*)
-  (let ([field (lambda (name text)
-                 (let ([path (string-append *scratch* "/" name)])
-                   (write-file! path text)
-                   (list "--form" (string-append name "=@" path))))])
-    (let ([spawned (~> (command "curl"
-                                (append (list "--silent" "--fail" "--max-time" "5")
-                                        (field "base" base)
-                                        (field "unsaved" unsaved)
-                                        (field "disk" disk)
-                                        (list *merge-url*)))
-                       with-stdout-piped
-                       spawn-process)])
-      (if (Err? spawned)
-          #f
-          (let* ([child (Ok->value spawned)]
-                 [out (read-port-to-string (child-stdout child))]
-                 [code (Ok->value (wait child))])
-            (if (equal? code 0) out #f))))))
+  (let* ([path (lambda (name) (string-append *scratch* "/" name))]
+         [field (lambda (name text)
+                  (write-file! (path name) text)
+                  (list "--form" (string-append name "=@" (path name))))]
+         ; The text to a file, and the conflicts to stdout
+         [spawned (~> (command "curl"
+                               (append (list "--silent" "--fail" "--max-time" "5")
+                                       (field "base" base)
+                                       (field "unsaved" unsaved)
+                                       (field "disk" disk)
+                                       (list "--output" (path "merged")
+                                             "--write-out" "%header{ah-conflicts}"
+                                             *merge-url*)))
+                      with-stdout-piped
+                      spawn-process)])
+    (if (Err? spawned)
+        #f
+        (let* ([child (Ok->value spawned)]
+               [out (read-port-to-string (child-stdout child))]
+               [code (Ok->value (wait child))])
+          (if (equal? code 0)
+              (cons (read-file (path "merged")) (or (string->number out) 0))
+              #f)))))
 
 ; The file is what helix last read or wrote: keep it as the base, once per
 ; mtime, if it doesn't change while being read
@@ -117,16 +123,23 @@
         ; after it changed: what helix last saved is unknown, so don't guess
         (set-error! "File changed on disk and the merge base is unknown: :reload or :w!")
         (let* ([disk (read-file path)]
-               [merged (ah-merge (cdr base) (text-of doc) disk)])
+               [result (ah-merge (cdr base) (text-of doc) disk)])
           (cond
-            [(not merged) (set-error! "Couldn't merge the file on disk: is ah running?")]
+            [(not result) (set-error! "Couldn't merge the file on disk: is ah running?")]
             ; Written again since we read it: the next check merges that
             [(not (equal? seen (mtime path))) void]
             [else
-             (unless (equal? merged disk)
-               (write-file! path merged))
-             (editor-document-reload doc)
-             (set-status! "Merged external changes")])))))
+             (let ([merged (car result)]
+                   [conflicts (cdr result)])
+               (unless (equal? merged disk)
+                 (write-file! path merged))
+               (editor-document-reload doc)
+               (if (> conflicts 0)
+                   (set-error! (string-append "Merged external changes, with "
+                                              (number->string conflicts)
+                                              (if (= conflicts 1) " conflict" " conflicts")
+                                              " marked"))
+                   (set-status! "Merged external changes")))])))))
 
 (define (check-doc doc)
   (let ([path (editor-document->path doc)]

@@ -7,7 +7,7 @@
 // with just the <ah-markdown> element, for other pages that show a file.
 
 import { createReadStream } from "node:fs"
-import { readFile, realpath } from "node:fs/promises"
+import { readFile, realpath, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { Readable } from "node:stream"
@@ -26,7 +26,7 @@ import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
 import { type LiveMarkdown, markdownFiles } from "./files.ts"
 import { fetchBlob, resolveAsset } from "./github.ts"
-import { mergeDisk } from "./merge.ts"
+import { AGENT, MINE, mergeDisk, pick } from "./merge.ts"
 import { indexPage, page } from "./page.ts"
 import { escapeHtml } from "../escape.ts"
 import { mediaType } from "../mime.ts"
@@ -126,8 +126,30 @@ export class MarkdownBackend {
       )
     }
     if (sub === "local") return await localMedia(path, searchParams.get("path") ?? "")
+    if (sub === "pick" && req.method === "POST") return await pickSide(path, req)
     return new Response("not found", { status: 404 })
   }
+}
+
+/** The preview's pick of one side of a conflict the editor pane's merge
+ * marked: JSON `{ text, at, side }`, where `text` is the file as the page
+ * shows it and `at` where the conflict starts in it. Written only if the file
+ * is still `text`, so it never writes over a newer edit; the page gets that
+ * and can pick again. The editor pane takes the change like any other. */
+export async function pickSide(path: string, req: Request): Promise<Response> {
+  const { text, at, side } = (await req.json().catch(() => null)) ?? {}
+  if (
+    typeof text !== "string" ||
+    !Number.isInteger(at) ||
+    (side !== MINE && side !== AGENT)
+  )
+    return new Response("expected text, at and side", { status: 400 })
+  const picked = pick(text, at, side)
+  if (picked === null) return new Response("no conflict there", { status: 400 })
+  if ((await readFile(path, "utf8")) !== text)
+    return new Response("the file changed since the page showed it", { status: 409 })
+  await writeFile(path, picked)
+  return new Response(null, { status: 204 })
 }
 
 /** For the editor pane's terminal editors, which can't run merge.ts
@@ -146,8 +168,12 @@ export async function merge(req: Request): Promise<Response> {
   if (base === null || unsaved === null || disk === null) {
     return new Response("expected files base, unsaved and disk", { status: 400 })
   }
-  return new Response(mergeDisk(base, unsaved, disk), {
-    headers: { "content-type": "text/plain; charset=utf-8" },
+  const { text, conflicts } = mergeDisk(base, unsaved, disk)
+  return new Response(text, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "ah-conflicts": String(conflicts),
+    },
   })
 }
 
