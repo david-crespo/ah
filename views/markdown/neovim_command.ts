@@ -11,8 +11,8 @@
 // - Save 650ms after typing stops, and when the pane loses focus.
 // - Check the file on disk every 300ms and when the pane gains focus
 //   (`checktime`). An unmodified buffer reloads. A modified one gets the
-//   file on disk merged into it by the server's merge route (routes.ts, at
-//   AH_MERGE_URL), with the text as of the last read or save as the base.
+//   file on disk merged into it by `ah view merge` (views/cli.ts), with
+//   the text as of the last read or save as the base.
 //   The agent's edits and the unsaved typing both survive, with both
 //   versions marked where they overlap (merge.ts). Every save checks
 //   first, so it writes the merged text and never writes over the agent's.
@@ -62,31 +62,23 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost" }, { callback = reme
 local function merge(buf)
   local disk = read(vim.api.nvim_buf_get_name(buf))
   if not disk then return end
-  local dir = vim.fn.tempname()
-  vim.fn.mkdir(dir, "p")
-  local args = { "curl", "--silent", "--fail", "--max-time", "5" }
-  local texts = { base = base[buf] or disk, unsaved = text_of(buf), disk = disk }
-  for name, text in pairs(texts) do
-    local f = assert(io.open(dir .. "/" .. name, "wb"))
-    f:write(text)
-    f:close()
-    vim.list_extend(args, { "--form", name .. "=@" .. dir .. "/" .. name })
-  end
-  -- The merged text to a file, and the number of conflicts it marked to stdout
-  vim.list_extend(args, { "--output", dir .. "/merged", "--write-out", "%header{ah-conflicts}" })
-  table.insert(args, vim.env.AH_MERGE_URL)
-  local result = vim.system(args, { text = true }):wait()
-  local merged = read(dir .. "/merged")
-  vim.fn.delete(dir, "rf")
-  if result.code ~= 0 or not merged then
+  -- vim.system throws if ah isn't on the PATH, and the JSON calls on text
+  -- that isn't UTF-8
+  local ok, result = pcall(function()
+    local input = vim.json.encode({ base = base[buf] or disk, unsaved = text_of(buf), disk = disk })
+    local done = vim.system({ "ah", "view", "merge", "--words" }, { stdin = input, text = true }):wait()
+    assert(done.code == 0)
+    return vim.json.decode(done.stdout)
+  end)
+  if not ok then
     unmerged[buf] = true
-    vim.notify("ah: couldn't merge the file on disk, not saving: is ah running?", vim.log.levels.ERROR)
+    vim.notify("ah: couldn't merge the file on disk, not saving: is ah on the PATH?", vim.log.levels.ERROR)
     return
   end
   unmerged[buf] = nil
-  set_text(buf, merged)
+  set_text(buf, result.text)
   base[buf] = disk
-  local conflicts = tonumber(result.stdout) or 0
+  local conflicts = result.conflicts
   if conflicts > 0 then
     vim.notify("ah: merged the file on disk, with " .. conflicts .. (conflicts == 1 and " conflict" or " conflicts") .. " marked", vim.log.levels.WARN)
   end

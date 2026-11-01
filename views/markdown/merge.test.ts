@@ -289,6 +289,67 @@ describe("mergeDisk on random edits", () => {
   })
 })
 
+describe("mergeDisk by lines", () => {
+  const code = 'fn main() {\n    let a = 1;\n    let b = 2;\n    println!("{a} {b}");\n}\n'
+  const byLines = (base: string, unsaved: string, disk: string) =>
+    mergeDisk(base, unsaved, disk, "lines")
+
+  test("keeps edits to different lines", () => {
+    const unsaved = code.replace("a = 1", "a = 10")
+    const disk = code.replace("b = 2", "b = 20").replace("fn main", "pub fn main")
+    expect(byLines(code, unsaved, disk)).toEqual({
+      text: code
+        .replace("a = 1", "a = 10")
+        .replace("b = 2", "b = 20")
+        .replace("fn main", "pub fn main"),
+      conflicts: 0,
+    })
+  })
+
+  test("marks a line both changed with git's markers, even a word apart", () => {
+    const unsaved = code.replace("let a = 1", "let mut a = 1")
+    const disk = code.replace("a = 1", "a = 2")
+    expect(byLines(code, unsaved, disk)).toEqual({
+      text: code.replace(
+        "    let a = 1;\n",
+        "<<<<<<< mine\n    let mut a = 1;\n=======\n    let a = 2;\n>>>>>>> agent\n",
+      ),
+      conflicts: 1,
+    })
+  })
+
+  test("takes the same edit on both sides once", () => {
+    const edited = code.replace("b = 2", "b = 3")
+    expect(byLines(code, edited, edited)).toEqual({ text: edited, conflicts: 0 })
+    expect(byLines(code, edited, code).text).toBe(edited)
+    expect(byLines(code, code, edited).text).toBe(edited)
+  })
+
+  test("marks different lines both added at one spot", () => {
+    const at = "    let b = 2;\n"
+    const unsaved = code.replace(at, at + "    let c = 3;\n")
+    const disk = code.replace(at, at + "    let d = 4;\n")
+    expect(byLines(code, unsaved, disk).text).toBe(
+      code.replace(
+        at,
+        at + "<<<<<<< mine\n    let c = 3;\n=======\n    let d = 4;\n>>>>>>> agent\n",
+      ),
+    )
+    expect(byLines(code, unsaved, unsaved).text).toBe(unsaved)
+  })
+
+  test("keeps the file's line endings and a missing last newline", () => {
+    expect(byLines("a\r\nb\r\nc", "A\r\nb\r\nc", "a\r\nb\r\nc!").text).toBe("A\r\nb\r\nc!")
+    expect(byLines("", "mine\n", "").text).toBe("mine\n")
+  })
+
+  test("leaves conflicts the preview can pick a side of", () => {
+    const unsaved = code.replace("a = 1", "a = 10")
+    const { text } = byLines(code, unsaved, code.replace("a = 1", "a = 2"))
+    expect(pick(text, text.indexOf("<<<<<<<"), MINE)).toBe(unsaved)
+  })
+})
+
 describe("lineChanges", () => {
   test("turns one text into the other", () => {
     const texts = [

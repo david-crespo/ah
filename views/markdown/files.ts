@@ -30,16 +30,12 @@ export class LiveMarkdown implements Live {
   }
 }
 
-/** `port` is the server's, whose merge route (routes.ts) the editor pane's
- * terminal editors call, at AH_MERGE_URL */
-export const markdownFiles = (port: number): FileType<LiveMarkdown> => ({
+export const markdownFiles: FileType<LiveMarkdown> = {
   kind: "markdown",
   kinds: threadKinds,
   attach: async (path, pages) =>
     new LiveMarkdown(
       await LiveDoc.open(path, (message) => pages.broadcast(message)),
-      new PtyBackend(path, helixCommand, {
-        AH_MERGE_URL: `http://127.0.0.1:${port}/view/markdown/merge`,
-      }),
+      new PtyBackend(path, helixCommand),
     ),
-})
+}

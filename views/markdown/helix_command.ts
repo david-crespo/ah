@@ -5,7 +5,7 @@
 // config.toml entirely, which is why this concatenates rather than overrides.
 // Steel config (helix.scm, init.scm) still loads from the normal location,
 // and the agent's edits come in through editors/helix/auto-merge.scm there,
-// which the pane's AH_MERGE_URL turns on (files.ts).
+// as in any helix.
 
 import { mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { homedir, tmpdir } from "node:os"

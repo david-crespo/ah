@@ -64,6 +64,9 @@ export class PtyBackend implements EditorBackend {
       ...this.#env,
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
+      // Marks the pane for the user's editor config, to turn off what makes
+      // no sense there, like splitting the Rex pane
+      AH_PANE: "1",
     }
     let command: string
     let args: string[]

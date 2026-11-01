@@ -3,8 +3,9 @@
 // (codemirror_pane.ts). Plain strings in and out, so it runs in both places
 // and is tested without a browser.
 //
-// The merge is word by word, since a markdown paragraph is often one long
-// line, and marks only the words both sides changed. See mergeDisk.
+// The merge is by lines, like git's, or word by word, since a markdown
+// paragraph is often one long line, marking only the words both sides
+// changed. See mergeDisk.
 
 import { diffArrays } from "diff"
 
@@ -116,26 +117,31 @@ function apply(base: string[], { start, end, hunks }: Region, ours: boolean): st
 
 const words = (text: string) => text.match(/[\p{L}\p{N}_'’]+/gu)?.length ?? 0
 
-/** `disk` merged into `unsaved`, where both are edits of `base`, word by word,
- * and how many conflicts it marked.
+/** Lines with their newlines. Joined, they give back the text. */
+const splitLines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? []
+
+/** `disk` merged into `unsaved`, where both are edits of `base`, by lines or
+ * by words, and how many conflicts it marked.
  *
- * Edits that only touch (a word added right after a word the other side
- * changed) both go in, and so do lines both added at one spot, unsaved
- * first. The same change on both sides goes in once. Any other overlap is a
- * conflict, marked with both versions, unsaved first:
+ * Edits that only touch (a line or word added right after one the other side
+ * changed) both go in. The same change on both sides goes in once. Any other
+ * overlap is a conflict, marked with both versions, unsaved first, as git's
+ * markers around the whole lines, `<<<<<<< mine`, `=======`,
+ * `>>>>>>> agent`.
  *
- * - Within a line, as CriticMarkup's substitution, `{~~unsaved~>disk~~}`,
- *   around the words that conflict when every version is at most two words,
- *   and else around the whole sentences.
- * - Across lines, as git's markers around the whole lines,
- *   `<<<<<<< mine`, `=======`, `>>>>>>> agent`. */
+ * By words, lines both added at one spot both go in, unsaved first, and a
+ * conflict within a line is marked as CriticMarkup's substitution,
+ * `{~~unsaved~>disk~~}`, around the words that conflict when every version
+ * is at most two words, and else around the whole sentences. */
 export function mergeDisk(
   base: string,
   unsaved: string,
   disk: string,
+  by: "lines" | "words" = "words",
 ): { text: string; conflicts: number } {
-  const o = tokens(base)
-  const all = [...hunks(o, tokens(unsaved), true), ...hunks(o, tokens(disk), false)].sort(
+  const split = by === "lines" ? splitLines : tokens
+  const o = split(base)
+  const all = [...hunks(o, split(unsaved), true), ...hunks(o, split(disk), false)].sort(
     // At one start, an insertion goes before a replacement
     (x, y) => x.start - y.start || x.end - x.start - (y.end - y.start),
   )
@@ -163,6 +169,7 @@ export function mergeDisk(
     if (ours === orig) return theirs
     // Lines both added at one spot
     if (
+      by === "words" &&
       r.start === r.end &&
       lineStart(r.start) &&
       ours.endsWith("\n") &&
@@ -172,11 +179,11 @@ export function mergeDisk(
     return null
   }
 
-  // Conflicts across lines widen to whole lines, and ones bigger than a
-  // couple of words to whole sentences
+  // By words, conflicts across lines widen to whole lines, and ones bigger
+  // than a couple of words to whole sentences
   const widen = new Map<Region, "line" | "sentence">()
   for (const r of regions) {
-    if (merged(r) !== null) continue
+    if (by === "lines" || merged(r) !== null) continue
     const all = Object.values(versions(r))
     if (all.some((t) => t.includes("\n"))) widen.set(r, "line")
     else if (r.start < r.end && all.some((t) => words(t) > 2)) widen.set(r, "sentence")
@@ -232,7 +239,9 @@ export function mergeDisk(
       conflicts++
       const { ours, theirs } = versions(r)
       text +=
-        widen.get(r) === "line" ? lineMarkers(ours, theirs) : inlineMarkers(ours, theirs)
+        by === "lines" || widen.get(r) === "line"
+          ? lineMarkers(ours, theirs)
+          : inlineMarkers(ours, theirs)
     }
     at = r.end
   }

@@ -8,6 +8,7 @@
 
 import { spawn } from "node:child_process"
 import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs"
+import { text } from "node:stream/consumers"
 import { basename, dirname, join, relative, resolve } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { threadCommands } from "../subjects/thread/cli.ts"
@@ -27,6 +28,7 @@ import { currentAgent } from "../platform/session.ts"
 import { focusHere } from "../platform/focus.ts"
 import { openFloat } from "../platform/rex.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
+import { mergeDisk } from "./markdown/merge.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
 import { sendToTab } from "../core/send.ts"
 import {
@@ -223,6 +225,23 @@ view
       return console.error("ah: server not running, nothing shown")
     if (result !== "closed") return console.error(`ah: no window shows ${path}`)
     console.log(`closed ${path}`)
+  })
+
+view
+  .command("merge")
+  .summary("Merge the file on disk into an editor's unsaved text")
+  .description(
+    'For editors that take the agent\'s edits by merging rather than reloading when you have unsaved edits. Reads JSON {"base", "unsaved", "disk"} on stdin: the file as the editor last read or saved it, the editor\'s text, and the file now. Merges disk into unsaved by lines, marking lines both changed with git\'s conflict markers, or with --words word by word, as the markdown editor pane does. Prints JSON {"text", "conflicts"}: the merged text and how many conflicts it marked. Reads all of stdin before writing anything. Doesn\'t need the server.',
+  )
+  .option(
+    "--words",
+    "merge word by word, marking conflicts within a line with CriticMarkup",
+  )
+  .action(async ({ words }) => {
+    const { base, unsaved, disk } = JSON.parse(await text(process.stdin))
+    if (![base, unsaved, disk].every((t) => typeof t === "string"))
+      throw new Error("expected base, unsaved and disk as strings")
+    console.log(JSON.stringify(mergeDisk(base, unsaved, disk, words ? "words" : "lines")))
   })
 
 export const message = new Command("message")
