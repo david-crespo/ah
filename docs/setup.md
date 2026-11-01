@@ -47,9 +47,7 @@ Codex fires `SessionStart` on the first prompt rather than at launch, so a Codex
 
 ## Helix
 
-The embedded editor uses Helix with Steel by default, but you can switch to the included CodeMirror or Neovim adapters with a small code change: select the backend in [`views/markdown/files.ts`](../views/markdown/files.ts) and the page component in [`views/markdown/client.ts`](../views/markdown/client.ts). [`editor.ts`](../views/markdown/editor.ts) describes the interface and sample adapters, which are starting points with limited testing. I left CodeMirror's npm packages out of `package.json`, so you'll need to add them. They're listed at the top of [`codemirror_pane.ts`](../views/markdown/codemirror_pane.ts).
-
-You can also pass `--no-editor` to skip the embedded editor and edit the file in your usual editor; the preview and commenting still work. If you want the embedded Helix pane or commenting from inside Helix, see [helix.md](helix.md) for building Helix with Steel and its config.
+The editor pane runs the `hx` on your `PATH`. Any Helix works, but sending comments from Helix and auto-reloading when the agent changes files on disk need the Steel fork; see [helix.md](helix.md) for more on that. To use the included CodeMirror or Neovim adapters instead, or no editor pane, see [Swapping out Helix](other-editors.md).
 
 ## Tab titles
 

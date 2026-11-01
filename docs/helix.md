@@ -1,17 +1,17 @@
 # Helix setup
 
-First of all, Helix is not tied to `ah` in any deep way. You can have your coding agent swap out Helix for whatever editor you prefer. My original prototype of the markdown editor used [CodeMirror](https://codemirror.net/) and it worked great. As you can see below, getting Helix to work the way I want is a pain, and it's hard for me to recommend doing so to anyone who isn't already in the tiny niche of people who build Helix from source in order to use the [Steel plugin system](https://github.com/helix-editor/helix/pull/8675) fork.
+`ah` is not tied to Helix in any deep way. To use another editor in the markdown editor, or none, see [Swapping out Helix](other-editors.md). `ah`'s Helix integration is written in Steel, the [plugin system](https://github.com/helix-editor/helix/pull/8675) that isn't in Helix's master branch yet, so you'll need to build a branch of Helix from source. After that, it's a symlink and a few lines of config.
 
 `ah` uses Helix in two places:
 
-- The Helix pane in the markdown editor, which runs a real `hx` process in a pty next to the markdown preview. The pane isn't tied to Helix. [`views/markdown/editor.ts`](../views/markdown/editor.ts) describes what fills the pane, so you could swap the terminal for an editor that runs in the page, like CodeMirror. [`codemirror_backend.ts`](../views/markdown/codemirror_backend.ts) and [`codemirror_pane.ts`](../views/markdown/codemirror_pane.ts) are an example of that. I left its npm packages out of `package.json`, so you'll need to add the ones listed at the top of `codemirror_pane.ts`. [`terminal_editor.ts`](../views/markdown/terminal_editor.ts) describes what the terminal needs from the editor running in it. To use a different terminal editor, implement its server and page halves and pick them in `files.ts` and `client.ts`. [`neovim.ts`](../views/markdown/neovim.ts) and [`neovim_command.ts`](../views/markdown/neovim_command.ts) do this for Neovim as an example (only very lightly tested).
+- The Helix pane in the markdown editor, which runs a real `hx` process in a pty next to the markdown preview.
 - Comments sent from Helix to an agent (`editors/helix/`). You select lines and write a comment in a box under them, and `ah` posts it to an agent running in the same Rex terminal tab.
 
-Comments need Helix with Steel scripting, which isn't in a Helix release yet, and Steel config that loads `ah`'s modules. The pane runs any Helix, but needs the same to take the agent's edits.
+Both need Helix built with Steel, plus `ah`'s Steel modules loaded in your Helix config. Without that, e.g., with vanilla Helix, the pane still opens the file, but it shows the agent's edits only after you `:reload`, and you can't send comments from Helix. Comments on the rendered preview work either way.
 
 ## Helix with Steel
 
-Steel lives on the `steel-event-system` branch of [mattwparas/helix](https://github.com/mattwparas/helix), which also has the components API that draws the comment box. `cargo xtask steel` installs Steel's tools, generates the Steel modules like `helix/components.scm` that the config requires, and builds and installs `hx` with Steel:
+Steel lives on the `steel-event-system` branch of [mattwparas/helix](https://github.com/mattwparas/helix), which also has the components API we use to draw the comment box. `cargo xtask steel` installs Steel's tools, generates the Steel modules like `helix/components.scm` that the config requires, and builds and installs `hx` with Steel:
 
 ```sh
 git clone --branch steel-event-system https://github.com/mattwparas/helix ~/repos/helix
@@ -90,8 +90,16 @@ When Helix is running inside the markdown editor web page, it doesn't know which
 
 ## My fork
 
-Everything above works with the `steel-event-system` branch as it is, and that's what I'd suggest building. I run my own fork, [david-crespo/helix](https://github.com/david-crespo/helix), which adds a few things on top. `ah` uses them when they're there and works the same without them, minus these extras:
+Everything above works with the `steel-event-system` branch as it is, and that's what I'd suggest building. I run my own fork, [david-crespo/helix](https://github.com/david-crespo/helix), which adds a few things on top. `ah` uses them when they're there but works without them. They're split across two branches, each stacked on `steel-event-system`: `file-watcher` has the file watcher, and `client-server` is built on `file-watcher` and adds sessions and `--auto-save`. I build `client-server`, which has everything:
 
-- **A file watcher** ([helix-editor/helix#14544](https://github.com/helix-editor/helix/pull/14544)) and a `document-changed-on-disk` hook for Steel. Helix reloads a buffer with no unsaved edits itself when its file changes, and `auto-merge.scm` merges when the hook fires instead of checking every 300ms. It also turns off the watcher's prompt to reload or keep a modified buffer, since the merge does that job.
-- **Sessions**, where several terminals share one editor, with the same buffers and undo history. With `editor.session = "auto"` in your config, the pane joins the Helix you have open on the same project, so a file open in both is the same buffer and there's nothing to merge between them. `auto-merge.scm` loads `auto-merge-clients.scm` only in a Helix with sessions, so the merge waits while anyone is typing in the document, not only the terminal the check runs as.
-- **`hx --auto-save <ms>`**, which turns on auto-save for one terminal's buffers. `ah` checks `hx --help` for the flag, and when it's there runs `hx --auto-save 650` with your config as it is, instead of a copy, so only the pane auto-saves.
+```sh
+git clone --branch client-server https://github.com/david-crespo/helix ~/repos/helix
+cd ~/repos/helix
+cargo xtask steel
+```
+
+The extras:
+
+- **A file watcher** (on `file-watcher`; [helix-editor/helix#14544](https://github.com/helix-editor/helix/pull/14544)) and a `document-changed-on-disk` hook for Steel. Helix reloads a buffer with no unsaved edits itself when its file changes, and `auto-merge.scm` merges when the hook fires instead of checking every 300ms. It also turns off the watcher's prompt to reload or keep a modified buffer, since the merge does that job.
+- **Sessions** (on `client-server`), where several terminals share one editor, with the same buffers and undo history. Every `hx` in a project joins one editor, the pane included, unless you turn it off with `editor.session = "off"`, so a file open in both is the same buffer and there's nothing to merge between them. `auto-merge.scm` loads `auto-merge-clients.scm` only in a Helix with sessions, so the merge waits while anyone is typing in the document, not only the terminal the check runs as.
+- **`hx --auto-save <ms>`** (on `client-server`), which turns on auto-save for one terminal's buffers. `ah` checks `hx --help` for the flag, and when it's there runs `hx --auto-save 650` with your config as it is, instead of a copy, so only the pane auto-saves.
