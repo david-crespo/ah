@@ -246,6 +246,74 @@ ah-markdown {
     color: #d1242f;
     font-size: 13px;
   }
+  /* Asciidoctor's markup (asciidoc.ts), in github-markdown.css's terms.
+     Every list item is a <p>, so items would all be spaced as loose ones. */
+  .markdown-body :is(.ulist, .olist) li > p {
+    margin: 0;
+  }
+  .markdown-body :is(.ulist, .olist) li > p + :not(.ulist, .olist) {
+    margin-top: 8px;
+  }
+  /* A block's last element, and the one in its wrapper (each paragraph is a
+     <div class="paragraph"><p>), sits flush with the block's bottom */
+  .markdown-body :is(.sidebarblock > .content, .exampleblock > .content, td.content) {
+    > :last-child,
+    > :last-child > :last-child {
+      margin-bottom: 0;
+    }
+  }
+  .markdown-body .title,
+  .markdown-body #toctitle {
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  /* Admonitions as GitHub's alerts. Asciidoctor writes each as a one-row
+     table: the label (a title, or with :icons: font an empty <i> with the
+     label as its title) and the content. */
+  .markdown-body .admonitionblock {
+    --ah-admonition: var(--borderColor-accent-emphasis);
+    margin-bottom: 16px;
+    padding: 8px 16px;
+    border-left: 0.25em solid var(--ah-admonition);
+    :is(table, tbody, tr, td) {
+      display: block;
+      width: auto;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: none;
+    }
+    td.icon {
+      margin-bottom: 4px;
+      color: var(--ah-admonition);
+      font-weight: 600;
+    }
+    td.icon i::before {
+      content: attr(title);
+      font-style: normal;
+    }
+    &.tip {
+      --ah-admonition: var(--borderColor-success-emphasis);
+    }
+    &.important {
+      --ah-admonition: var(--borderColor-done-emphasis);
+    }
+    &.warning {
+      --ah-admonition: var(--borderColor-attention-emphasis);
+    }
+    &.caution {
+      --ah-admonition: var(--borderColor-danger-emphasis);
+    }
+  }
+  .markdown-body :is(.sidebarblock, .exampleblock > .content) {
+    margin-bottom: 16px;
+    padding: 16px;
+    border: 1px solid var(--borderColor-default);
+    border-radius: 6px;
+  }
+  .markdown-body .sidebarblock {
+    background: var(--bgColor-muted);
+  }
   /* Mermaid diagrams, drawn in place of their code blocks (preview.ts) */
   .mermaid-diagram {
     margin-bottom: 16px;

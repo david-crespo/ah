@@ -1,7 +1,8 @@
 /// <reference lib="dom" />
 
 // <ah-markdown src="/view/markdown/<id>/">: the live, read-only GFM preview
-// of one open file, as a custom element so any ah page can hold one. The
+// of one open file, or its AsciiDoc rendered by Asciidoctor (asciidoc.ts),
+// as a custom element so any ah page can hold one. The
 // file page puts one next to its helix pane and comment popover (client.ts);
 // the dashboard holds one per workspace. Every URL is resolved against
 // `src` rather than the page's own location.
@@ -21,6 +22,8 @@ import { LanguageDescription } from "@codemirror/language"
 import { classHighlighter, highlightCode } from "@lezer/highlight"
 import { createMarkdown } from "./render.ts"
 import { diffMarkdown, leafBlocks, type MarkdownDiff } from "./diff.ts"
+import { renderAsciidoc } from "./asciidoc.ts"
+import type { DocFormat } from "./doc.ts"
 import { type Conflict, findConflictEnd, parseConflict } from "./conflict.ts"
 import { AGENT, MINE } from "./merge.ts"
 import type { ThreadSnapshot } from "../../subjects/thread/events.ts"
@@ -29,7 +32,7 @@ import { splice } from "./splice.ts"
 /** What the doc socket sends: the text, the file's thread, and the
  * file closing */
 export type DocMessage =
-  | { type: "doc"; text: string }
+  | { type: "doc"; text: string; format: DocFormat }
   | { type: "closed" }
   | (ThreadSnapshot & { replay: boolean })
 
@@ -44,6 +47,7 @@ export class AhMarkdown extends HTMLElement {
   readonly content = document.createElement("article")
   #ws: WebSocket | null = null
   #text: string | null = null
+  #format: DocFormat = "markdown"
   // 0-based [start, end) source line ranges to flash on the next render, with
   // the inserted source text so small edits can flash just the changed words
   #pendingFlash: { start: number; end: number; inserted: string }[] = []
@@ -58,7 +62,7 @@ export class AhMarkdown extends HTMLElement {
   // Diagrams are drawn for the color scheme, so a switch redraws them
   #scheme = matchMedia(DARK)
   #onScheme = () => {
-    if (this.#text !== null) this.#render()
+    if (this.#text !== null) void this.#render()
   }
 
   constructor() {
@@ -155,7 +159,10 @@ export class AhMarkdown extends HTMLElement {
     ws.onopen = () => this.#note(null)
     ws.onmessage = (e) => {
       const msg: DocMessage = JSON.parse(e.data)
-      if (msg.type === "doc") this.#apply(msg.text)
+      if (msg.type === "doc") {
+        this.#format = msg.format
+        this.#apply(msg.text)
+      }
       if (msg.type === "closed") this.#showClosed()
       this.dispatchEvent(new CustomEvent<DocMessage>("doc-message", { detail: msg }))
     }
@@ -287,18 +294,28 @@ export class AhMarkdown extends HTMLElement {
       })
     }
     this.#text = text
-    this.#render()
+    void this.#render()
   }
 
-  #render() {
+  async #render() {
+    const text = this.#text ?? ""
+    const base = this.#diffBase && "text" in this.#diffBase ? this.#diffBase.text : null
+    const diff =
+      base === null || this.#format !== "markdown"
+        ? null
+        : diffMarkdown(base, text, blocksOf)
+    const html =
+      this.#format === "asciidoc"
+        ? await renderAsciidoc(text)
+        : md.render(diff?.text ?? text, diff ? { diff } : {})
+    // Asciidoctor is async, so a newer text may have come meanwhile; its own
+    // render shows it, and takes the pending flashes
+    if (text !== (this.#text ?? "")) return
     const content = this.content
     const toggled = toggledDetails(content)
     const embeds = hydratedEmbeds(content)
-    const text = this.#text ?? ""
-    const base = this.#diffBase && "text" in this.#diffBase ? this.#diffBase.text : null
-    const diff = base === null ? null : diffMarkdown(base, text, blocksOf)
     this.#changes = diff?.changes ?? 0
-    content.innerHTML = md.render(diff?.text ?? text, diff ? { diff } : {})
+    content.innerHTML = html
     if (diff) showDiff(content, diff)
     restoreDetails(content, toggled)
     markConflictChanges(content)

@@ -183,7 +183,8 @@ export type ChangeId = string
 export const FILE_KINDS = ["markdown", "html"] as const
 export type FileKind = (typeof FILE_KINDS)[number]
 
-/** A file's kind: html for .html and .htm, markdown for anything else */
+/** A file's kind: html for .html and .htm, markdown for anything else,
+ * AsciiDoc included: the markdown view renders both */
 export const fileKind = (path: string): FileKind =>
   /\.html?$/i.test(path) ? "html" : "markdown"
 

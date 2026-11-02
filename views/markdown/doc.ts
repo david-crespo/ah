@@ -13,6 +13,13 @@ import { readFile } from "node:fs/promises"
 import { basename, dirname } from "node:path"
 import { splice } from "./splice.ts"
 
+/** How the preview renders a file: AsciiDoc for .adoc and .asciidoc, and
+ * markdown for anything else */
+export type DocFormat = "markdown" | "asciidoc"
+
+export const docFormat = (path: string): DocFormat =>
+  /\.a(scii)?doc$/i.test(path) ? "asciidoc" : "markdown"
+
 export class LiveDoc {
   readonly path: string
   text: string
@@ -81,7 +88,8 @@ export class LiveDoc {
   }
 
   /** The text as the page takes it, also sent when a page connects */
-  message = () => JSON.stringify({ type: "doc", text: this.text })
+  message = () =>
+    JSON.stringify({ type: "doc", text: this.text, format: docFormat(this.path) })
 
   close() {
     this.#watcher.close()

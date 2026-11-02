@@ -2,8 +2,8 @@
 // with a conversation back to the agent, and the workspace's trackers, which
 // the dashboard shows. The extension picks the backend that serves the page:
 // an .html file is the agent's own page, served as is on an origin of its own
-// (views/html/); anything else is markdown, rendered by ah with a helix pane
-// (views/markdown/). Showing, listing and closing (subjects/files/), the thread
+// (views/html/); anything else is markdown or AsciiDoc, rendered by ah with a
+// helix pane (views/markdown/). Showing, listing and closing (subjects/files/), the thread
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
@@ -29,6 +29,7 @@ import { focusHere } from "../platform/focus.ts"
 import { openFloat } from "../platform/rex.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
 import { mergeDisk } from "./markdown/merge.ts"
+import { docFormat } from "./markdown/doc.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
 import { sendToTab } from "../core/send.ts"
 import {
@@ -94,7 +95,7 @@ function ensureTaskList(file: string, title?: string, goal?: string) {
 export const view = new Command("view")
   .summary("Show a file in a page you can comment on, or a URL in a window")
   .description(
-    "Show a markdown or HTML file in a page you can comment on, or any URL in a window or tab. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
+    "Show a markdown, AsciiDoc or HTML file in a page you can comment on, or any URL in a window or tab. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
   )
 
 /** Any URL, like a diff review tool's page: shown in a window or
@@ -107,7 +108,7 @@ view
   .command("open", { isDefault: true })
   .summary("Open a file in a page you can comment on")
   .description(
-    "Open a file in a page you can comment on; `ah view <file>` does the same. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several; the file stays bound to that agent until another opens it. HTML files are served as they are, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already shown in a window keeps that window, which comes to the front under the same rule. Prints the page's URL, which keeps working across server restarts.\n\nGiven an http(s) URL instead of a file, open it in a window named --name or a tab. Nothing is bound to it and it has no conversation. The URL can come last, so a tool can append it to `ah view open --name <name>`.",
+    "Open a file in a page you can comment on; `ah view <file>` does the same. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several; the file stays bound to that agent until another opens it. HTML files are served as they are, .adoc and .asciidoc files are rendered as AsciiDoc, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already shown in a window keeps that window, which comes to the front under the same rule. Prints the page's URL, which keeps working across server restarts.\n\nGiven an http(s) URL instead of a file, open it in a window named --name or a tab. Nothing is bound to it and it has no conversation. The URL can come last, so a tool can append it to `ah view open --name <name>`.",
   )
   // Optional so that `ah view` alone, which comes here as the default, shows
   // the help rather than a missing argument
@@ -153,7 +154,8 @@ view
       die("ah view open --name: URLs only; a file's window is named after it")
     const path = openablePathOrDie(file)
     const kind = fileKind(path)
-    if ((place === "split" || place === "float" || place === "here") && kind === "html") {
+    const glow = place === "split" || place === "float" || place === "here"
+    if (glow && (kind === "html" || docFormat(path) === "asciidoc")) {
       die(`ah view open --in ${place}: glow only shows markdown`)
     }
     // glow's TUI watches the file itself and keeps scroll position across reloads
