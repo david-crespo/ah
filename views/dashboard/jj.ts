@@ -113,10 +113,14 @@ export function isIgnored(path: string): boolean {
   return path.split(sep).some((segment) => IGNORED_DIRS.has(segment))
 }
 
+/** Long enough that a pause while typing doesn't become an operation of
+ * its own and clutter the op log and evolog */
+const SNAPSHOT_DELAY_MS = 10_000
+
 /**
  * Runs `jj util snapshot` once files in the workspace have been quiet for
- * `delayMs`, so `@` in the log reflects edits that no jj command has seen
- * yet. jj records an operation only when something changed, which then
+ * SNAPSHOT_DELAY_MS, so `@` in the log reflects edits that no jj command has
+ * seen yet. jj records an operation only when something changed, which then
  * fires the LogWatcher. Any jj command would take the same snapshot; this
  * only takes it sooner.
  */
@@ -124,15 +128,13 @@ export class SnapshotWatcher {
   #watcher: FSWatcher | null = null
   #timer: ReturnType<typeof setTimeout> | undefined
   readonly root: string
-  readonly delayMs: number
 
-  constructor(root: string, delayMs: number) {
+  constructor(root: string) {
     this.root = root
-    this.delayMs = delayMs
     const onChange = (filename: string | null) => {
       if (filename && isIgnored(filename)) return
       clearTimeout(this.#timer)
-      this.#timer = setTimeout(() => this.#snapshot(), this.delayMs)
+      this.#timer = setTimeout(() => this.#snapshot(), SNAPSHOT_DELAY_MS)
     }
     try {
       // Gone if the workspace was removed while a tab was still in it

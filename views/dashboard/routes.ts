@@ -67,8 +67,6 @@ const docEvent = (tab: string, doc: ShownDoc | null) =>
   })
 
 export interface DashboardOptions {
-  /** null turns off snapshotting the focused workspace */
-  snapshotDelayMs: number | null
   /** The page shows each file with <ah-markdown> or in a frame of an html
    * page, so the backend has to hold the file open before the page hears about it */
   markdown: MarkdownBackend
@@ -223,9 +221,7 @@ export class Dashboard {
     const focused = focusedRoot(this.#state)
     if (this.#snapshotter?.root !== focused) {
       this.#snapshotter?.close()
-      const delay = this.options.snapshotDelayMs
-      this.#snapshotter =
-        focused && delay !== null ? new SnapshotWatcher(focused, delay) : null
+      this.#snapshotter = focused ? new SnapshotWatcher(focused) : null
     }
   }
 

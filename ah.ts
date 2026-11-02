@@ -38,7 +38,7 @@ import { Core } from "./core/core.ts"
 import { TitleSetter } from "./core/tabtitle/setter.ts"
 import { assetPath } from "./platform/assets.ts"
 import { boxCss } from "./views/dashboard/box.ts"
-import { die, parseNumber, portOption } from "./platform/cli.ts"
+import { die, portOption } from "./platform/cli.ts"
 import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
@@ -93,8 +93,7 @@ interface ViewRoutes {
   upgrade?(rest: string, query: URLSearchParams): ((ws: WebSocket) => void) | null
 }
 
-/** `snapshotDelayMs` null turns off snapshotting the focused workspace */
-async function serve(port: number, snapshotDelayMs: number | null) {
+async function serve(port: number) {
   const startedAt = Date.now()
   scrubSessionEnv(process.env)
   const css = themeCss() + boxCss()
@@ -118,7 +117,6 @@ async function serve(port: number, snapshotDelayMs: number | null) {
   const markdownBackend = new MarkdownBackend(port, core)
   const htmlBackend = new HtmlBackend(port, pagesPort, core, core.trackers)
   const dashboardBackend = new Dashboard({
-    snapshotDelayMs,
     markdown: markdownBackend,
     html: htmlBackend,
     core,
@@ -334,15 +332,8 @@ server
     "Run the server in the foreground, logging to the terminal. `ah server start` runs this command in the background.",
   )
   .addOption(portOption("Port to serve on"))
-  .option(
-    "--snapshot-delay <seconds>",
-    "Snapshot the focused workspace once its files have been quiet this long",
-    parseNumber,
-    2,
-  )
-  .option("--no-snapshot", "Never snapshot; @ only updates when some jj command runs")
-  .action(async ({ port, snapshot, snapshotDelay }) => {
-    await serve(port, snapshot ? snapshotDelay * 1000 : null)
+  .action(async ({ port }) => {
+    await serve(port)
   })
 
 server

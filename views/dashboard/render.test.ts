@@ -91,5 +91,5 @@ test("isIgnored skips jj state and build output anywhere in the tree", () => {
 test("a SnapshotWatcher on a removed workspace logs instead of throwing", () => {
   const dir = mkdtempSync(join(tmpdir(), "ah-snapshot-"))
   rmSync(dir, { recursive: true })
-  new SnapshotWatcher(dir, 1000).close()
+  new SnapshotWatcher(dir).close()
 })

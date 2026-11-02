@@ -65,12 +65,6 @@ export function parseInteger(value: string): number {
   return n
 }
 
-export function parseNumber(value: string): number {
-  const n = Number(value)
-  if (Number.isNaN(n)) throw new InvalidArgumentError("Not a number.")
-  return n
-}
-
 /** `-p, --port`, on every command that starts or talks to the server */
 export const portOption = (description = "Port the server is on") =>
   new Option("-p, --port <port>", description).argParser(parseInteger).default(DEFAULT_PORT)
