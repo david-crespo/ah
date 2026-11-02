@@ -51,19 +51,19 @@ function diff(a: string[], b: string[]): Run[] {
 
 /** Words with their trailing spaces, other characters one at a time with
  * theirs, and newlines alone. Joined, they give back the text. */
-function tokens(text: string): string[] {
+export function tokens(text: string): string[] {
   return (
     text.match(/[\p{L}\p{N}_'’]+[^\S\n]*|\n|[^\S\n]+|[^\p{L}\p{N}_'’\s][^\S\n]*/gu) ?? []
   )
 }
 
 /** A side's edit to the base's tokens: replace [start, end) with `insert` */
-type Hunk = { ours: boolean; start: number; end: number; insert: string[] }
+export type Hunk = { ours: boolean; start: number; end: number; insert: string[] }
 
 /** The hunks that turn the base's tokens into a side's: a line diff, then a
  * token diff of each run of changed lines, which keeps a big rewrite fast and
  * unchanged lines anchoring the alignment */
-function hunks(base: string[], side: string[], ours: boolean): Hunk[] {
+export function hunks(base: string[], side: string[], ours: boolean): Hunk[] {
   const lines = (t: string[]) => {
     const out: string[][] = [[]]
     for (const tok of t) {
@@ -115,7 +115,7 @@ function apply(base: string[], { start, end, hunks }: Region, ours: boolean): st
   return out + base.slice(at, end).join("")
 }
 
-const words = (text: string) => text.match(/[\p{L}\p{N}_'’]+/gu)?.length ?? 0
+export const words = (text: string) => text.match(/[\p{L}\p{N}_'’]+/gu)?.length ?? 0
 
 /** Lines with their newlines. Joined, they give back the text. */
 const splitLines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? []
@@ -155,7 +155,7 @@ export function mergeDisk(
     } else regions.push({ start: h.start, end: h.end, hunks: [h] })
   }
 
-  const lineStart = (i: number) => i === 0 || o[i - 1] === "\n"
+  const lineStart = (i: number) => atLineStart(o, i)
   /** The base's version of a region and each side's */
   const versions = (r: Region) => ({
     orig: o.slice(r.start, r.end).join(""),
@@ -188,21 +188,7 @@ export function mergeDisk(
     if (all.some((t) => t.includes("\n"))) widen.set(r, "line")
     else if (r.start < r.end && all.some((t) => words(t) > 2)) widen.set(r, "sentence")
   }
-  // Whether a sentence ends right before token i, or a line or the marker
-  // that starts a heading, list item or quote
-  const boundary = (i: number) => {
-    if (i <= 0 || i >= o.length || o[i] === "\n" || lineStart(i)) return true
-    let start = i
-    while (!lineStart(start)) start--
-    if (
-      /^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?$/.test(o.slice(start, i).join(""))
-    )
-      return true
-    const before = o.slice(Math.max(0, i - 4), i).join("")
-    return (
-      /[.!?]["')\]*_]*$/.test(before.trimEnd()) && (/\s$/.test(before) || /^\s/.test(o[i]))
-    )
-  }
+  const boundary = (i: number) => atBoundary(o, i)
   if (widen.size) {
     const out: Region[] = []
     for (const r of regions) {
@@ -247,6 +233,24 @@ export function mergeDisk(
   }
   return { text: text + o.slice(at).join(""), conflicts }
 }
+
+export const atLineStart = (o: string[], i: number) => i === 0 || o[i - 1] === "\n"
+
+/** Whether a sentence ends right before token i of `o`, or a line or the
+ * marker that starts a heading, list item or quote */
+export function atBoundary(o: string[], i: number): boolean {
+  if (i <= 0 || i >= o.length || o[i] === "\n" || atLineStart(o, i)) return true
+  let start = i
+  while (!atLineStart(o, start)) start--
+  if (MARKER.test(o.slice(start, i).join(""))) return true
+  const before = o.slice(Math.max(0, i - 4), i).join("")
+  return (
+    /[.!?]["')\]*_]*$/.test(before.trimEnd()) && (/\s$/.test(before) || /^\s/.test(o[i]))
+  )
+}
+
+/** The marker that starts a heading, list item or quote, and nothing else */
+export const MARKER = /^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?$/
 
 /** `{~~ours~>theirs~~}`, with the spaces both start or end with outside */
 function inlineMarkers(ours: string, theirs: string) {

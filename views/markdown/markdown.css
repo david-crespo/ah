@@ -62,6 +62,57 @@ ah-markdown {
   .markdown-body .footnotes {
     font-size: 14px;
   }
+  /* The diff mode (diff.ts): changed words inline, old then new, and whole
+     blocks added or removed, with a bar in the margin */
+  /* Old words dimmed on a faint red, like a removed block, and set apart
+     from the new words that follow */
+  .diff-old {
+    background: #ffebe9;
+    color: #59636e;
+    text-decoration: none;
+    border-radius: 2px;
+  }
+  .diff-old:has(+ .diff-new:not(:empty)) {
+    margin-right: 0.3em;
+  }
+  .diff-new {
+    background: #dafbe1;
+    text-decoration: none;
+    border-radius: 2px;
+  }
+  .diff-new:empty {
+    display: none;
+  }
+  .diff-added,
+  .diff-removed {
+    position: relative;
+  }
+  /* A bar in the margin, at the same place however deep the block is
+     (--diff-indent, from preview.ts) */
+  .diff-added::before,
+  .diff-removed::before {
+    content: "";
+    position: absolute;
+    top: 2px;
+    bottom: 2px;
+    left: calc(-16px - var(--diff-indent, 0px));
+    width: 2px;
+    border-radius: 1px;
+    background: #1a7f3766;
+  }
+  .diff-removed {
+    opacity: 0.55;
+  }
+  /* A panel, not a list's item put back in it, which keeps its spacing */
+  .diff-removed:not(li) {
+    margin-bottom: 16px;
+  }
+  .diff-removed::before {
+    background: #cf222e;
+  }
+  .diff-removed > :last-child {
+    margin-bottom: 0 !important;
+  }
   .flash {
     animation: ah-markdown-flash 1.8s ease-out;
   }
@@ -290,6 +341,19 @@ ah-markdown {
   }
 
   @media (prefers-color-scheme: dark) {
+    .diff-old {
+      background: #f8514926;
+      color: #9198a1;
+    }
+    .diff-new {
+      background: #2ea04326;
+    }
+    .diff-added::before {
+      background: #3fb95080;
+    }
+    .diff-removed::before {
+      background: #f85149;
+    }
     .file-note {
       border-color: #3d444d;
       color: #f0f6fc;

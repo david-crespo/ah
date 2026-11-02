@@ -12,6 +12,7 @@ import { Conversation } from "../thread/conversation.ts"
 import { threadKinds } from "../../subjects/thread/kinds.ts"
 import { setUpSelectionComments } from "../thread/selection.ts"
 import { setUpFind } from "./find.ts"
+import { setUpBasePicker } from "./base_picker.ts"
 import "./preview.ts"
 import { type SourcePosition, sourcePosition } from "./source_position.ts"
 import type { EditorPane } from "./editor.ts"
@@ -135,6 +136,108 @@ async function showInEditor({ line, column }: SourcePosition, spot: Range) {
   if (!shown) window.scrollBy(0, middleOf(spot) - y)
   await pane?.reveal(line, column, middleOf(spot))
 }
+
+// ---------- diff mode ----------
+
+// ⌘D shows the file as a diff against a revision, ?diff-from= in the URL so a
+// reload keeps it, and B picks the revision (base_picker.ts). Empty means
+// the working copy's changes, from its parent (revisions.ts).
+const diffBar = document.getElementById("diff-bar")!
+const diffRelation = document.getElementById("diff-relation")!
+const diffBase = document.getElementById("diff-base")!
+const diffBaseLabel = document.getElementById("diff-base-label")!
+const diffInfo = document.getElementById("diff-info")!
+const picker = document.getElementById("base-picker")!
+let lastRev = ""
+
+function setDiffFrom(rev: string | null) {
+  if (rev === null) preview.removeAttribute("diff-from")
+  else preview.setAttribute("diff-from", (lastRev = rev))
+  diffBar.hidden = rev === null
+  // The bar keeps saying what it said until the new base loads, so it
+  // doesn't flicker; only a bar that's said nothing yet gets a stand-in
+  if (rev !== null && !diffBaseLabel.textContent) {
+    const from = rev === "" || rev.endsWith("-")
+    diffRelation.textContent = from ? "Changes starting with" : "Changes since"
+    diffBaseLabel.textContent = rev.replace(/-$/, "") || "the working copy"
+  }
+  const url = new URL(location.href)
+  if (rev === null) url.searchParams.delete("diff-from")
+  else url.searchParams.set("diff-from", rev)
+  history.replaceState(null, "", url)
+}
+setDiffFrom(new URLSearchParams(location.search).get("diff-from"))
+setUpBasePicker(
+  picker,
+  preview.base,
+  () => preview.getAttribute("diff-from") ?? "",
+  setDiffFrom,
+)
+
+preview.addEventListener("render", () => {
+  const diff = preview.diff
+  if (!diff) return
+  diffInfo.classList.toggle("error", Boolean(diff.error))
+  if (diff.error) {
+    diffRelation.textContent = "Changes since"
+    diffBaseLabel.textContent = diff.rev || "@-"
+    diffInfo.textContent = diff.error
+    return
+  }
+  diffRelation.textContent = `Changes ${diff.relation}`
+  diffBaseLabel.textContent = diff.label!
+  diffBase.title = `${diff.rev || "@-"}, ${diff.commit}: pick another base (B)`
+  const n = diff.changes ?? 0
+  diffInfo.textContent =
+    n === 0 ? "· no changes, pick an earlier base" : `· ${n} change${n === 1 ? "" : "s"}`
+})
+
+/** The changes in the preview, in order: each inline change once, by its
+ * old words or else its new ones */
+function changes(): HTMLElement[] {
+  return [
+    ...content.querySelectorAll<HTMLElement>(
+      ".diff-added, .diff-removed, .diff-old, .diff-new",
+    ),
+  ].filter(
+    (el) =>
+      !el.classList.contains("diff-new") ||
+      !el.previousElementSibling?.matches(".diff-old"),
+  )
+}
+
+/** Scroll to the next change below the top of the window, or the previous
+ * one above it */
+function jump(forward: boolean) {
+  const all = changes()
+  const top = (el: HTMLElement) => el.getBoundingClientRect().top
+  const edge = (diffBar.hidden ? 0 : diffBar.getBoundingClientRect().bottom) + 8
+  const target = forward
+    ? all.find((el) => top(el) > edge + 40)
+    : all.findLast((el) => top(el) < edge - 1)
+  target?.scrollIntoView({ block: "start", behavior: "smooth" })
+}
+
+document.addEventListener("keydown", (e) => {
+  // From anywhere, like ⌘E: the editors pass it on to the page
+  if (e.key === "d" && e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+    e.preventDefault()
+    setDiffFrom(preview.hasAttribute("diff-from") ? null : lastRev)
+    return
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return
+  if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]"))
+    return
+  if (e.key === "b" || e.key === "B") {
+    e.preventDefault()
+    // The bar holds the button the picker opens under
+    if (!preview.hasAttribute("diff-from")) setDiffFrom(lastRev)
+    picker.showPopover()
+  } else if ((e.key === "]" || e.key === "[") && preview.hasAttribute("diff-from")) {
+    e.preventDefault()
+    jump(e.key === "]")
+  }
+})
 
 // ? shows the page's shortcuts (page.ts), unless it's being typed somewhere:
 // the comment and chat boxes, or the editor, whose xterm takes keys in a

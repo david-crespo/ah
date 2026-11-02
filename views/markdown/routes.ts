@@ -27,6 +27,7 @@ import { pathOf } from "../../subjects/id.ts"
 import { type LiveMarkdown, markdownFiles } from "./files.ts"
 import { fetchBlob, resolveAsset } from "./github.ts"
 import { AGENT, MINE, pick } from "./merge.ts"
+import { bases, complaint, fileAt } from "./revisions.ts"
 import { indexPage, page } from "./page.ts"
 import { escapeHtml } from "../escape.ts"
 import { mediaType } from "../mime.ts"
@@ -126,6 +127,14 @@ export class MarkdownBackend {
     }
     if (sub === "local") return await localMedia(path, searchParams.get("path") ?? "")
     if (sub === "pick" && req.method === "POST") return await pickSide(path, req)
+    if (sub === "base") {
+      return await fileAt(path, searchParams.get("rev") ?? "").then(
+        (base) => Response.json(base),
+        (e) => new Response(complaint(e), { status: 400 }),
+      )
+    }
+    if (sub === "bases")
+      return Response.json(await bases(path, searchParams.get("rev") ?? ""))
     return new Response("not found", { status: 404 })
   }
 }

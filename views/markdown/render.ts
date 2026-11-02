@@ -2,6 +2,7 @@
 // adds its own rules on top, like conflict panels and GitHub embeds.
 
 import MarkdownExit from "markdown-exit"
+import { CLOSE, OPEN } from "./diff.ts"
 import { AGENT, MINE } from "./merge.ts"
 // @ts-expect-error no type declarations
 import footnote from "markdown-it-footnote"
@@ -53,6 +54,30 @@ export function createMarkdown() {
       `<span class="merge-${name}"${text ? "" : " data-empty"}><button class="merge-pick" data-side="${name}"></button>${md.renderInline(text, env)}</span>`
     return `<span class="merge-conflict" data-source="${md.utils.escapeHtml(source)}" data-nth="${nth}">${side(MINE, mine)}${side(AGENT, agent)}</span>`
   }
+  // The diff mode's marks around changed words (diff.ts): the old words,
+  // from env.diff, then the new ones, which parse as part of their paragraph
+  md.inline.ruler.before("strikethrough", "diff_mark", (state, silent) => {
+    const { src, pos } = state
+    if (src.startsWith(CLOSE, pos)) {
+      if (!silent) state.push("diff_close", "ins", -1)
+      state.pos += CLOSE.length
+      return true
+    }
+    if (!src.startsWith(OPEN, pos)) return false
+    const end = src.indexOf("}", pos + OPEN.length)
+    if (!silent) {
+      const index = Number(src.slice(pos + OPEN.length, end))
+      state.push("diff_open", "ins", 1).meta = { old: state.env.diff?.old[index] ?? "" }
+    }
+    state.pos = end + 1
+    return true
+  })
+  md.renderer.rules.diff_open = (tokens, idx, _opts, env) => {
+    const { old } = tokens[idx].meta
+    const del = old ? `<del class="diff-old">${md.renderInline(old, env)}</del>` : ""
+    return `${del}<ins class="diff-new">`
+  }
+  md.renderer.rules.diff_close = () => "</ins>"
   md.core.ruler.push("gh_issue_ref", (state) => {
     for (const tok of state.tokens) {
       const kids = tok.children ?? []

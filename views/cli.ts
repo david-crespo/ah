@@ -128,11 +128,15 @@ view
   .option("--no-editor", "Markdown preview only, without the helix pane")
   .option("--no-chat", "Without the conversation")
   .option(
+    "--diff-from [revset]",
+    "Markdown: show the file's changes since a jj revision, by default the working copy's parent, @-. ⌘D on the page does the same, and B picks the revision.",
+  )
+  .option(
     "--name <name>",
     "A URL's window: what the Dock calls it (default: the URL's hostname). Each name makes a copy of the window app, so keep it stable.",
   )
   .addOption(portOption())
-  .action(async (file, { in: place, editor, chat, name, port }) => {
+  .action(async (file, { in: place, editor, chat, diffFrom, name, port }) => {
     if (!file) return view.help()
     if (isUrl(file)) {
       if (place !== "window" && place !== "tab")
@@ -191,6 +195,8 @@ view
     const { url, views } = await showInServer(kind, port, path)
     if (!editor && kind === "markdown") url.searchParams.set("editor", "off")
     if (!chat) url.searchParams.set("chat", "off")
+    if (diffFrom !== undefined && kind === "markdown")
+      url.searchParams.set("diff-from", diffFrom === true ? "" : diffFrom)
     await showPage(place, url, path, views)
   })
 

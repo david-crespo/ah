@@ -20,6 +20,7 @@ import { languages } from "@codemirror/language-data"
 import { LanguageDescription } from "@codemirror/language"
 import { classHighlighter, highlightCode } from "@lezer/highlight"
 import { createMarkdown } from "./render.ts"
+import { diffMarkdown, leafBlocks, type MarkdownDiff } from "./diff.ts"
 import { type Conflict, findConflictEnd, parseConflict } from "./conflict.ts"
 import { AGENT, MINE } from "./merge.ts"
 import type { ThreadSnapshot } from "../../subjects/thread/events.ts"
@@ -37,7 +38,7 @@ interface AhMarkdownEventMap extends HTMLElementEventMap {
 }
 
 export class AhMarkdown extends HTMLElement {
-  static observedAttributes = ["src"]
+  static observedAttributes = ["src", "diff-from"]
 
   /** The rendered file, an <article class="markdown-body"> */
   readonly content = document.createElement("article")
@@ -50,6 +51,10 @@ export class AhMarkdown extends HTMLElement {
   #closed = false
   #retry: ReturnType<typeof setTimeout> | undefined
   #mermaid = new MermaidDiagrams()
+  // With a diff-from attribute, the file at that revision, which the
+  // preview shows its changes since, or why it couldn't get it
+  #diffBase: DiffBase | null = null
+  #changes = 0
   // Diagrams are drawn for the color scheme, so a switch redraws them
   #scheme = matchMedia(DARK)
   #onScheme = () => {
@@ -90,6 +95,24 @@ export class AhMarkdown extends HTMLElement {
     return this.#text
   }
 
+  /** With a diff-from attribute: the revision, the commit it was when the
+   * preview fetched it, and how many changes the file has since, or why
+   * there's no diff. Null before the base arrives, or without one. */
+  get diff(): {
+    rev: string
+    commit?: string
+    relation?: string
+    label?: string
+    changes?: number
+    error?: string
+  } | null {
+    const b = this.#diffBase
+    if (!b) return null
+    if ("error" in b) return b
+    const { rev, commit, relation, label } = b
+    return { rev, commit, relation, label, changes: this.#changes }
+  }
+
   /** The file's page URL, which every request is relative to */
   get base(): URL {
     return new URL(this.getAttribute("src") ?? "./", document.baseURI)
@@ -99,6 +122,7 @@ export class AhMarkdown extends HTMLElement {
     if (!this.content.isConnected) this.append(this.content)
     this.#scheme.addEventListener("change", this.#onScheme)
     this.#connect()
+    if (this.hasAttribute("diff-from")) void this.#fetchBase()
   }
 
   disconnectedCallback() {
@@ -106,8 +130,9 @@ export class AhMarkdown extends HTMLElement {
     this.#disconnect()
   }
 
-  attributeChangedCallback(_name: string, old: string | null, value: string | null) {
+  attributeChangedCallback(name: string, old: string | null, value: string | null) {
     if (old === value || !this.isConnected) return
+    if (name === "diff-from") return void this.#fetchBase()
     // A different file: start over, without flashing the whole new text
     this.#disconnect()
     this.#text = null
@@ -142,6 +167,28 @@ export class AhMarkdown extends HTMLElement {
       void this.#explainClose()
       this.#retry = setTimeout(() => this.#connect(), 1000)
     }
+  }
+
+  /** The file at the diff-from revision, then a render showing the diff;
+   * without the attribute, a render without one */
+  async #fetchBase() {
+    const rev = this.getAttribute("diff-from")
+    let base: DiffBase | null = null
+    if (rev !== null) {
+      const url = new URL("base", this.base)
+      url.searchParams.set("rev", rev)
+      try {
+        const res = await fetch(url, { cache: "no-store" })
+        base = res.ok ? await res.json() : { rev, error: await res.text() }
+      } catch {
+        base = { rev, error: "can't reach ah" }
+      }
+      // Stale if the attribute changed meanwhile
+      if (this.getAttribute("diff-from") !== rev) return
+    }
+    this.#diffBase = base
+    if (this.#text !== null) this.#render()
+    else this.dispatchEvent(new Event("render"))
   }
 
   /** A refused socket looks the same whether the server is down or the
@@ -247,7 +294,12 @@ export class AhMarkdown extends HTMLElement {
     const content = this.content
     const toggled = toggledDetails(content)
     const embeds = hydratedEmbeds(content)
-    content.innerHTML = md.render(this.#text ?? "")
+    const text = this.#text ?? ""
+    const base = this.#diffBase && "text" in this.#diffBase ? this.#diffBase.text : null
+    const diff = base === null ? null : diffMarkdown(base, text, blocksOf)
+    this.#changes = diff?.changes ?? 0
+    content.innerHTML = md.render(diff?.text ?? text, diff ? { diff } : {})
+    if (diff) showDiff(content, diff)
     restoreDetails(content, toggled)
     markConflictChanges(content)
     highlightCodeBlocks(content)
@@ -257,16 +309,13 @@ export class AhMarkdown extends HTMLElement {
     const pending = this.#pendingFlash
     this.#pendingFlash = []
     if (pending.length > 0) {
-      const els = [...content.querySelectorAll<HTMLElement>("[data-line]")]
-      const hit = els.filter((el) => {
-        const [s, e] = el.dataset.line!.split(":").map(Number)
-        return pending.some((r) => s < r.end && e > r.start)
-      })
       // flash only the innermost matching blocks; within one, flash just the
       // inserted text when it's small and locatable, else the whole block
-      for (const el of hit) {
-        if (hit.some((other) => other !== el && el.contains(other))) continue
-        const [s, e] = el.dataset.line!.split(":").map(Number)
+      for (const el of innermostBlocks(
+        content,
+        pending.map((r) => [r.start, r.end]),
+      )) {
+        const [s, e] = lines(el)
         const ranges = pending.filter((r) => s < r.end && e > r.start)
         let scoped = ranges.length > 0
         for (const r of ranges) {
@@ -286,6 +335,99 @@ declare global {
 }
 
 // ---------- rendering ----------
+
+/** What the preview got for its diff-from revision (routes.ts) */
+type DiffBase =
+  | { rev: string; commit: string; relation: string; label: string; text: string }
+  | { rev: string; error: string }
+
+/** A block's source lines, [start, end), from its data-line */
+const lines = (el: HTMLElement) => el.dataset.line!.split(":").map(Number)
+
+/** The innermost blocks whose lines overlap one of `ranges` */
+function innermostBlocks(content: HTMLElement, ranges: number[][]): HTMLElement[] {
+  const hit = [...content.querySelectorAll<HTMLElement>("[data-line]")].filter((el) => {
+    const [s, e] = lines(el)
+    return ranges.some(([start, end]) => s < end && e > start)
+  })
+  return hit.filter((el) => !hit.some((other) => other !== el && el.contains(other)))
+}
+
+/** A text's leaf blocks, for diffMarkdown */
+const blocksOf = (text: string) => leafBlocks(md.parse(text, { nested: true }))
+
+/** Mark the blocks the diff added, and put back the ones it removed, each
+ * before the first block from where it was */
+function showDiff(content: HTMLElement, diff: MarkdownDiff) {
+  const blocks = [...content.querySelectorAll<HTMLElement>("[data-line]")]
+  const added = new Set(innermostBlocks(content, diff.added).map(outer))
+  // The removed go back first, so they go before an added <pre> or <table>,
+  // not into its wrapper
+  for (const { line, text } of diff.removed) {
+    const panel = document.createElement("div")
+    panel.className = "diff-removed"
+    panel.innerHTML = md.render(text, { nested: true })
+    // Its lines aren't the file's: don't let flashes or ⌘-click find it
+    for (const el of panel.querySelectorAll("[data-line]")) el.removeAttribute("data-line")
+    const next = blocks.find((el) => lines(el)[0] >= line)
+    if (!(next && putItems(panel, outer(next)))) {
+      if (next) outer(next).before(panel)
+      else content.append(panel)
+    }
+  }
+  // A fence's lines are on its <code> and a table's on its rows, but the
+  // <pre> or <table> would clip the mark's bar, so it goes on a wrapper
+  for (const el of added) {
+    if (el.matches("pre, table")) wrap(el)
+    else el.classList.add("diff-added")
+  }
+  const left =
+    content.getBoundingClientRect().left + parseFloat(getComputedStyle(content).paddingLeft)
+  for (const el of content.querySelectorAll<HTMLElement>(".diff-added, .diff-removed"))
+    el.style.setProperty("--diff-indent", `${el.getBoundingClientRect().left - left}px`)
+}
+
+/** The element a block's lines are marked on: the <pre> of a fence's
+ * <code>, the <table> of a row */
+const outer = (el: HTMLElement) => el.closest<HTMLElement>("pre, table") ?? el
+
+/** Put `el` in a div marked added */
+function wrap(el: HTMLElement) {
+  const div = document.createElement("div")
+  div.className = "diff-added"
+  el.replaceWith(div)
+  div.append(el)
+}
+
+/** When `panel` is just a list's items, put them back in the list as items
+ * marked removed, before the item `next` is in, or at the end of the list
+ * just before it; returns whether it could. In an ordered list, every item
+ * gets its number, so the removed ones don't shift the others'. */
+function putItems(panel: HTMLElement, next: HTMLElement): boolean {
+  const list = panel.querySelector("ul, ol")
+  const only = (el: Element | null): boolean =>
+    el === list || (el?.children.length === 1 && only(el.firstElementChild))
+  if (!list || !only(panel)) return false
+  const before = next.closest("li")
+  const prev = next.previousElementSibling
+  const into =
+    before?.parentElement ??
+    (prev?.matches("ul, ol") ? prev : prev?.querySelector(":scope > ul, :scope > ol"))
+  if (!into || into.tagName !== list.tagName) return false
+  const items = [...list.children].filter((el) => el.tagName === "LI")
+  if (into instanceof HTMLOListElement) {
+    const own = [...into.children].filter((el) => el.tagName === "LI") as HTMLLIElement[]
+    own.forEach((li, j) => (li.value ||= into.start + j))
+    let n = before ? (before as HTMLLIElement).value : into.start + own.length
+    for (const li of items as HTMLLIElement[]) li.value = n++
+  }
+  for (const li of items) {
+    li.classList.add("diff-removed")
+    if (before) before.before(li)
+    else into.append(li)
+  }
+  return true
+}
 
 // data-line attributes on blocks let remote-edit flashes find the right
 // blocks after a re-render

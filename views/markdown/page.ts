@@ -16,6 +16,9 @@ function shortcutsDialog({ editor, chat }: { editor: boolean; chat: boolean }) {
     ["⌘F", "Find in the document"],
     ["⌘G", "Next match (⇧⌘G previous)"],
     ["⇧⌘C", "Copy the file's path"],
+    ["⌘D", "Show or hide the changes since a revision"],
+    ["B", "Pick the revision to show changes since"],
+    ["] / [", "Next or previous change"],
   ]
   if (editor) {
     rows.push(
@@ -95,6 +98,7 @@ ${chat ? chatStylesheet : ""}
     margin: 0 auto;
     padding: 45px;
   }
+  /* Its top and height center it in the diff bar, when that's shown */
   #editor-toggle {
     position: fixed;
     top: 10px;
@@ -122,6 +126,117 @@ ${chat ? chatStylesheet : ""}
     }
     #editor-toggle:hover { color: #f0f6fc; background: #1c2330; }
   }
+  /* The diff mode's base and change count, above the preview */
+  #diff-bar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    /* Across the pane, its contents in line with the text (markdown.css's
+       830px column with 45px padding) */
+    padding: 0 max(45px, calc((100% - 740px) / 2));
+    /* Tall enough that the editor toggle, fixed 10px from the top and 28px
+       tall, sits centered in it */
+    height: 49px;
+    box-sizing: border-box;
+    background: light-dark(#ffffff, #0d1117);
+    border-bottom: 1px solid light-dark(#d1d9e0, #3d444d);
+    color: light-dark(#59636e, #9198a1);
+    color-scheme: light dark;
+    font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #diff-bar[hidden] { display: none; }
+  /* Clear of the bar when a change is scrolled to */
+  .diff-added, .diff-removed, .diff-old, .diff-new { scroll-margin-top: 60px; }
+  #diff-relation, #diff-info { flex: none; white-space: nowrap; }
+  /* Shrinks first, eliding the base's name */
+  #diff-base {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 44ch;
+    padding: 2px 8px;
+    border: 1px solid light-dark(#d1d9e0, #3d444d);
+    border-radius: 4px;
+    background: light-dark(#f6f8fa, #151b23);
+    color: light-dark(#1f2328, #e6edf3);
+    font: inherit;
+    line-height: 1.4;
+    text-align: left;
+    cursor: pointer;
+  }
+  #diff-base-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #diff-base::after {
+    flex: none;
+    content: "";
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin: 0 2px 3px 10px;
+    border: solid light-dark(#59636e, #9198a1);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+  #base-picker {
+    position: fixed;
+    inset: auto;
+    width: min(560px, calc(100vw - 32px));
+    max-height: min(420px, 70vh);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    flex-direction: column;
+    border: 1px solid light-dark(#d1d9e0, #3d444d);
+    border-radius: 8px;
+    background: light-dark(#ffffff, #151b23);
+    color: light-dark(#1f2328, #e6edf3);
+    box-shadow: 0 8px 28px #0003;
+    color-scheme: light dark;
+    font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #base-picker:popover-open { display: flex; }
+  #base-picker input {
+    margin: 8px;
+    padding: 6px 8px;
+    border: 1px solid light-dark(#d1d9e0, #3d444d);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  #base-picker ul { margin: 0; padding: 0 0 6px; overflow-y: auto; list-style: none; }
+  #base-picker li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    column-gap: 12px;
+    padding: 6px 12px;
+  }
+  #base-picker .stat {
+    grid-area: 1 / 2 / 3 / 3;
+    align-self: center;
+    font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  #base-picker .stat ins { color: light-dark(#1a7f37, #3fb950); text-decoration: none; }
+  #base-picker .stat del { color: light-dark(#cf222e, #f85149); text-decoration: none; }
+  #base-picker .bookmark {
+    padding: 0 5px;
+    border-radius: 9px;
+    background: light-dark(#ddf4ff, #388bfd33);
+    color: light-dark(#0969da, #79c0ff);
+    font-size: 11px;
+  }
+  #base-picker li.note { color: light-dark(#59636e, #9198a1); }
+  #base-picker [role="option"] { cursor: pointer; }
+  #base-picker [role="option"]:hover,
+  #base-picker [aria-selected="true"] { background: light-dark(#ddf4ff, #388bfd26); }
+  #base-picker .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #base-picker .detail {
+    color: light-dark(#59636e, #9198a1);
+    font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  #diff-info.error { color: light-dark(#cf222e, #f85149); }
   #shortcuts {
     color-scheme: light dark;
     min-width: 320px;
@@ -240,7 +355,18 @@ ${chat ? chatStylesheet : ""}
 <body data-path="${path}">
 <div id="layout">
   ${editor ? '<div id="editor-pane"><div id="editor-host"></div></div>' : ""}
-  <div id="preview-pane"><ah-markdown src="./"></ah-markdown></div>
+  <div id="preview-pane">
+    <div id="diff-bar" hidden>
+      <span id="diff-relation">Changes since</span>
+      <button id="diff-base" popovertarget="base-picker" title="Pick another base (B)"><span id="diff-base-label"></span></button>
+      <span id="diff-info" role="status"></span>
+      <div id="base-picker" popover>
+        <input aria-label="Revision to diff from" placeholder="Any revset, like main or @--" autocomplete="off" spellcheck="false">
+        <ul role="listbox" aria-label="Bases"></ul>
+      </div>
+    </div>
+    <ah-markdown src="./"></ah-markdown>
+  </div>
 </div>
 ${
   editor

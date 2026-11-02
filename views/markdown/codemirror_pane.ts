@@ -228,12 +228,12 @@ export class CodeMirrorPane implements EditorPane {
 
 /** ⌘-chords the page binds go to it instead (client.ts, find.ts, the
  * conversation): CodeMirror binds some of the same ones, ⌘F to its own search
- * and ⌘I to select the enclosing syntax node. Skipping CodeMirror without
+ * ⌘I to select the enclosing syntax node and ⌘D the next match. Skipping CodeMirror without
  * preventDefault lets the event go on to the page. */
 function forPage(e: KeyboardEvent): boolean {
   if (!e.metaKey || e.ctrlKey || e.altKey) return false
   const key = e.key.toLowerCase()
-  return e.shiftKey ? key === "c" || key === "g" : ["e", "f", "g", "i"].includes(key)
+  return e.shiftKey ? key === "c" || key === "g" : ["d", "e", "f", "g", "i"].includes(key)
 }
 
 /** The markdown constructs themselves; each fenced block's language comes
