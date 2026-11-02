@@ -1,8 +1,8 @@
 // The editor pane's backend when the pane is a terminal (editor.ts): a
-// terminal editor (terminal_editor.ts) in a pty, one per socket, spawned when the page first shows the pane and hung up
-// when the socket closes (page reload or close) or the file does. Output goes
-// to the page as binary frames; input and resizes come back as JSON text
-// frames.
+// terminal editor (terminal_editor.ts) in a pty, one per socket, spawned when
+// the page loads and hung up when the socket closes (page reload or close) or
+// the file does. Output goes to the page as binary frames; input and resizes
+// come back as JSON text frames.
 
 import { dirname } from "node:path"
 import { type IPty, spawn } from "@lydell/node-pty"
@@ -103,7 +103,9 @@ export class PtyBackend implements EditorBackend {
     pty.onExit(({ exitCode }) => {
       this.#ptys.delete(pty)
       console.error(`ah: ${command} exited (${exitCode})`)
-      if (ws.readyState === ws.OPEN) ws.close(1000, "editor exited")
+      // The page restarts an editor that quit, not one hung up with the file
+      const reason = this.#closed ? "file closed" : "editor exited"
+      if (ws.readyState === ws.OPEN) ws.close(1000, reason)
     })
     ws.on("message", (data, isBinary) => {
       if (isBinary) return

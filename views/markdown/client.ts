@@ -59,7 +59,7 @@ preview.addEventListener("closed", () => {
 // What fills the pane (editor.ts): Helix in a terminal. The pane always
 // starts collapsed.
 const pane: EditorPane | null = editorHost
-  ? new TerminalPane(editorHost, wsUrl("editor"), helix)
+  ? new TerminalPane(editorHost, wsUrl("editor"), helix, () => setEditorShown(false))
   : null
 
 function setEditorShown(shown: boolean) {

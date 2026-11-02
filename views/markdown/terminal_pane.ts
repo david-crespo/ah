@@ -2,8 +2,10 @@
 
 // The editor pane when it's a terminal (editor.ts), page side: an xterm.js
 // terminal wired to a terminal editor (terminal_editor.ts) running in a pty on
-// the server (pty.ts). The editor starts on the pane's first show and keeps
-// running while it's hidden, so toggling the pane doesn't lose editor state.
+// the server (pty.ts). The editor starts with the page, at the size the hidden
+// pane keeps (page.ts), so it's ready when the pane is first shown. It keeps
+// running while hidden, so toggling the pane doesn't lose editor state.
+// Quitting the editor hides the pane and starts a fresh one behind it.
 
 import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
@@ -20,8 +22,10 @@ export class TerminalPane implements EditorPane {
   readonly #host: HTMLElement
   readonly #socketUrl: string
   readonly #editor: TerminalEditor
+  /** For a quit editor (`:q`), which the pane restarts behind it */
+  readonly #onQuit: () => void
   #term: Terminal | null = null
-  #sock: WebSocket | null = null
+  #resizes: ResizeObserver | null = null
   /** Types keys into the editor, set once it has drawn: before that it may not
    * have the pty in raw mode yet. What needs it sooner waits in #waiters. */
   #type: ((keys: string) => void) | null = null
@@ -29,15 +33,21 @@ export class TerminalPane implements EditorPane {
   /** When the editor last sent output, to tell when it's done drawing */
   #outputAt = 0
 
-  constructor(host: HTMLElement, socketUrl: string, editor: TerminalEditor) {
+  constructor(
+    host: HTMLElement,
+    socketUrl: string,
+    editor: TerminalEditor,
+    onQuit: () => void,
+  ) {
     this.#host = host
     this.#socketUrl = socketUrl
     this.#editor = editor
+    this.#onQuit = onQuit
+    this.#start()
   }
 
   show() {
-    if (!this.#sock) this.#start()
-    else this.#term?.focus()
+    this.#term?.focus()
   }
 
   /** The editor's goto, and then its lower to bring the cursor's line level
@@ -111,7 +121,7 @@ export class TerminalPane implements EditorPane {
       })}`,
     )
     ws.binaryType = "arraybuffer"
-    this.#sock = ws
+    const startedAt = performance.now()
     const send = (msg: Record<string, unknown>) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg))
     }
@@ -146,9 +156,19 @@ export class TerminalPane implements EditorPane {
         this.#waiters = []
       }
     }
-    ws.onclose = () => {
-      this.#sock = null
+    ws.onclose = (e) => {
       if (this.#type === type) this.#type = null
+      // The editor quit, rather than failing to start or losing the server or
+      // the file. One that quits soon after starting may be failing, and
+      // restarting it could loop.
+      if (
+        e.code === 1000 &&
+        e.reason === "editor exited" &&
+        performance.now() - startedAt > 3000
+      ) {
+        this.#onQuit()
+        return this.#restart()
+      }
       this.#term?.write(`\r\n\x1b[2m[${editor.name} exited — click here to restart]\x1b[0m`)
       host.addEventListener("click", () => this.#restart(), { once: true })
     }
@@ -190,13 +210,14 @@ export class TerminalPane implements EditorPane {
         }, 300)
       }, 50)
     })
-    new ResizeObserver(() => {
-      if (document.body.classList.contains("editor-shown")) fitWhole(term, fit)
-    }).observe(host)
-    term.focus()
+    this.#resizes = new ResizeObserver(() => fitWhole(term, fit))
+    this.#resizes.observe(host)
+    // On a restart; on the page's start, the pane is hidden until shown
+    if (document.body.classList.contains("editor-shown")) term.focus()
   }
 
   #restart() {
+    this.#resizes?.disconnect()
     this.#term?.dispose()
     this.#term = null
     this.#start()

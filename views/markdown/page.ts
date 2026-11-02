@@ -64,7 +64,6 @@ ${chat ? chatStylesheet : ""}
   #layout { display: grid; grid-template-columns: 1fr; }
   body.editor-shown #layout { grid-template-columns: minmax(0, 45%) minmax(0, 1fr); }
   #editor-pane {
-    display: none;
     position: sticky;
     top: 0;
     align-self: start;
@@ -75,7 +74,14 @@ ${chat ? chatStylesheet : ""}
     background: #020202; /* ayu_evolve background, so the pane's padding matches helix */
     border-right: 1px solid #d1d9e0;
   }
-  body.editor-shown #editor-pane { display: block; }
+  /* Hidden, the pane keeps its shown size out of the layout, so the editor
+     can start at that size before it's first shown (terminal_pane.ts) */
+  body:not(.editor-shown) #editor-pane {
+    position: fixed;
+    left: 0;
+    width: 45%;
+    visibility: hidden;
+  }
   #editor-host { height: 100%; }
   /* Room for the conversation, which stays out of the editor pane */
   #preview-pane { padding-bottom: 80px; }

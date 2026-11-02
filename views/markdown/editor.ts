@@ -46,7 +46,8 @@ export interface EditorBackend {
  * socket URL it's made with. The pane starts hidden; hiding it again is the
  * page's business (`editor-shown` on the body). */
 export interface EditorPane {
-  /** The pane was shown: start the editor if it isn't running, else focus it */
+  /** The pane was shown: focus the editor, starting it first if it waited
+   * for this (the terminal pane starts with the page) */
   show(): void
   /** Put the cursor at `line` and `column` (0-based) for ⌘-click in the
    * preview, with that line level with `y` (client coordinates) if the editor
