@@ -237,12 +237,13 @@ export function mergeDisk(
 export const atLineStart = (o: string[], i: number) => i === 0 || o[i - 1] === "\n"
 
 /** Whether a sentence ends right before token i of `o`, or a line or the
- * marker that starts a heading, list item or quote */
-export function atBoundary(o: string[], i: number): boolean {
+ * marker that starts a heading, list item or quote, `marker` matching a
+ * line's start up to there when it's one */
+export function atBoundary(o: string[], i: number, marker = MARKER): boolean {
   if (i <= 0 || i >= o.length || o[i] === "\n" || atLineStart(o, i)) return true
   let start = i
   while (!atLineStart(o, start)) start--
-  if (MARKER.test(o.slice(start, i).join(""))) return true
+  if (marker.test(o.slice(start, i).join(""))) return true
   const before = o.slice(Math.max(0, i - 4), i).join("")
   return (
     /[.!?]["')\]*_]*$/.test(before.trimEnd()) && (/\s$/.test(before) || /^\s/.test(o[i]))

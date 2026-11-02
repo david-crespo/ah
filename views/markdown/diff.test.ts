@@ -3,8 +3,9 @@ import { CLOSE, diffMarkdown, leafBlocks, OPEN } from "./diff.ts"
 import { createMarkdown } from "./render.ts"
 
 const md = createMarkdown()
+const blocksOf = (t: string) => leafBlocks(md.parse(t, { nested: true }))
 const diff = (prev: string, next: string) =>
-  diffMarkdown(prev, next, (t) => leafBlocks(md.parse(t, { nested: true })))
+  diffMarkdown(prev, next, [blocksOf(prev), blocksOf(next)])
 
 /** The marked text with each inline change as [-old-]{+new+} */
 function inline(prev: string, next: string): string {

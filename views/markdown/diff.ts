@@ -14,7 +14,9 @@
 // file. A change that crosses blocks, or is inside one that inline markers
 // can't go in (a code fence, table or HTML), takes whole blocks: the old ones
 // come back to be rendered where they were, and the new ones as line ranges.
-// Imports only merge.ts, for tests.
+// The markup language matters only in which lines and spans markers can't go
+// in (Syntax), and in the leaf blocks the caller passes, so this diffs
+// AsciiDoc (asciidoc.ts) too. Imports only merge.ts, for tests.
 
 import { atBoundary, atLineStart, hunks, words } from "./merge.ts"
 
@@ -24,8 +26,32 @@ import { atBoundary, atLineStart, hunks, words } from "./merge.ts"
 const tokens = (text: string): string[] =>
   text.match(/[\p{L}\p{N}_'’]+|\n|[^\S\n]+|[^\p{L}\p{N}_'’\s]/gu) ?? []
 
-/** The markers that start a line's heading, list items and quotes */
-const LINE_MARKER = /^\s*(?:(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)+/
+/** What a markup language's syntax means for marking changes inline */
+export type Syntax = {
+  /** The markers that start a line's heading, list items and quotes */
+  lineMarker: RegExp
+  /** Inline markup, which widens a change that touches it to whole
+   * sentences, so markers don't cut through it */
+  markup: RegExp
+  /** On a change's lines, the start of a span a marker can't go inside,
+   * like a code span or a link's target, which widens it the same way */
+  span: RegExp
+}
+
+export const MARKDOWN: Syntax = {
+  lineMarker: /^\s*(?:(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)+/,
+  markup: /[*_`[\]()<>|\\]/,
+  span: /`|\]\(/,
+}
+
+export const ASCIIDOC: Syntax = {
+  // Description list terms too, `CPU::`, which can end the line
+  lineMarker:
+    /^\s*(?:(?:={1,6}|\*{1,5}|-|\.{1,5}|\d+\.|<\d+>|(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION):)\s+|[^\s:][^:\n]*?(?::{2,4}|;;)(?:\s+|$))(?:\[[ xX*]\]\s+)?/,
+  markup: /[*_`#+^~[\]<>|\\{}]/,
+  // Code and passthrough spans, macros' targets and attributes, and URLs
+  span: /`|\+|\[|:\/\//,
+}
 
 /** Inline markers: OPEN, the old words' index and `}` before the new words,
  * CLOSE after them. `{` stops markdown-it's text rule, which runs over
@@ -90,14 +116,16 @@ type Run = { a: number; aEnd: number; b: number; bEnd: number; block: boolean }
 class Side {
   readonly t: string[]
   readonly blocks: Block[]
+  readonly syntax: Syntax
   /** The line each token is on, with one more for the end */
   readonly lineOf: number[] = [0]
   /** The token each line starts at, with one more for the end */
   readonly lineStart: number[] = [0]
 
-  constructor(text: string, blocks: Block[]) {
+  constructor(text: string, blocks: Block[], syntax: Syntax) {
     this.t = tokens(text)
     this.blocks = blocks
+    this.syntax = syntax
     for (const tok of this.t) {
       const line = this.lineOf.at(-1)! + (tok === "\n" ? 1 : 0)
       this.lineOf.push(line)
@@ -124,18 +152,6 @@ class Side {
     return { blocks, loose: covered < le - ls }
   }
 
-  /** Whether token `i` is inside the marker that starts its line (`- `,
-   * `## `, `> `) */
-  inMarker(i: number, empty: boolean): boolean {
-    let start = i
-    while (!atLineStart(this.t, start)) start--
-    let end = start
-    while (end < this.t.length && this.t[end] !== "\n") end++
-    const m = LINE_MARKER.exec(this.t.slice(start, end).join(""))
-    const at = this.t.slice(start, i).join("").length
-    return m !== null && at < m[0].length && (at > 0 || !empty)
-  }
-
   /** What the diff compares the tokens by. A line break inside a paragraph
    * is a space, unless it's a hard break, since rewrapping doesn't show. An
    * ordered item's number is `#`, since adding an item renumbers the ones
@@ -158,20 +174,36 @@ class Side {
       return numbered ? "#" : tok
     })
   }
+
+  /** Whether token `i` is inside the marker that starts its line (`- `,
+   * `## `, `> `) */
+  inMarker(i: number, empty: boolean): boolean {
+    let start = i
+    while (!atLineStart(this.t, start)) start--
+    let end = start
+    while (end < this.t.length && this.t[end] !== "\n") end++
+    const m = this.syntax.lineMarker.exec(this.t.slice(start, end).join(""))
+    const at = this.t.slice(start, i).join("").length
+    return m !== null && at < m[0].length && (at > 0 || !empty)
+  }
 }
 
-/** `next`, the file now, marked with its changes since `prev`. `blocksOf`
- * gives a text's leaf blocks, from the renderer's own parse. */
+/** `next`, the file now, marked with its changes since `prev`. `blocks` are
+ * each text's leaf blocks, from the renderer's own parse, and `syntax` is
+ * its markup language's. */
 export function diffMarkdown(
   prev: string,
   next: string,
-  blocksOf: (text: string) => Block[],
+  blocks: [Block[], Block[]],
+  syntax: Syntax = MARKDOWN,
 ): MarkdownDiff {
-  const o = new Side(prev, blocksOf(prev))
-  const n = new Side(next, blocksOf(next))
+  const o = new Side(prev, blocks[0], syntax)
+  const n = new Side(next, blocks[1], syntax)
+  /** A line's marker, when that's all there is before token i */
+  const marker = new RegExp(`(?:${syntax.lineMarker.source})$`)
   /** A line break and the marker that continues a quote on the next line */
-  const continued = new RegExp(`\\n${LINE_MARKER.source.slice(1)}`, "g")
-  const trailing = new RegExp(`\\s*(?:\\n${LINE_MARKER.source.slice(1)})?$`)
+  const continued = new RegExp(`\\n${syntax.lineMarker.source.slice(1)}`, "g")
+  const trailing = new RegExp(`\\s*(?:\\n${syntax.lineMarker.source.slice(1)})?$`)
   const runs: Run[] = []
   let shift = 0
   for (const h of hunks(o.keys(), n.keys(), true)) {
@@ -223,7 +255,11 @@ export function diffMarkdown(
     const min = i > 0 ? runs[i - 1][s] : 0
     const max = i + 1 < runs.length ? runs[i + 1][s] : t.length
     const edge = (at: number) =>
-      atBoundary(t, at) ? 2 : /\s/.test(t[at - 1] ?? "") || /\s/.test(t[at] ?? "") ? 1 : 0
+      atBoundary(t, at, marker)
+        ? 2
+        : /\s/.test(t[at - 1] ?? "") || /\s/.test(t[at] ?? "")
+          ? 1
+          : 0
     // A quote's marker on a line that continues a paragraph is no place to
     // start or end, which would take the whole quote
     const cuts = (at: number) =>
@@ -316,11 +352,11 @@ export function diffMarkdown(
     // A reworded sentence, but not an addition or removal, which has no other
     // side to read against
     if (before && after && (words(before) > 2 || words(after) > 2)) return true
-    if (/[*_`[\]()<>|\\]/.test((before + after).replace(continued, "\n"))) return true
+    if (syntax.markup.test((before + after).replace(continued, "\n"))) return true
     // Inside a code span or a link's URL, where a marker can't go
     const [ls, le] = n.lines(r.b, r.bEnd)
     const lines = n.t.slice(n.lineStart[ls], n.lineStart[le]).join("")
-    return /`|\]\(/.test(lines)
+    return syntax.span.test(lines)
   }
 
   /** Grow run i to whole lines and whole blocks on both sides, until neither
@@ -360,8 +396,8 @@ export function diffMarkdown(
       if (!needsSentences(r)) break
       let start = r.a
       let end = r.aEnd
-      while (!atBoundary(o.t, start)) start--
-      while (!atBoundary(o.t, end)) end++
+      while (!atBoundary(o.t, start, marker)) start--
+      while (!atBoundary(o.t, end, marker)) end++
       if (start === r.a && end === r.aEnd) break
       i = grow(i, "a", start, end)
     }

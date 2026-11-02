@@ -21,8 +21,8 @@ import { languages } from "@codemirror/language-data"
 import { LanguageDescription } from "@codemirror/language"
 import { classHighlighter, highlightCode } from "@lezer/highlight"
 import { createMarkdown } from "./render.ts"
-import { diffMarkdown, leafBlocks, type MarkdownDiff } from "./diff.ts"
-import { renderAsciidoc } from "./asciidoc.ts"
+import { ASCIIDOC, diffMarkdown, leafBlocks, type MarkdownDiff } from "./diff.ts"
+import { asciidocBlocks, renderAsciidoc } from "./asciidoc.ts"
 import type { DocFormat } from "./doc.ts"
 import { type Conflict, findConflictEnd, parseConflict } from "./conflict.ts"
 import { AGENT, MINE } from "./merge.ts"
@@ -297,26 +297,43 @@ export class AhMarkdown extends HTMLElement {
     void this.#render()
   }
 
+  /** The diff mode's base text, or null when it's off or not loaded */
+  get #baseText() {
+    return this.#diffBase && "text" in this.#diffBase ? this.#diffBase.text : null
+  }
+
   async #render() {
     const text = this.#text ?? ""
-    const base = this.#diffBase && "text" in this.#diffBase ? this.#diffBase.text : null
+    const base = this.#baseText
+    const asciidoc = this.#format === "asciidoc"
     const diff =
-      base === null || this.#format !== "markdown"
+      base === null
         ? null
-        : diffMarkdown(base, text, blocksOf)
-    const html =
-      this.#format === "asciidoc"
-        ? await renderAsciidoc(text)
-        : md.render(diff?.text ?? text, diff ? { diff } : {})
-    // Asciidoctor is async, so a newer text may have come meanwhile; its own
-    // render shows it, and takes the pending flashes
-    if (text !== (this.#text ?? "")) return
+        : asciidoc
+          ? diffMarkdown(
+              base,
+              text,
+              await Promise.all([asciidocBlocks(base), asciidocBlocks(text)]),
+              ASCIIDOC,
+            )
+          : diffMarkdown(base, text, [blocksOf(base), blocksOf(text)])
+    const html = asciidoc
+      ? await renderAsciidoc(diff?.text ?? text, diff?.old)
+      : md.render(diff?.text ?? text, diff ? { diff } : {})
+    const removed = await Promise.all(
+      (diff?.removed ?? []).map((r) =>
+        asciidoc ? renderAsciidoc(r.text) : md.render(r.text, { nested: true }),
+      ),
+    )
+    // Asciidoctor is async, so a newer text or base may have come meanwhile;
+    // its own render shows it, and takes the pending flashes
+    if (text !== (this.#text ?? "") || base !== this.#baseText) return
     const content = this.content
     const toggled = toggledDetails(content)
     const embeds = hydratedEmbeds(content)
     this.#changes = diff?.changes ?? 0
     content.innerHTML = html
-    if (diff) showDiff(content, diff)
+    if (diff) showDiff(content, diff, removed)
     restoreDetails(content, toggled)
     markConflictChanges(content)
     highlightCodeBlocks(content)
@@ -374,16 +391,16 @@ function innermostBlocks(content: HTMLElement, ranges: number[][]): HTMLElement[
 const blocksOf = (text: string) => leafBlocks(md.parse(text, { nested: true }))
 
 /** Mark the blocks the diff added, and put back the ones it removed, each
- * before the first block from where it was */
-function showDiff(content: HTMLElement, diff: MarkdownDiff) {
+ * before the first block from where it was, rendered as `removed` */
+function showDiff(content: HTMLElement, diff: MarkdownDiff, removed: string[]) {
   const blocks = [...content.querySelectorAll<HTMLElement>("[data-line]")]
   const added = new Set(innermostBlocks(content, diff.added).map(outer))
   // The removed go back first, so they go before an added <pre> or <table>,
   // not into its wrapper
-  for (const { line, text } of diff.removed) {
+  for (const [i, { line }] of diff.removed.entries()) {
     const panel = document.createElement("div")
     panel.className = "diff-removed"
-    panel.innerHTML = md.render(text, { nested: true })
+    panel.innerHTML = removed[i]
     // Its lines aren't the file's: don't let flashes or ⌘-click find it
     for (const el of panel.querySelectorAll("[data-line]")) el.removeAttribute("data-line")
     const next = blocks.find((el) => lines(el)[0] >= line)
@@ -416,32 +433,35 @@ function wrap(el: HTMLElement) {
   div.append(el)
 }
 
-/** When `panel` is just a list's items, put them back in the list as items
- * marked removed, before the item `next` is in, or at the end of the list
- * just before it; returns whether it could. In an ordered list, every item
- * gets its number, so the removed ones don't shift the others'. */
+/** When `panel` is just a list's items, or a description list's terms and
+ * descriptions, put them back in the list marked removed, before the item
+ * `next` is in, or at the end of the list just before it; returns whether it
+ * could. In an ordered list, every item gets its number, so the removed ones
+ * don't shift the others'. */
 function putItems(panel: HTMLElement, next: HTMLElement): boolean {
-  const list = panel.querySelector("ul, ol")
+  const list = panel.querySelector("ul, ol, dl")
   const only = (el: Element | null): boolean =>
     el === list || (el?.children.length === 1 && only(el.firstElementChild))
   if (!list || !only(panel)) return false
-  const before = next.closest("li")
+  const before = next.closest("li, dt, dd")
   const prev = next.previousElementSibling
   const into =
     before?.parentElement ??
-    (prev?.matches("ul, ol") ? prev : prev?.querySelector(":scope > ul, :scope > ol"))
+    (prev?.matches("ul, ol, dl")
+      ? prev
+      : prev?.querySelector(":scope > ul, :scope > ol, :scope > dl"))
   if (!into || into.tagName !== list.tagName) return false
-  const items = [...list.children].filter((el) => el.tagName === "LI")
+  const items = [...list.children].filter((el) => ["LI", "DT", "DD"].includes(el.tagName))
   if (into instanceof HTMLOListElement) {
     const own = [...into.children].filter((el) => el.tagName === "LI") as HTMLLIElement[]
     own.forEach((li, j) => (li.value ||= into.start + j))
     let n = before ? (before as HTMLLIElement).value : into.start + own.length
     for (const li of items as HTMLLIElement[]) li.value = n++
   }
-  for (const li of items) {
-    li.classList.add("diff-removed")
-    if (before) before.before(li)
-    else into.append(li)
+  for (const item of items) {
+    item.classList.add("diff-removed")
+    if (before) before.before(item)
+    else into.append(item)
   }
   return true
 }

@@ -104,7 +104,7 @@ ah-markdown {
     opacity: 0.55;
   }
   /* A panel, not a list's item put back in it, which keeps its spacing */
-  .diff-removed:not(li) {
+  .diff-removed:not(li, dt, dd) {
     margin-bottom: 16px;
   }
   .diff-removed::before {
