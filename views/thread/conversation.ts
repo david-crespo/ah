@@ -31,6 +31,43 @@ function describe(request: Request, kinds: RequestKinds): { label?: string; body
   )
 }
 
+/** A gap between messages longer than this gets a time divider */
+const DIVIDER_GAP = 30 * 60 * 1000
+
+/** A divider's label: the time, with as much of the date as it takes to place
+ * it from today */
+function dividerLabel(at: Date, now: Date): string {
+  const time = at.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+  const days = calendarDays(at, now)
+  if (days === 0) return time
+  if (days === 1) return `Yesterday ${time}`
+  if (days < 7) return `${at.toLocaleDateString([], { weekday: "long" })} ${time}`
+  const sameYear = at.getFullYear() === now.getFullYear()
+  const date = at.toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+    year: sameYear ? undefined : "numeric",
+  })
+  return sameYear ? `${date}, ${time}` : date
+}
+
+/** How many midnights there are from `at` to `now` */
+function calendarDays(at: Date, now: Date): number {
+  const day = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  // Rounded, since a day with a DST change isn't 24 hours
+  return Math.round((day(now).getTime() - day(at).getTime()) / 86400000)
+}
+
+/** How long ago the last message was: "3 hours ago", "yesterday" */
+function sinceLabel(at: Date, now: Date): string {
+  const relative = new Intl.RelativeTimeFormat([], { numeric: "auto" })
+  const minutes = Math.round((now.getTime() - at.getTime()) / 60000)
+  if (minutes < 60) return relative.format(-minutes, "minute")
+  if (minutes < 24 * 60 && calendarDays(at, now) === 0)
+    return relative.format(-Math.round(minutes / 60), "hour")
+  return relative.format(-calendarDays(at, now), "day")
+}
+
 export class Conversation {
   readonly element = document.createElement("section")
   private feed: HTMLElement
@@ -45,6 +82,13 @@ export class Conversation {
   private offline: HTMLElement
   private snapshot: ThreadSnapshot | null = null
   private rows = new Map<string, HTMLElement>()
+  /** The time dividers, relabeled on each update so "Yesterday" stays true */
+  private dividers: { element: HTMLElement; at: Date }[] = []
+  /** When the last message in the feed was sent */
+  private lastAt = 0
+  /** Under the last message, when it was a while ago, how long ago, so an old
+   * conversation looks old without scrolling up to its last divider */
+  private since = document.createElement("p")
   private read = new Set<string>()
   private toasts = new Map<string, number>()
   private connected = false
@@ -94,6 +138,7 @@ export class Conversation {
       </div>`
     document.body.append(this.element)
     this.feed = this.element.querySelector(".conversation-feed")!
+    this.since.className = "conversation-divider"
     this.form = this.element.querySelector("form")!
     this.input = this.element.querySelector("textarea")!
     this.toggle = this.element.querySelector(".conversation-toggle")!
@@ -250,6 +295,15 @@ export class Conversation {
     for (const entry of snapshot.entries) {
       if (entry.type === "activity" && !entry.text) continue
       if (!this.rows.has(entry.id)) {
+        const at = Date.parse(entry.at)
+        if (at - this.lastAt > DIVIDER_GAP) {
+          const element = document.createElement("time")
+          element.className = "conversation-divider"
+          element.dateTime = entry.at
+          this.dividers.push({ element, at: new Date(at) })
+          this.feed.append(element)
+        }
+        this.lastAt = at
         const row = this.renderMessage(entry)
         this.rows.set(entry.id, row)
         this.feed.append(row)
@@ -269,6 +323,8 @@ export class Conversation {
         meta.toggleAttribute("hidden", !meta.textContent)
       }
     }
+    this.feed.append(this.since)
+    this.labelTimes()
     this.showRows()
     if (this.open && added) {
       if (bottom || first || sent) {
@@ -414,9 +470,23 @@ export class Conversation {
     this.setOpen(!this.open)
   }
   /** Open, the compose box takes focus */
+  /** Label the dividers and the time since the last message from now, which
+   * moves on while the page sits open */
+  private labelTimes() {
+    const now = new Date()
+    for (const { element, at } of this.dividers) element.textContent = dividerLabel(at, now)
+    const last = new Date(this.lastAt)
+    this.since.hidden = this.rows.size === 0 || now.getTime() - this.lastAt <= DIVIDER_GAP
+    this.since.textContent = `Last message ${sinceLabel(last, now)}`
+    this.since.title = last.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+  }
+
   private setOpen(value: boolean, refocus = true) {
     this.open = value
-    if (value) this.onOpen()
+    if (value) {
+      this.onOpen()
+      this.labelTimes()
+    }
     this.element.classList.toggle("open", value)
     this.form.hidden = !value
     this.newMessages.hidden = true

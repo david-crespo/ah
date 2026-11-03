@@ -125,6 +125,15 @@
 #conversation.open .conversation-message[data-from="agent"] .conversation-meta {
   display: none;
 }
+#conversation .conversation-divider {
+  align-self: center;
+  margin: 0;
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+#conversation:not(.open) .conversation-divider {
+  display: none;
+}
 #conversation .conversation-meta {
   font-size: 12px;
   color: var(--chat-muted);
