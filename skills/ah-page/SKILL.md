@@ -129,6 +129,10 @@ Then come the requests, each starting `Request <id>: `:
 
 - Only the user's text: a message from the page's conversation. Answer a
   question there; change the page only when the message asks for a change.
+  When the page shows one thing at a time (the selected row of a list, the
+  open item), have its script keep `data-ah-about` on `<html>` set to a
+  short description of it, and remove the attribute when nothing is
+  selected. The message then starts `(on the page, about <description>)`.
 - `a comment on the passage "…" (after "…", before "…"):` and a note on the
   next line: the passage and the text around it are as rendered on the
   page, which may come from the HTML, from data the page loads, or from

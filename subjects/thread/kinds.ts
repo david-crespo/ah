@@ -26,7 +26,18 @@ const selection = {
 }
 
 export const threadKinds: RequestKinds = {
-  chat: { text: "required", render: (r) => r.text!, feed: (r) => ({ body: r.text ?? "" }) },
+  // `about` is what the page says the user is looking at (a page sets
+  // data-ah-about on its <html>), such as the item selected in a list
+  chat: {
+    text: "required",
+    args: { about: { max: 1000 } },
+    render: (r) =>
+      r.args.about ? `(on the page, about ${r.args.about})\n${r.text}` : r.text!,
+    feed: (r) => ({
+      ...(r.args.about && { label: `About ${r.args.about}` }),
+      body: r.text ?? "",
+    }),
+  },
   comment: {
     text: "required",
     args: selection,

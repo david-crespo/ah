@@ -792,7 +792,13 @@ export class Conversation {
     button.disabled = true
     this.reportError("")
     try {
-      await this.send({ kind: "chat", text, args: {}, replyTo: question?.id })
+      const about = document.documentElement.dataset.ahAbout
+      await this.send({
+        kind: "chat",
+        text,
+        args: about ? { about } : {},
+        replyTo: question?.id,
+      })
       if (this.input.value.trim() === text) this.input.value = ""
       this.fitInput()
       this.saveDraft()
