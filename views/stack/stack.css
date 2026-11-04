@@ -39,7 +39,7 @@ main a:visited {
 }
 main h1 {
   font-size: 22px;
-  margin: 0 0 4px;
+  margin: 0 0 4px 28px; /* line up with the PR blocks, past the graph lane */
 }
 main .notes {
   margin: 12px 0 20px 28px;
