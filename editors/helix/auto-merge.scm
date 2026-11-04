@@ -9,7 +9,7 @@
 ; is:
 ;
 ; - reloaded, if the buffer is unmodified
-; - merged, if it's modified: `ah view merge` merges the file on disk into
+; - merged, if it's modified: `ah tool doc merge` merges the file on disk into
 ;   the buffer, against the file as helix last read or saved it (the base),
 ;   marking the text both changed with both versions. The result is written
 ;   to the file and the buffer reloaded from it, so the buffer ends
@@ -57,7 +57,7 @@
 (define CHECK-EVERY 300)
 (define SETTLE 150)
 
-; How `ah view merge` merges a file, by its extension: by 'lines, or by
+; How `ah tool doc merge` merges a file, by its extension: by 'lines, or by
 ; 'words for prose, where a paragraph is often one long line. Others go by
 ; lines.
 (define *merge-units* (hash "md" 'words "markdown" 'words))
@@ -117,7 +117,7 @@
 (define (set-typing-check! typing-in?)
   (set! *typing-in?* typing-in?))
 
-; disk merged into unsaved, both edits of base, by `ah view merge` by unit,
+; disk merged into unsaved, both edits of base, by `ah tool doc merge` by unit,
 ; and how many conflicts it marked in it: (text . conflicts), or #f if that
 ; failed. Runs on the editor's thread, which waits for it, so the buffer
 ; can't change in the meantime. ah reads all of stdin before it writes, so
@@ -125,8 +125,8 @@
 (define (ah-merge unit base unsaved disk)
   (let ([spawned (~> (command "ah"
                               (if (equal? unit 'words)
-                                  (list "view" "merge" "--words")
-                                  (list "view" "merge")))
+                                  (list "tool" "doc" "merge" "--words")
+                                  (list "tool" "doc" "merge")))
                      with-stdin-piped
                      with-stdout-piped
                      spawn-process)])

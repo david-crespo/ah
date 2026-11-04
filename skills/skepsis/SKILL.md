@@ -9,7 +9,7 @@ Run this in the background, outside the sandbox (it binds a port and opens a
 page through ah). No Rex pane.
 
 ```
-node ~/oxide/skepsis/cli.ts --send 'jq -r .prompt | ah message send' --open-cmd 'ah view open --name skepsis'
+node ~/oxide/skepsis/cli.ts --send 'jq -r .prompt | ah message send' --open-cmd 'ah tool page --name skepsis'
 ```
 
 Run from your shell, it shares your Rex pane, so `ah message send` sends its

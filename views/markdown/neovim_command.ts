@@ -11,7 +11,7 @@
 // - Save 650ms after typing stops, and when the pane loses focus.
 // - Check the file on disk every 300ms and when the pane gains focus
 //   (`checktime`). An unmodified buffer reloads. A modified one gets the
-//   file on disk merged into it by `ah view merge` (views/cli.ts), with
+//   file on disk merged into it by `ah tool doc merge` (views/cli.ts), with
 //   the text as of the last read or save as the base.
 //   The agent's edits and the unsaved typing both survive, with both
 //   versions marked where they overlap (merge.ts). Every save checks
@@ -66,7 +66,7 @@ local function merge(buf)
   -- that isn't UTF-8
   local ok, result = pcall(function()
     local input = vim.json.encode({ base = base[buf] or disk, unsaved = text_of(buf), disk = disk })
-    local done = vim.system({ "ah", "view", "merge", "--words" }, { stdin = input, text = true }):wait()
+    local done = vim.system({ "ah", "tool", "doc", "merge", "--words" }, { stdin = input, text = true }):wait()
     assert(done.code == 0)
     return vim.json.decode(done.stdout)
   end)

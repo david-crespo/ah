@@ -26,7 +26,7 @@ export interface Status {
   pid: number
   /** Dashboard pages connected */
   pages: number
-  /** Pages showing files (what `ah view ls` lists); null from an older server */
+  /** Pages showing files (what `ah window ls` lists); null from an older server */
   views: number | null
   /** ms since the epoch; null from an older server */
   startedAt: number | null

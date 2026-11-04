@@ -147,7 +147,7 @@ export async function showPage(
   path: string,
   shown: Location[],
 ) {
-  // Its socket says so, for `ah view ls`
+  // Its socket says so, for `ah window ls`
   url.searchParams.set("in", place)
   const name = windowName(path)
   const html = fileKind(path) === "html"
@@ -165,7 +165,7 @@ export async function showPage(
 export const shownFiles = (kind: FileKind, port: number) =>
   callServer<FileInfo[]>(filesUrl(kind, port))
 
-/** A file as `ah view ls` prints it: id, path, where its pages are, agent,
+/** A file as `ah window ls` prints it: id, path, where its pages are, agent,
  * and where its comments go */
 export function fileLine(f: FileInfo): string {
   const address = f.address ? `${f.address}${f.addressAlive ? "" : " (gone)"}` : "-"

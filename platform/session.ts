@@ -1,6 +1,6 @@
 // Posting into an agent session. A command run in the session's shell knows
 // which session it's in from what the harness exports to its children, and
-// hands that to the server, as `ah view open` does; the server isn't
+// hands that to the server, as `ah tool doc` does; the server isn't
 // the session's child, so it can't look for itself. Each harness takes a post
 // its own way, and each starts a turn when the session is idle:
 //

@@ -62,7 +62,7 @@ There are three main parts:
    - **Claude Code** gives each session an [inbox socket](https://code.claude.com/docs/en/cross-session-messaging) that we write JSON to
    - **Codex** has `codex queue --thread <id>`
    - **OpenCode** runs a local server, and we post messages to `/api/session/<id>/prompt`
-3. Connecting each tool to the right agent. When tools are started directly by an agent, there is no routing problem: harnesses pass a session ID to the command through an env var. But if I run `ah view README.md` by hand in the terminal, `ah` needs to find the agent running in that tab. So we have agents register with `ah` at session start and maintain a map of terminal panes to session IDs.
+3. Connecting each tool to the right agent. When tools are started directly by an agent, there is no routing problem: harnesses pass a session ID to the command through an env var. But if I run `ah tool doc README.md` by hand in the terminal, `ah` needs to find the agent running in that tab. So we have agents register with `ah` at session start and maintain a map of terminal panes to session IDs.
 
 2 is really the core of `ah`. The tools can be whatever you want them to be, and 3 makes the tool-agent connections mostly automatic in my terminal, but there is no deep tie to the terminal. The Claude Code and Codex desktop apps work with it just fine.[^1]
 

@@ -6,7 +6,7 @@
 // up the live state, and it stops a few seconds after the last page leaves,
 // long enough for a reload. After a restart, pages reconnect on their own.
 //
-// A file is bound to the agent that showed it (`ah view open`), not to the
+// A file is bound to the agent that showed it (`ah tool doc` or `page`), not to the
 // session it was in, so comments follow the agent through /clear, Codex's
 // /new, and a restart in its pane. The binding is the directory's (the core
 // keeps it in the registry, on disk), and the directory resolves the agent's
@@ -51,7 +51,7 @@ export interface AgentDirectory {
 }
 
 /** Where a page is, as its socket's `in` says: a window or browser tab from
- * `ah view open`, or the dashboard's doc slot */
+ * `ah tool doc` or `page`, or the dashboard's doc slot */
 export const LOCATIONS = ["window", "tab", "dashboard"] as const
 export type Location = (typeof LOCATIONS)[number] | "page"
 
@@ -205,7 +205,7 @@ export class Files<L extends Live> {
     return this.#directory.agentId(ref)
   }
 
-  /** For `ah view open`: bind the file to `agent`, if given, which can be
+  /** For `ah tool doc` and `page`: bind the file to `agent`, if given, which can be
    * reached at `from`, and expect a page, which is on its way */
   async bind(path: string, from: Address | null, agent: AgentId | null): Promise<FileInfo> {
     if (agent) {

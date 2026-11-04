@@ -10,7 +10,7 @@ const showing = (files: [string, boolean][] = [], dashboard = true): Showing => 
 test("a starting session is told every active tracker, the current one marked", () => {
   expect(startContext("/w/b.html", ["/w/a.html", "/w/b.html"])).toEqual(
     [
-      "Active trackers in this workspace (`ah tracker ls`). The ah dashboard shows the current one, which is what a request that doesn't name a tracker refers to.",
+      "Active trackers in this workspace (`ah tool tracker ls`). The ah dashboard shows the current one, which is what a request that doesn't name a tracker refers to.",
       "- /w/a.html",
       "- /w/b.html (current)",
       "When picking up work, check the tracker it belongs to, and keep it updated.",

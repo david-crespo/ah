@@ -31,7 +31,7 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah view open <path-to-draft.md>
+   ah tool doc <path-to-draft.md>
    ```
 
    This starts the server if needed, binds the draft to this session (so
@@ -233,5 +233,5 @@ it with a fresh `start` afterwards.
 
 When the user says they're done, read the final file and use it for whatever
 comes next (e.g. `gh pr edit --body-file`), then
-`ah view close <file>`. This skill composes with `write-gh` (if
+`ah window close <file>`. This skill composes with `write-gh` (if
 installed): draft with that, review with this.

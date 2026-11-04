@@ -17,22 +17,22 @@ fails.
 ## Starting or picking one up
 
 ```
-ah tracker add .claude/notes/2026-10-15-post-rex-review-tracker/index.html --title 'Post-Rex review' --goal 'Clean up what the port left behind, then pick the next features.'
+ah tool tracker add .claude/notes/2026-10-15-post-rex-review-tracker/index.html --title 'Post-Rex review' --goal 'Clean up what the port left behind, then pick the next features.'
 ```
 
 A new tracker goes in `.claude/notes/<YYYY-MM-DD>-<slug>-tracker/index.html`,
-today's date and a kebab-case slug, in a directory of its own. `ah tracker
+today's date and a kebab-case slug, in a directory of its own. `ah tool tracker
 add` writes it from the template if it isn't there, adds it to the
 workspace's active trackers (back from parked or done if it was), makes it
 the current one, which the dashboard shows in every tab on the
 workspace, and binds it to this session. To bind an existing tracker to
 this session, as when picking work back up in a new one, run
-`ah tracker add <path>`. The binding outlasts server restarts. If it
+`ah tool tracker add <path>`. The binding outlasts server restarts. If it
 fails, mention it in a line and move on.
 
 Picking up: the SessionStart hook names the workspace's current tracker.
-`ah tracker ls` lists the workspace's active ones, the current one marked
-`*`, then the parked ones; `ah tracker ls --done` lists the finished ones.
+`ah tool tracker ls` lists the workspace's active ones, the current one marked
+`*`, then the parked ones; `ah tool tracker ls --done` lists the finished ones.
 Take the one that fits the request (ask if it's unclear). If there's an
 existing tracker for the work, use it rather than starting another, even a
 parked or finished one: adding it puts it back in the list. Older trackers
@@ -172,8 +172,8 @@ request. The icon shows a spinner until then.
 ## Finishing
 
 The user usually parks or finishes a tracker with the buttons by its title.
-When the goal is done, `ah tracker finish <path>` marks the tracker done and
-takes it out of the list; `ah tracker park <path>` sets it aside with work
+When the goal is done, `ah tool tracker finish <path>` marks the tracker done and
+takes it out of the list; `ah tool tracker park <path>` sets it aside with work
 left, until it's added again. If it was current, the tracker used before it
 becomes current.
 
@@ -190,7 +190,7 @@ node ~/.claude/skills/tracker/lan-proxy.mjs <lan-ip> <page-id>...
 
 The LAN IP is the `inet` address on the local network in `ifconfig` output
 (`192.168.…`); `ipconfig getifaddr en0` fails in the sandbox. Page ids are the
-first column of `ah view ls`, and an html page can go alongside the
+first column of `ah window ls`, and an html page can go alongside the
 tracker. It prints a URL per page to give the user. The page doesn't reload
 live (pull to refresh) and comments and Go don't work from it: the proxy
 passes only GETs and no socket. Stop it when the user is back.

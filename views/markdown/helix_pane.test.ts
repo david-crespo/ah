@@ -1,6 +1,6 @@
 // The Helix pane taking the agent's edits, end to end: real hx in a pty
-// (pty.ts, helix_command.ts), editors/helix/auto-merge.scm, and `ah view
-// merge` from this checkout, which runs in any helix, not just the pane.
+// (pty.ts, helix_command.ts), editors/helix/auto-merge.scm, and `ah tool
+// doc merge` from this checkout, which runs in any helix, not just the pane.
 // Needs hx built with Steel and its generated helix/*.scm modules
 // (docs/helix.md); skipped without hx on PATH. Checks on a timer with that
 // hx, or on its document-changed-on-disk hook if it has one. Helix gets a
@@ -58,8 +58,8 @@ async function fileWith(path: string, ...texts: string[]) {
 
 /** The environment for a pane's hx in `dir`: a config directory whose
  * helix.scm loads only ah.scm, as docs/helix.md has it, with `init.scm`
- * and `config.toml`, and this checkout's ah for the script's `ah view
- * merge` */
+ * and `config.toml`, and this checkout's ah for the script's `ah tool
+ * doc merge` */
 async function helixEnv(dir: string, init: string, configToml = "") {
   const config = join(dir, "config")
   await mkdir(join(config, "helix"), { recursive: true })

@@ -150,8 +150,8 @@ export class AhMarkdown extends HTMLElement {
     if (this.#ws || this.#closed) return
     const url = new URL("doc", this.base)
     url.protocol = "ws:"
-    // Where this view is, for `ah view ls`: the dashboard marks its
-    // elements, and `ah view open` the page's URL
+    // Where this view is, for `ah window ls`: the dashboard marks its
+    // elements, and `ah tool doc` the page's URL
     const where = this.getAttribute("in") ?? new URLSearchParams(location.search).get("in")
     if (where) url.searchParams.set("in", where)
     const ws = new WebSocket(url)
@@ -218,7 +218,7 @@ export class AhMarkdown extends HTMLElement {
     }
     if (status === 404) {
       this.#note(
-        "ah can't show this file: it's gone, or ah's URL key changed. Open it again with ah view open.",
+        "ah can't show this file: it's gone, or ah's URL key changed. Open it again with ah tool doc.",
       )
     } else if (status === 0) {
       this.#note("Can't reach ah. Retrying…")
@@ -278,7 +278,7 @@ export class AhMarkdown extends HTMLElement {
 
   #showClosed() {
     this.#closed = true
-    this.#note("This file was closed. Open it again with ah view open.")
+    this.#note("This file was closed. Open it again with ah tool doc.")
     this.dispatchEvent(new Event("closed"))
   }
 

@@ -1,4 +1,4 @@
-// A task list's file, which `ah tracker add` writes from the template here:
+// A task list's file, which `ah tool tracker add` writes from the template here:
 // the page around the items, so an agent keeping one only writes
 // <ah-item>s into its groups (task_list.ts, task_list.css). One directory
 // per task list, since a page reloads on any change in its directory.

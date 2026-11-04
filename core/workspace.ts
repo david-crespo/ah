@@ -30,7 +30,7 @@ export function rootFinder(): RootOf {
   return find
 }
 
-/** Whether `path` (real) is one `ah view open` may serve from `cwd`: under
+/** Whether `path` (real) is one `ah tool doc` or `page` may serve from `cwd`: under
  * cwd, the jj workspace it's in, or that repo's default workspace, where a
  * secondary workspace's notes usually are. ah runs outside the agent's
  * sandbox, so without this an agent talked into opening ~/.ssh/id_ed25519

@@ -1,6 +1,6 @@
 // A file's text as its pages see it: read from disk, watched for changes,
-// and pushed to every page showing it. One per open file, from `ah view
-// open` until close.
+// and pushed to every page showing it. One per open file, from `ah tool
+// doc` until close.
 //
 // It also keeps an edit window: disk changes since the last
 // comment (helix saves, and the agent's own edits echoed back) accumulate

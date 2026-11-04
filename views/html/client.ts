@@ -62,8 +62,8 @@ let opened = false
 function connect() {
   const url = new URL("socket", threadUrl)
   url.protocol = "ws:"
-  // Where this page is, for `ah view ls`: the dashboard's frames and
-  // `ah view open` say in their URL
+  // Where this page is, for `ah window ls`: the dashboard's frames and
+  // `ah tool page` say in their URL
   const where = new URLSearchParams(location.search).get("in")
   if (where) url.searchParams.set("in", where)
   const ws = new WebSocket(url)

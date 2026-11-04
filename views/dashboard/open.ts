@@ -1,4 +1,4 @@
-// Opening the dashboard window, shared by `ah dashboard open` and the
+// Opening the dashboard window, shared by `ah tool dashboard` and the
 // commands that put something in the dashboard
 
 import { ensureStarted, serverUrl } from "../../platform/cli.ts"

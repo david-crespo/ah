@@ -1,9 +1,10 @@
-// `ah view`, `ah message` and `ah tracker`: files an agent shows the user,
-// with a conversation back to the agent, and the workspace's trackers, which
-// the dashboard shows. The extension picks the backend that serves the page:
-// an .html file is the agent's own page, served as is on an origin of its own
-// (views/html/); anything else is markdown or AsciiDoc, rendered by ah with a
-// helix pane (views/markdown/). Showing, listing and closing (subjects/files/), the thread
+// `ah tool`, `ah window` and `ah message`: the tools that show the user files
+// an agent wrote, with a conversation back to the agent, and the workspace's
+// trackers, which the dashboard shows; the windows they're in; and the
+// messages between pages and agents. `ah tool doc` is a markdown or AsciiDoc
+// file, rendered by ah with a helix pane (views/markdown/); `ah tool page` is
+// an HTML file, the agent's own page, served as is on an origin of its own
+// (views/html/). Showing, listing and closing (subjects/files/), the thread
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
@@ -29,6 +30,7 @@ import { focusHere } from "../platform/focus.ts"
 import { openFloat } from "../platform/rex.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
 import { mergeDisk } from "./markdown/merge.ts"
+import { dashboard } from "./dashboard/cli.ts"
 import { docFormat } from "./markdown/doc.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
 import { sendToTab } from "../core/send.ts"
@@ -86,17 +88,11 @@ async function runInherited(cmd: string, args: string[]) {
 function ensureTaskList(file: string, title?: string, goal?: string) {
   if (existsSync(file)) return
   if (!/\.html$/i.test(file)) die(`no such file: ${file}`)
-  if (!title || !goal) die("ah tracker add: a new task list needs --title and --goal")
+  if (!title || !goal) die("ah tool tracker add: a new task list needs --title and --goal")
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, taskListPage(title, goal))
   console.log(`wrote ${absolute(file)}`)
 }
-
-export const view = new Command("view")
-  .summary("Show a file in a page you can comment on, or a URL in a window")
-  .description(
-    "Show a markdown, AsciiDoc or HTML file in a page you can comment on, or any URL in a window or tab. `ah view <file>` is short for `ah view open <file>`, except for a file named like a command here.",
-  )
 
 /** Any URL, like a diff review tool's page: shown in a window or
  * tab like a file's page, but with no subject ah knows, so nothing is bound
@@ -104,15 +100,36 @@ export const view = new Command("view")
  * `ah message send`. */
 const isUrl = (arg: string) => /^https?:\/\//i.test(arg) && URL.canParse(arg)
 
-view
-  .command("open", { isDefault: true })
-  .summary("Open a file in a page you can comment on")
+/** Show a file in its tool's page, bound to this agent */
+async function openFile(
+  path: string,
+  place: "window" | "tab",
+  port: number,
+  params: Record<string, string> = {},
+) {
+  const { url, views } = await showInServer(fileKind(path), port, path)
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
+  await showPage(place, url, path, views)
+}
+
+const BINDING =
+  "Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several; the file stays bound to that agent until another opens it. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already shown in a window keeps that window, which comes to the front under the same rule. Prints the page's URL, which keeps working across server restarts."
+
+const doc = new Command("doc")
+  .summary("A markdown or AsciiDoc file to write with the agent")
   .description(
-    "Open a file in a page you can comment on; `ah view <file>` does the same. Comments go to the agent session this command runs in, or run from a shell in Rex, to an agent in its tab, which it asks you to pick if there are several; the file stays bound to that agent until another opens it. HTML files are served as they are, .adoc and .asciidoc files are rendered as AsciiDoc, and any other file is shown as markdown. A window or tab comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens without taking focus. A file already shown in a window keeps that window, which comes to the front under the same rule. Prints the page's URL, which keeps working across server restarts.\n\nGiven an http(s) URL instead of a file, open it in a window named --name or a tab. Nothing is bound to it and it has no conversation. The URL can come last, so a tool can append it to `ah view open --name <name>`.",
+    "A markdown or AsciiDoc file, rendered like GitHub, with a helix pane and comments and chat that go to the agent. `ah tool doc <file>` is short for `ah tool doc open <file>`, except for a file named like a command here.",
   )
-  // Optional so that `ah view` alone, which comes here as the default, shows
-  // the help rather than a missing argument
-  .argument("[file]", "a file, or any http(s) URL")
+
+doc
+  .command("open", { isDefault: true })
+  .summary("Open a doc's page")
+  .description(
+    `Open a markdown or AsciiDoc file in a page you can comment on; \`ah tool doc <file>\` does the same. .adoc and .asciidoc files are rendered as AsciiDoc, and any other file as markdown. ${BINDING}`,
+  )
+  // Optional so that `ah tool doc` alone, which comes here as the default,
+  // shows the help rather than a missing argument
+  .argument("[file]")
   .addOption(
     new Option(
       "--in <place>",
@@ -126,42 +143,25 @@ view
       .choices(["window", "tab", "split", "float", "here"] as const)
       .default("window" as const),
   )
-  .option("--no-editor", "Markdown preview only, without the helix pane")
+  .option("--no-editor", "The preview only, without the helix pane")
   .option("--no-chat", "Without the conversation")
   .option(
     "--diff-from [revset]",
-    "Markdown: show the file's changes since a jj revision, by default the working copy's parent, @-. ⌘D on the page does the same, and B picks the revision.",
-  )
-  .option(
-    "--name <name>",
-    "A URL's window: what the Dock calls it (default: the URL's hostname). Each name makes a copy of the window app, so keep it stable.",
+    "Show the file's changes since a jj revision, by default the working copy's parent, @-. ⌘D on the page does the same, and B picks the revision.",
   )
   .addOption(portOption())
-  .action(async (file, { in: place, editor, chat, diffFrom, name, port }) => {
-    if (!file) return view.help()
-    if (isUrl(file)) {
-      if (place !== "window" && place !== "tab")
-        die(`ah view open --in ${place}: files only`)
-      const dockName = name ?? new URL(file).hostname
-      await showUrl(place, file, {
-        name: dockName,
-        badge: dockName.charAt(0).toUpperCase(),
-        color: "#475569",
-      })
-      return console.log(file)
-    }
-    if (name !== undefined)
-      die("ah view open --name: URLs only; a file's window is named after it")
+  .action(async (file, { in: place, editor, chat, diffFrom, port }) => {
+    if (!file) return doc.help()
     const path = openablePathOrDie(file)
-    const kind = fileKind(path)
+    if (fileKind(path) === "html") die(`ah tool doc: ${file} is HTML; use ah tool page`)
     const glow = place === "split" || place === "float" || place === "here"
-    if (glow && (kind === "html" || docFormat(path) === "asciidoc")) {
-      die(`ah view open --in ${place}: glow only shows markdown`)
+    if (glow && docFormat(path) === "asciidoc") {
+      die(`ah tool doc --in ${place}: glow only shows markdown`)
     }
     // glow's TUI watches the file itself and keeps scroll position across reloads
     if (place === "split") {
       const block =
-        process.env.REX_BLOCK ?? die("ah view open --in split: not running in Rex")
+        process.env.REX_BLOCK ?? die("ah tool doc --in split: not running in Rex")
       return await runInherited("rex", [
         "split",
         "--block",
@@ -181,9 +181,9 @@ view
     }
     if (place === "float") {
       const session =
-        process.env.REX_SESSION ?? die("ah view open --in float: not running in Rex")
+        process.env.REX_SESSION ?? die("ah tool doc --in float: not running in Rex")
       const block =
-        process.env.REX_BLOCK ?? die("ah view open --in float: not running in Rex")
+        process.env.REX_BLOCK ?? die("ah tool doc --in float: not running in Rex")
       // It covers the caller's pane, so it takes focus by the same rule as a
       // window: when the person is looking at that pane
       const { take } = await focusHere()
@@ -194,15 +194,77 @@ view
       })
     }
     if (place === "here") return await runInherited("glow", ["--tui", path])
-    const { url, views } = await showInServer(kind, port, path)
-    if (!editor && kind === "markdown") url.searchParams.set("editor", "off")
-    if (!chat) url.searchParams.set("chat", "off")
-    if (diffFrom !== undefined && kind === "markdown")
-      url.searchParams.set("diff-from", diffFrom === true ? "" : diffFrom)
-    await showPage(place, url, path, views)
+    await openFile(path, place, port, {
+      ...(!editor && { editor: "off" }),
+      ...(!chat && { chat: "off" }),
+      ...(diffFrom !== undefined && { "diff-from": diffFrom === true ? "" : diffFrom }),
+    })
   })
 
-view
+doc
+  .command("merge")
+  .summary("Merge the file on disk into an editor's unsaved text")
+  .description(
+    'For editors that take the agent\'s edits by merging rather than reloading when you have unsaved edits. Reads JSON {"base", "unsaved", "disk"} on stdin: the file as the editor last read or saved it, the editor\'s text, and the file now. Merges disk into unsaved by lines, marking lines both changed with git\'s conflict markers, or with --words word by word, as the doc page\'s editor pane does. Prints JSON {"text", "conflicts"}: the merged text and how many conflicts it marked. Reads all of stdin before writing anything. Doesn\'t need the server.',
+  )
+  .option(
+    "--words",
+    "merge word by word, marking conflicts within a line with CriticMarkup",
+  )
+  .action(async ({ words }) => {
+    const { base, unsaved, disk } = JSON.parse(await text(process.stdin))
+    if (![base, unsaved, disk].every((t) => typeof t === "string"))
+      throw new Error("expected base, unsaved and disk as strings")
+    console.log(JSON.stringify(mergeDisk(base, unsaved, disk, words ? "words" : "lines")))
+  })
+
+const page = new Command("page")
+  .summary("An HTML page the agent wrote, or any URL")
+  .description(
+    `Open an HTML file as it is, with comments and chat that go to the agent. ${BINDING}\n\nGiven an http(s) URL instead of a file, open it in a window named --name or a tab. Nothing is bound to it and it has no conversation. The URL can come last, so a tool can append it to \`ah tool page --name <name>\`.`,
+  )
+  .argument("<file>", "an HTML file, or any http(s) URL")
+  .addOption(
+    new Option(
+      "--in <place>",
+      "window: a window of its own, with its own Dock tile; tab: the default browser",
+    )
+      .choices(["window", "tab"] as const)
+      .default("window" as const),
+  )
+  .option("--no-chat", "Without the conversation")
+  .option(
+    "--name <name>",
+    "A URL's window: what the Dock calls it (default: the URL's hostname). Each name makes a copy of the window app, so keep it stable.",
+  )
+  .addOption(portOption())
+  .action(async (file, { in: place, chat, name, port }) => {
+    if (isUrl(file)) {
+      const dockName = name ?? new URL(file).hostname
+      await showUrl(place, file, {
+        name: dockName,
+        badge: dockName.charAt(0).toUpperCase(),
+        color: "#475569",
+      })
+      return console.log(file)
+    }
+    if (name !== undefined)
+      die("ah tool page --name: URLs only; a file's window is named after it")
+    const path = openablePathOrDie(file)
+    if (fileKind(path) !== "html") die(`ah tool page: ${file} isn't HTML; use ah tool doc`)
+    await openFile(path, place, port, chat ? {} : { chat: "off" })
+  })
+
+export const windows = new Command("window")
+  .summary("The windows and tabs tools are open in")
+  .description(
+    "The windows and browser tabs ah's tools are open in, and the dashboard's slot",
+  )
+  .action(function () {
+    this.help()
+  })
+
+windows
   .command("ls")
   .summary("List the files pages show")
   .description(
@@ -217,9 +279,9 @@ view
     for (const f of files) console.log(fileLine(f))
   })
 
-view
+windows
   .command("close")
-  .summary("Close a file's windows")
+  .summary("Close the windows showing a file")
   .description(
     "Close the windows and browser tabs that show a file. The dashboard keeps showing it if it's a tracker there. The file stays bound to its agent, and comments sent to it still arrive.",
   )
@@ -235,23 +297,6 @@ view
     console.log(`closed ${path}`)
   })
 
-view
-  .command("merge")
-  .summary("Merge the file on disk into an editor's unsaved text")
-  .description(
-    'For editors that take the agent\'s edits by merging rather than reloading when you have unsaved edits. Reads JSON {"base", "unsaved", "disk"} on stdin: the file as the editor last read or saved it, the editor\'s text, and the file now. Merges disk into unsaved by lines, marking lines both changed with git\'s conflict markers, or with --words word by word, as the markdown editor pane does. Prints JSON {"text", "conflicts"}: the merged text and how many conflicts it marked. Reads all of stdin before writing anything. Doesn\'t need the server.',
-  )
-  .option(
-    "--words",
-    "merge word by word, marking conflicts within a line with CriticMarkup",
-  )
-  .action(async ({ words }) => {
-    const { base, unsaved, disk } = JSON.parse(await text(process.stdin))
-    if (![base, unsaved, disk].every((t) => typeof t === "string"))
-      throw new Error("expected base, unsaved and disk as strings")
-    console.log(JSON.stringify(mergeDisk(base, unsaved, disk, words ? "words" : "lines")))
-  })
-
 export const message = new Command("message")
   .summary("Exchange messages with agent sessions")
   .description(
@@ -262,7 +307,7 @@ export const message = new Command("message")
   })
 for (const command of threadCommands(fileUrl, sendToTab)) message.addCommand(command)
 
-export const tracker = new Command("tracker")
+const tracker = new Command("tracker")
   .description("Task trackers for a workspace")
   .action(function () {
     this.help()
@@ -281,8 +326,9 @@ tracker
   .action(async (file, { title, goal, port }) => {
     ensureTaskList(file, title, goal)
     const path = openablePathOrDie(file)
-    const agent = currentAgent() ?? die("ah tracker add: not running in an agent session")
-    // Bound the way `ah view open` binds; the dashboard's view of the file
+    const agent =
+      currentAgent() ?? die("ah tool tracker add: not running in an agent session")
+    // Bound the way `ah tool doc` and `page` bind; the dashboard's view of the file
     // leaves the binding alone
     await showInServer(fileKind(path), port, path)
     await setCurrentTracker(port, agent, path)
@@ -301,7 +347,7 @@ tracker
   .option("--done", "The finished ones instead, most recent first")
   .addOption(portOption())
   .action(async ({ done, port }) => {
-    if (!(await status(port))) die("ah tracker ls: server not running")
+    if (!(await status(port))) die("ah tool tracker ls: server not running")
     const t = await workspaceTrackers(port, process.cwd())
     const pathsOf = (entries: TrackerEntry[]) =>
       entries.flatMap((a) => ("path" in a.subject ? [a.subject.path] : []))
@@ -337,7 +383,17 @@ for (const [name, to, summary, description] of [
     .argument("<file>")
     .addOption(portOption())
     .action(async (file, { port }) => {
-      if (!(await status(port))) die(`ah tracker ${name}: server not running`)
+      if (!(await status(port))) die(`ah tool tracker ${name}: server not running`)
       console.log(`${to}: ${await setTrackerStatus(port, resolve(file), to)}`)
     })
 }
+
+export const tool = new Command("tool")
+  .summary("Open one of ah's tools: a doc, a page, a tracker, or the dashboard")
+  .description(
+    "ah's tools, each a page whose comments and buttons talk back to agent sessions",
+  )
+  .action(function () {
+    this.help()
+  })
+for (const command of [doc, page, tracker, dashboard]) tool.addCommand(command)

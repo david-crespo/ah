@@ -47,9 +47,9 @@ The text is JSON-quoted so the notice stays on a single line. If a change only a
 
 ### Held requests
 
-Each file is bound to the agent that opened its page with `ah view open`. When you open a page from a shell in Rex instead, it uses the pane's existing agent pick or the tab's only agent; if there are several and no pick, it asks you to choose. Requests go to that agent. In Rex, the binding follows the agent through `/clear` or a restart in its pane. If it's gone, requests go to another live agent in its tab.
+Each file is bound to the agent that opened its page with `ah tool doc` or `ah tool page`. When you open a page from a shell in Rex instead, it uses the pane's existing agent pick or the tab's only agent; if there are several and no pick, it asks you to choose. Requests go to that agent. In Rex, the binding follows the agent through `/clear` or a restart in its pane. If it's gone, requests go to another live agent in its tab.
 
-If you submit a request when no agent is reachable, the request waits in the thread's log and the page tells you it's held. Once an agent connects, or another agent runs `ah view open` on the file and so binds it, requests still waiting that have never been delivered are sent together in a single message, oldest first. Requests already delivered and interrupted work aren't automatically resent; an agent can find them with `ah message pending <file>`.
+If you submit a request when no agent is reachable, the request waits in the thread's log and the page tells you it's held. Once an agent connects, or another agent runs `ah tool doc` or `ah tool page` on the file and so binds it, requests still waiting that have never been delivered are sent together in a single message, oldest first. Requests already delivered and interrupted work aren't automatically resent; an agent can find them with `ah message pending <file>`.
 
 ## Comments sent to a tab
 
@@ -149,7 +149,7 @@ Once you have the hooks and HTML skill installed ([setup](setup.md)), ask the ag
 Then have the agent run:
 
 ```sh
-ah view open hello/index.html
+ah tool page hello/index.html
 ```
 
 This registers the file, binds it to that agent, and opens the page. The printed URL contains a signed page ID, so use the URL `ah` prints rather than trying to construct an ID from the filename. Inside the page, the relative `_ah/request` URL resolves against port 7421. `ah` injects the chat panel and its WebSocket connection for replies automatically.
@@ -194,14 +194,14 @@ The WebSockets send a snapshot on connect and whenever the thread changes: `type
 
 These endpoints run on `http://127.0.0.1:7420` for the CLI and other local tools; scripts on HTML pages can't call them. `<kind>` is `markdown` or `html`, and `<file>` is a URL-encoded absolute path.
 
-| Endpoint                                      | Purpose                                                                                                                                                                                                                         |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /view/<kind>/files`                     | Register a file and bind it to an agent. This is what `ah view open` calls; see `ShowRequest` in [subjects/files/routes.ts](../subjects/files/routes.ts) for the body. Returns the file's `id`, `url`, and binding information. |
-| `GET /view/<kind>/files`                      | List files currently shown, including their IDs and URLs.                                                                                                                                                                       |
-| `POST /view/<kind>/files/request?path=<file>` | Submit the same request JSON as a page, by file path. Returns `request` and `agentConnected`.                                                                                                                                   |
-| `GET /view/<kind>/files/thread?path=<file>`   | Read the thread's requests and history.                                                                                                                                                                                         |
-| `POST /view/<kind>/files/thread?path=<file>`  | Record agent activity: `phase`, `requests`, `workId`, and optional `text`, as described under [Replies from the agent](#replies-from-the-agent).                                                                                |
-| `POST /core/send`                             | Send a plain message using `block` (the sender's `REX_BLOCK`), `agent` (an explicit agent ID, or null), and `text`. With no explicit agent, uses the pane's selection or the tab's only agent.                                  |
+| Endpoint                                      | Purpose                                                                                                                                                                                                                                          |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /view/<kind>/files`                     | Register a file and bind it to an agent. This is what `ah tool doc` and `ah tool page` call; see `ShowRequest` in [subjects/files/routes.ts](../subjects/files/routes.ts) for the body. Returns the file's `id`, `url`, and binding information. |
+| `GET /view/<kind>/files`                      | List files currently shown, including their IDs and URLs.                                                                                                                                                                                        |
+| `POST /view/<kind>/files/request?path=<file>` | Submit the same request JSON as a page, by file path. Returns `request` and `agentConnected`.                                                                                                                                                    |
+| `GET /view/<kind>/files/thread?path=<file>`   | Read the thread's requests and history.                                                                                                                                                                                                          |
+| `POST /view/<kind>/files/thread?path=<file>`  | Record agent activity: `phase`, `requests`, `workId`, and optional `text`, as described under [Replies from the agent](#replies-from-the-agent).                                                                                                 |
+| `POST /core/send`                             | Send a plain message using `block` (the sender's `REX_BLOCK`), `agent` (an explicit agent ID, or null), and `text`. With no explicit agent, uses the pane's selection or the tab's only agent.                                                   |
 
 If you post activity for a request directly over HTTP, supply a `workId` and send `start` before posting updates or completing it. First, POST `start` to the file's thread endpoint:
 

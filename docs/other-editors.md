@@ -10,8 +10,8 @@ CodeMirror runs in the page instead of in a terminal. [`codemirror_backend.ts`](
 
 ## Neovim, or another terminal editor
 
-[`terminal_editor.ts`](../views/markdown/terminal_editor.ts) describes what the terminal needs from the editor running in it. To use a different terminal editor, implement its server and page halves and pick them in `files.ts` and `client.ts`. [`neovim.ts`](../views/markdown/neovim.ts) and [`neovim_command.ts`](../views/markdown/neovim_command.ts) do this for Neovim. Like the Helix pane, it auto-saves and merges the agent's edits into unsaved text with `ah view merge`.
+[`terminal_editor.ts`](../views/markdown/terminal_editor.ts) describes what the terminal needs from the editor running in it. To use a different terminal editor, implement its server and page halves and pick them in `files.ts` and `client.ts`. [`neovim.ts`](../views/markdown/neovim.ts) and [`neovim_command.ts`](../views/markdown/neovim_command.ts) do this for Neovim. Like the Helix pane, it auto-saves and merges the agent's edits into unsaved text with `ah tool doc merge`.
 
 ## No editor pane
 
-`ah view open --no-editor` opens the page without the editor pane. The preview and commenting still work, and you edit the file in your usual editor.
+`ah tool doc --no-editor` opens the page without the editor pane. The preview and commenting still work, and you edit the file in your usual editor.

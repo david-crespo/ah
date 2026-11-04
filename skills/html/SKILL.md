@@ -38,7 +38,7 @@ for every `ah` command. opencode has no sandbox.
 2. Open it:
 
    ```
-   ah view open <path-to-file.html>
+   ah tool page <path-to-file.html>
    ```
 
    This starts the server if needed, binds the page to this session, opens
@@ -143,4 +143,4 @@ and which session a page's comments go to outlasts the server.
 `ah message respond` works whether a page shows the file or not, and
 restarts mark work in flight `interrupted`. The conversation history survives in its log under
 `~/.local/state/ah/html/`. When the user is done with the page,
-`ah view close <file>`.
+`ah window close <file>`.

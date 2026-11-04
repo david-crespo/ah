@@ -1,4 +1,4 @@
-// `ah dashboard`, and `ah debug tabs`, which shows the workspaces the
+// `ah tool dashboard`, and `ah debug tabs`, which shows the workspaces the
 // dashboard maps tabs to and the titles ah gives them
 
 import { Command, Option } from "@commander-js/extra-typings"
@@ -13,13 +13,13 @@ import { dashboardStatus, ensureDashboardPage } from "./api.ts"
 import { resolve } from "./workspace.ts"
 
 export const dashboard = new Command("dashboard")
-  .description("A window that follows the focused Rex tab")
-  .action(function () {
-    this.help()
-  })
+  .summary("A window that follows the focused Rex tab")
+  .description(
+    "A window that follows the focused Rex tab. `ah tool dashboard` is short for `ah tool dashboard open`.",
+  )
 
 dashboard
-  .command("open")
+  .command("open", { isDefault: true })
   .summary("Open the dashboard window")
   .description(
     "Open the dashboard window, or if it's already open, keep that one. The window comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens or stays without taking focus.",

@@ -26,11 +26,11 @@ import { serve as nodeServe } from "@hono/node-server"
 import { readFile } from "node:fs/promises"
 import type { Duplex } from "node:stream"
 import { WebSocketServer, type WebSocket } from "ws"
-import { dashboard, debugTabs } from "./views/dashboard/cli.ts"
+import { debugTabs } from "./views/dashboard/cli.ts"
 import { Dashboard } from "./views/dashboard/routes.ts"
 import { MarkdownBackend } from "./views/markdown/routes.ts"
 import { HtmlBackend } from "./views/html/routes.ts"
-import { message, tracker, view } from "./views/cli.ts"
+import { message, tool, windows } from "./views/cli.ts"
 import { debugAgents, workspace } from "./core/cli.ts"
 import { hook } from "./core/hook.ts"
 import { watchOpencode } from "./core/opencode.ts"
@@ -367,7 +367,7 @@ const debug = new Command("debug").description(
 )
 debug.addCommand(debugTabs)
 debug.addCommand(debugAgents)
-for (const command of [view, message, tracker, workspace, dashboard, server, hook, debug])
+for (const command of [tool, windows, message, workspace, server, hook, debug])
   program.addCommand(command)
 
 // `-h` is enough; no `help` subcommand, which isn't inherited, so at every

@@ -9,7 +9,7 @@
 // What changes:
 // - the workspace's current tracker, the one the dashboard shows, which is
 //   what an unqualified "do 3" refers to
-// - a view the agent opened (`ah view open`) that no window shows any more
+// - a view the agent opened (`ah tool doc` or `page`) that no window shows any more
 // - the dashboard, closed
 //
 // What each agent was last told is in memory. After a server restart an
@@ -46,7 +46,7 @@ export function startContext(current: string | null, active: string[]): string |
   if (!paths.length) return null
   const lines = paths.map((p) => `- ${p}${p === current ? " (current)" : ""}`)
   return [
-    `Active trackers in this workspace (\`ah tracker ls\`). The ah dashboard ` +
+    `Active trackers in this workspace (\`ah tool tracker ls\`). The ah dashboard ` +
       `shows the current one, which is what a request that doesn't name a ` +
       `tracker refers to.`,
     ...lines,
