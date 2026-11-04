@@ -690,6 +690,10 @@
   border: 1px solid #d1d9e0;
   color: #59636e;
 }
+/* A page whose text isn't the user's to rewrite turns de-LLM off */
+html[data-ah-no-dellm] #popover #dellm {
+  display: none;
+}
 #popover #dellm:hover {
   color: #1f2328;
   border-color: #818b98;

@@ -138,7 +138,9 @@ Then come the requests, each starting `Request <id>: `:
 - A de-LLM request (the popover's button, with optional guidance): rewrite
   the passage's source to sound like a person, plain and concrete, without
   formulaic gestures or "that's X, not Y" constructions, keeping its
-  meaning. If the text is generated, say so instead.
+  meaning. If the text is generated, say so instead. A page whose text
+  isn't yours to rewrite (other people's comments, say) hides the button
+  with `data-ah-no-dellm` on its `<html>`.
 - `Request <id>, answering <earlier id>`: the user answering your question
   on an earlier request. Finish both ids together.
 
