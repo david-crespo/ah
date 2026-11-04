@@ -1,12 +1,12 @@
 ---
 name: ah-doc
-description: "Review/edit a markdown draft in a browser page served by ah, connected to this session: live preview, selection comments, general conversation, and agent replies. Use when the user wants to iterate on a draft visually, or says /ah-doc."
+description: "Review/edit a Markdown or AsciiDoc draft in a browser page served by ah, connected to this session: live preview, selection comments, general conversation, and agent replies. Use when the user wants to iterate on a draft visually, or says /ah-doc."
 ---
 
-# Markdown drafts in ah
+# Markdown and AsciiDoc drafts in ah
 
-Iterate on a markdown draft through a browser page instead of chat round
-trips. ah's `doc` view serves a live GitHub-style preview of the file; the
+Iterate on a Markdown or AsciiDoc draft (an RFD, say) through a browser page
+instead of chat round trips. ah's `doc` view serves a live preview of the file; the
 user highlights text and comments, and each comment is posted to this
 session. The file on disk is the single source of truth: the page picks up
 every disk change live, flashing what changed. Keep editing the file normally
@@ -21,9 +21,10 @@ for every `ah` command. opencode has no sandbox.
 
 ## Setup
 
-1. Write the draft to a markdown file if it isn't in one already. Default
-   location: `.claude/notes/<YYYY-MM-DD>-<slug>.md` in the repo being worked
-   on. For a PR description, end the slug with `-pr` and put the title on
+1. Write the draft to a file if it isn't in one already: Markdown by
+   default, AsciiDoc (`.adoc`) when that's where it's going, as with RFDs.
+   Default location: `.claude/notes/<YYYY-MM-DD>-<slug>.md` (or `.adoc`) in
+   the repo being worked on. For a PR description, end the slug with `-pr` and put the title on
    line 1 as a `#` heading: `jprc --body` finds the newest `*-pr*.md` there
    and uses that line as the PR title. This file is the single source of
    truth from now on: edit it in place; do NOT paste draft revisions into
