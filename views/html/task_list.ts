@@ -190,7 +190,7 @@ class CommentBox {
     const row = document.createElement("div")
     row.className = "ah-item-comment-row"
     const hint = document.createElement("span")
-    hint.textContent = "⏎ to send · ⇧⏎ new line · esc to close"
+    hint.textContent = "⏎ send · ⇧⏎ newline"
     const send = document.createElement("button")
     send.type = "button"
     send.textContent = "Send"

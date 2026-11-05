@@ -489,7 +489,7 @@
   box-sizing: border-box;
   width: 366px;
   max-width: calc(100vw - 16px);
-  padding: 12px;
+  padding: 8px;
   border: 1px solid #d1d9e0;
   border-radius: 12px;
   background: #ffffff;
@@ -512,14 +512,11 @@
   background: #f6f8fa;
   color: #1f2328;
   outline: none;
-  transition:
-    border-color 0.1s,
-    box-shadow 0.1s;
+  transition: border-color 0.1s;
 }
 #popover textarea:focus {
   background: #ffffff;
   border-color: #0969da;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.3);
 }
 #popover textarea::placeholder {
   color: #818b98;
@@ -603,7 +600,6 @@
   #popover textarea:focus {
     background: #0d1117;
     border-color: #1f6feb;
-    box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.35);
   }
   #popover textarea::placeholder {
     color: #656c76;
