@@ -4,7 +4,8 @@ import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
 import type { RexState, TrackerEntry } from "./model.ts"
 import { emptyRegistry, type Registry } from "./registry.ts"
-import { subjectOf, Trackers } from "./trackers.ts"
+import { fileSubject } from "./model.ts"
+import { Trackers } from "./trackers.ts"
 
 let dir: string
 let registry: Registry
@@ -131,8 +132,8 @@ test("outside a jj workspace, the directory stands in for one", () => {
 })
 
 test("a file's subject goes by its extension", () => {
-  expect(subjectOf(join(dir, "page.html")).kind).toBe("html")
-  expect(subjectOf(join(dir, "x.md")).kind).toBe("markdown")
+  expect(fileSubject(join(dir, "page.html")).kind).toBe("html")
+  expect(fileSubject(join(dir, "x.md")).kind).toBe("markdown")
 })
 
 test("a finished tracker leaves the list, is listed as done, until it's set again", () => {

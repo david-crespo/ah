@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { WebSocket } from "ws"
+import { fileSubject } from "../../core/model.ts"
 import { GRACE_MS } from "../../platform/presence.ts"
 import { pathOf } from "../id.ts"
 import type { RequestKinds } from "../thread/events.ts"
@@ -69,7 +70,7 @@ test("binding a file again moves it to the new agent", async () => {
   const codex = { harness: "codex" as const, thread: "t1", pid: process.pid }
   const info = await files.bind(a, codex, "block:2")
   expect(files.binding(a)).toEqual("block:2")
-  expect(directory.route(a)).toEqual({ address: codex, via: "agent" })
+  expect(directory.route(fileSubject(a))).toEqual({ address: codex, via: "agent" })
   expect(info).toMatchObject({ path: a, agent: "block:2", views: [] })
   // The URL names the file
   expect(pathOf(info.id)).toEqual(a)
@@ -128,15 +129,15 @@ test("a file's presence outlasts its pages, for the agent's notices", async () =
   const a = await md("a.md")
   const page = socket()
   await files.connect(a, page, "window", () => [])
-  expect(files.presence()).toEqual([{ path: a, open: true }])
+  expect(files.presence()).toEqual([{ path: a, agent: null, open: true }])
   page.close()
   vi.advanceTimersByTime(GRACE_MS)
-  expect(files.presence()).toEqual([{ path: a, open: false }])
+  expect(files.presence()).toEqual([{ path: a, agent: null, open: false }])
 })
 
 test("a held request tells the directory", async () => {
   const a = await md("a.md")
-  directory.bindFile(a, "block:1")
+  directory.bindSubject(fileSubject(a), "block:1")
   const thread = await files.thread(a)
   expect(await files.thread(a)).toBe(thread)
   await thread.request({ kind: "chat", text: "hi", args: {} })
@@ -149,7 +150,7 @@ test("a held request tells the directory", async () => {
 
 test("held requests go out after a restart, to the agent there now", async () => {
   const a = await md("a.md")
-  directory.bindFile(a, "block:1")
+  directory.bindSubject(fileSubject(a), "block:1")
   await (await files.thread(a)).request({ kind: "chat", text: "hi", args: {} })
 
   const posts: string[] = []

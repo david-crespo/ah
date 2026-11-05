@@ -5,6 +5,7 @@ import {
   type Request,
   type RequestState,
   type ThreadEntry,
+  type SubjectKey,
 } from "../../core/model.ts"
 import { isOneOf, isRecord } from "../../platform/guards.ts"
 
@@ -39,7 +40,7 @@ export type RequestResult = { request: ThreadEntry & Request; agentConnected: bo
 /** The thread as a page gets it: on connecting, and after each change */
 export type ThreadSnapshot = {
   type: "thread"
-  file: string
+  subject: SubjectKey
   entries: ThreadEntry[]
   requests: RequestState[]
   agentConnected: boolean
@@ -135,14 +136,14 @@ export class ThreadLog {
   /** The requests a post has carried to an agent */
   private delivered = new Set<string>()
   private path: string
-  file: string
-  private constructor(path: string, file: string) {
+  subject: SubjectKey
+  private constructor(path: string, subject: SubjectKey) {
     this.path = path
-    this.file = file
+    this.subject = subject
   }
 
-  static async open(path: string, file: string) {
-    const log = new ThreadLog(path, file)
+  static async open(path: string, subject: SubjectKey) {
+    const log = new ThreadLog(path, subject)
     let source: string
     try {
       source = await readFile(path, "utf8")
@@ -251,7 +252,7 @@ export class ThreadLog {
   snapshot(agentConnected: boolean): ThreadSnapshot {
     return {
       type: "thread",
-      file: this.file,
+      subject: this.subject,
       entries: this.entries,
       requests: [...this.requests.values()],
       agentConnected,

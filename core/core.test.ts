@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
-import type { Address, RexState } from "./model.ts"
+import { type Address, fileSubject, type RexState } from "./model.ts"
 import { emptyRegistry, type RegistryEvent } from "./registry.ts"
 import { Core, RELAYED } from "./core.ts"
 
@@ -149,13 +149,13 @@ test("a file's requests go to the agent it's bound to, or that agent's stand-in"
   vi.advanceTimersByTime(1000)
   await report(start("codex", "th2", undefined, "block:2"))
   const path = join(dir, "notes.md")
-  expect(core.route(path)).toEqual(null)
-  core.bindFile(path, "block:1")
+  expect(core.route(fileSubject(path))).toEqual(null)
+  core.bindSubject(fileSubject(path), "block:1")
   const th2 = { harness: "codex", thread: "th2", pid: null }
   // block:1's socket isn't live, so the tab's other agent takes it
-  expect(core.route(path)).toEqual({ address: th2, via: "tab" })
+  expect(core.route(fileSubject(path))).toEqual({ address: th2, via: "tab" })
   // A sender can name its own agent
-  expect(core.route(path, "block:2")).toEqual({ address: th2, via: "agent" })
+  expect(core.route(fileSubject(path), "block:2")).toEqual({ address: th2, via: "agent" })
 })
 
 test("with its agent's tab gone, a file's requests go to an agent in its workspace", async () => {
@@ -165,38 +165,40 @@ test("with its agent's tab gone, a file's requests go to an agent in its workspa
   const path = join(repo, "notes", "tracker.html")
   core.onRex(rex({ t2: ["block:2"], t3: ["block:3"] }))
   // block:1's pane, and with it its tab, closed long ago
-  core.bindFile(path, "block:1")
+  core.bindSubject(fileSubject(path), "block:1")
   await report({ ...start("codex", "th2", undefined, "block:2"), cwd: join(repo, "src") })
   vi.advanceTimersByTime(1000)
   // More recent, but in another directory
   await report({ ...start("codex", "th3", undefined, "block:3"), cwd: join(dir, "other") })
   const th2 = { harness: "codex", thread: "th2", pid: null }
-  expect(core.route(path)).toEqual({ address: th2, via: "workspace" })
+  expect(core.route(fileSubject(path))).toEqual({ address: th2, via: "workspace" })
   // A file never bound goes there too
-  expect(core.route(join(repo, "notes", "draft.md"))).toEqual({
+  expect(core.route(fileSubject(join(repo, "notes", "draft.md")))).toEqual({
     address: th2,
     via: "workspace",
   })
   // But not one outside any workspace, or one a sender named the agent for
-  expect(core.route(join(dir, "loose.md"))).toEqual(null)
-  expect(core.route(path, "block:1")).toEqual(null)
+  expect(core.route(fileSubject(join(dir, "loose.md")))).toEqual(null)
+  expect(core.route(fileSubject(path), "block:1")).toEqual(null)
 })
 
-test("bindings and held files outlast the server, while their files do", () => {
-  const kept = join(dir, "kept.md")
-  const gone = join(dir, "gone.md")
-  writeFileSync(kept, "")
-  writeFileSync(gone, "")
-  core.bindFile(kept, "block:1")
-  core.bindFile(gone, "block:1")
-  core.hold(kept, true)
-  core.hold(gone, true)
+test("bindings and held subjects outlast the server, while their files do", () => {
+  const kept = fileSubject(join(dir, "kept.md"))
+  const gone = fileSubject(join(dir, "gone.md"))
+  const github = { kind: "github-notifications" } as const
+  writeFileSync(kept.path, "")
+  writeFileSync(gone.path, "")
+  for (const subject of [kept, gone, github]) {
+    core.bindSubject(subject, "block:1")
+    core.hold(subject, true)
+  }
   vi.advanceTimersByTime(1000)
-  rmSync(gone)
+  rmSync(gone.path)
   const after = Core.load(join(dir, "registry.json"))
   expect(after.binding(kept)).toEqual("block:1")
   expect(after.binding(gone)).toEqual(null)
-  expect(after.held).toEqual([kept])
+  expect(after.binding(github)).toEqual("block:1")
+  expect(after.held).toEqual([kept, github])
 })
 
 test("a shell's agents are the live ones in its tab, in its layout order", async () => {

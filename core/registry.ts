@@ -34,28 +34,29 @@ import {
   HARNESSES,
   type Harness,
   type Home,
+  type SubjectKey,
   type TrackerStatus,
   type WorkspaceRecord,
   type WorkspaceRoot,
 } from "./model.ts"
 
-/** What ah keeps on disk about agents, trackers and files */
+/** What ah keeps on disk about agents, trackers and subjects */
 export interface Registry {
   agents: Map<AgentId, AgentRecord>
   trackers: Map<WorkspaceRoot, WorkspaceRecord>
   /** zsh's label for each block's directory */
   shellLabels: Map<BlockId, string>
-  /** File path -> the agent its requests go to */
-  bindings: Map<string, AgentId>
+  /** A subject -> the agent its requests go to */
+  bindings: Map<SubjectKey, AgentId>
   /** A shell pane -> the agent in its tab it picked, for the messages it
    * sends and the files it opens */
   picks: Map<BlockId, AgentId>
   /** A pane -> the messages it sent that no agent has taken yet, oldest
    * first, to send when one turns up in its tab */
   outbox: Map<BlockId, string[]>
-  /** Files whose threads hold requests no agent has taken, to send when
-   * one turns up */
-  held: Set<string>
+  /** Subjects whose threads hold requests no agent has taken, to send
+   * when one turns up */
+  held: Set<SubjectKey>
 }
 
 export const emptyRegistry = (): Registry => ({
@@ -282,10 +283,10 @@ interface Stored {
   agents: Record<string, AgentRecord>
   trackers: Record<string, WorkspaceRecord>
   shellLabels: Record<string, string>
-  bindings: Record<string, AgentId>
+  bindings: Record<SubjectKey, AgentId>
   picks: Record<string, AgentId>
   outbox: Record<string, string[]>
-  held: string[]
+  held: SubjectKey[]
 }
 
 /** The registry as last saved, or null if it never was. Entries that don't

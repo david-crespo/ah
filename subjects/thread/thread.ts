@@ -2,8 +2,9 @@
 // activity on them.
 // The page's requests are posted into the session, each rendered by its
 // subject type's kinds, and the agent's activity (`ah message respond`) is
-// shown back on the page. One append-only log per file, under ~/.local/state/ah/<kind>/, is both
-// the history and what a session catching up reads.
+// shown back on the page. One append-only log per subject, under
+// ~/.local/state/ah/<kind>/, is both the history and what a session catching
+// up reads.
 //
 // The backend serving the page brings the transport to it (markdown's doc socket)
 // and anything the agent should read ahead of each comment (markdown's edits
@@ -14,7 +15,13 @@ import { join } from "node:path"
 import { DEFAULT_PORT } from "../../platform/cli.ts"
 import { ahStateDir } from "../../platform/paths.ts"
 import { describeAddress, postTo, addressAlive } from "../../platform/session.ts"
-import type { Address, FileKind, Request } from "../../core/model.ts"
+import {
+  type Address,
+  type Request,
+  type Requestable,
+  type SubjectKey,
+  subjectKey,
+} from "../../core/model.ts"
 import {
   type ActivityInput,
   type RequestInput,
@@ -23,25 +30,25 @@ import {
   ThreadLog,
 } from "./events.ts"
 
-function logPath(kind: FileKind, file: string): string {
+function logPath(kind: string, key: SubjectKey): string {
   const dir = ahStateDir(kind)
   mkdirSync(dir, { recursive: true })
-  // One log per file, named by its absolute path with slashes flattened
-  return join(dir, file.replaceAll("/", "-") + ".comments.jsonl")
+  // One log per subject, named by its key, a file's with slashes flattened
+  return join(dir, key.replaceAll("/", "-") + ".comments.jsonl")
 }
 
 /** The one line before the requests in every post: where they're from,
  * and the command that answers them, so the agent doesn't have to work out
- * the file's path or the server's port. The skill explains the rest. */
+ * the subject's key or the server's port. The skill explains the rest. */
 export function header(
   { kind, title }: Pick<ThreadOptions, "kind" | "title">,
-  file: string,
+  key: SubjectKey,
   port: number,
 ): string {
   const portFlag = port === DEFAULT_PORT ? "" : ` -p ${port}`
   const tool = title ?? kind[0].toUpperCase() + kind.slice(1)
-  const respond = `ah message respond${portFlag} ${shellWord(file)} <phase> <request ids>`
-  return `${tool} requests for ${file} (load the /${kind} skill before handling these, and answer on the page with ${respond}):`
+  const respond = `ah message respond${portFlag} ${shellWord(key)} <phase> <request ids>`
+  return `${tool} requests for ${key} (load the /${kind} skill before handling these, and answer on the page with ${respond}):`
 }
 
 /** A path as one shell word, single-quoted only if it needs to be */
@@ -55,18 +62,18 @@ export function render(request: Request, kinds: RequestKinds): string {
   return `Request ${request.id}${answering}: ${kinds[request.kind].render(request)}`
 }
 
-/** The file, and where its comments go now: its agent's address, which
+/** The subject, and where its requests go now: its agent's address, which
  * changes as the agent moves through sessions, or the session that opened
  * it */
 export interface Bound {
-  readonly path: string
+  readonly subject: Requestable
   address(): Address | null
 }
 
 export interface ThreadOptions {
-  /** The page's subject kind: where the log goes, and the skill the header
+  /** The subject's type: where the log goes, and the skill the header
    * names */
-  kind: FileKind
+  kind: string
   /** The type's name in the header, if not its name capitalized */
   title?: string
   /** The requests the type takes */
@@ -82,7 +89,7 @@ export interface ThreadOptions {
 }
 
 export class Thread {
-  #file: Bound
+  #bound: Bound
   #log: ThreadLog
   #options: ThreadOptions
   #queue: Promise<unknown> = Promise.resolve()
@@ -92,15 +99,16 @@ export class Thread {
    * which are held until an agent turns up */
   #unsent: string[] = []
 
-  private constructor(file: Bound, log: ThreadLog, options: ThreadOptions) {
-    this.#file = file
+  private constructor(bound: Bound, log: ThreadLog, options: ThreadOptions) {
+    this.#bound = bound
     this.#log = log
     this.#options = options
   }
 
-  static async open(file: Bound, options: ThreadOptions): Promise<Thread> {
-    const log = await ThreadLog.open(logPath(options.kind, file.path), file.path)
-    return new Thread(file, log, options)
+  static async open(bound: Bound, options: ThreadOptions): Promise<Thread> {
+    const key = subjectKey(bound.subject)
+    const log = await ThreadLog.open(logPath(options.kind, key), key)
+    return new Thread(bound, log, options)
   }
 
   /** Keep the context, the log, and delivery in that order, including when
@@ -114,17 +122,17 @@ export class Thread {
   /** For the page: the whole conversation, and whether a session is there to
    * read it. `replay` marks the one sent on connect. */
   snapshot(replay: boolean): string {
-    const snapshot = this.#log.snapshot(addressAlive(this.#file.address()))
+    const snapshot = this.#log.snapshot(addressAlive(this.#bound.address()))
     return JSON.stringify({ ...snapshot, replay })
   }
 
   /** Requests and history, for the agent */
   state() {
-    return this.#log.snapshot(addressAlive(this.#file.address()))
+    return this.#log.snapshot(addressAlive(this.#bound.address()))
   }
 
   #broadcast() {
-    this.#told = addressAlive(this.#file.address())
+    this.#told = addressAlive(this.#bound.address())
     const snapshot = this.#log.snapshot(this.#told)
     this.#options.broadcast(JSON.stringify({ ...snapshot, replay: false }))
   }
@@ -153,7 +161,7 @@ export class Thread {
    * outlive the server. */
   refresh(): Promise<void> {
     return this.#serially(async () => {
-      const alive = addressAlive(this.#file.address())
+      const alive = addressAlive(this.#bound.address())
       const held = alive ? this.#log.undelivered() : []
       if (held.length) {
         await this.#takeContext()
@@ -187,10 +195,10 @@ export class Thread {
   /** Post the requests, with the context no post has carried ahead of them,
    * and log that they went */
   async #deliver(requests: Request[]): Promise<boolean> {
-    const address = this.#file.address()
+    const address = this.#bound.address()
     if (!address) return false
     const lines = [
-      header(this.#options, this.#file.path, this.#options.port),
+      header(this.#options, this.#log.subject, this.#options.port),
       ...this.#unsent,
       ...requests.map((request) => render(request, this.#options.kinds)),
     ]

@@ -12,9 +12,8 @@
 
 import { statSync } from "node:fs"
 import {
-  fileKind,
+  fileSubject,
   type RexState,
-  type Requestable,
   type TrackerEntry,
   type TrackerRecord,
   type TrackerStatus,
@@ -26,9 +25,6 @@ import type { Registry } from "./registry.ts"
 import { rootFinder, tabRoot } from "./workspace.ts"
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-
-/** A file's subject, by its extension */
-export const subjectOf = (path: string): Requestable => ({ kind: fileKind(path), path })
 
 const mtime = (path: string): number | null => {
   try {
@@ -98,11 +94,11 @@ export class Trackers {
       byRecent(
         listed
           .filter((t) => t.status === status)
-          .map((t) => ({ subject: subjectOf(t.path), lastOpen: t.used })),
+          .map((t) => ({ subject: fileSubject(t.path), lastOpen: t.used })),
       )
     const current = this.currentPath(root)
     return {
-      current: current ? subjectOf(current) : null,
+      current: current ? fileSubject(current) : null,
       active: entries("active"),
       parked: entries("parked"),
     }
@@ -113,7 +109,7 @@ export class Trackers {
     return byRecent(
       this.#listed(root, Date.now())
         .filter((t) => t.status === "done")
-        .map((t) => ({ subject: subjectOf(t.path), lastOpen: t.used })),
+        .map((t) => ({ subject: fileSubject(t.path), lastOpen: t.used })),
     )
   }
 

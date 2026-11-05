@@ -3,6 +3,7 @@ import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
+import { fileSubject } from "../../core/model.ts"
 import { LiveDoc } from "../../views/markdown/doc.ts"
 import { parseActivity, parseRequest } from "./events.ts"
 import { threadKinds } from "./kinds.ts"
@@ -66,7 +67,7 @@ test("a request goes to the bound session, rendered, after the edits it follows"
   try {
     const { path, doc } = await markdownFile("hello world\n")
     const file = {
-      path,
+      subject: fileSubject(path),
       address: () => ({ harness: "claude" as const, socket: session.socket }),
     }
     const thread = await markdownThread(file, doc)
@@ -99,7 +100,7 @@ test("a request goes to the bound session, rendered, after the edits it follows"
 
 test("without a session, a request is kept for later and activity still lands", async () => {
   const { path, doc } = await markdownFile("text\n")
-  const file = { path, address: () => null }
+  const file = { subject: fileSubject(path), address: () => null }
   const thread = await markdownThread(file, doc)
   const { request, agentConnected } = await thread.request(
     parseRequest({ kind: "chat", text: "hi" }, threadKinds),
@@ -124,7 +125,7 @@ test("requests no agent took go to the next one, unless handled by then", async 
     let address: { harness: "claude"; socket: string } | null = null
     const sent: { agentConnected: boolean }[] = []
     const thread = await Thread.open(
-      { path, address: () => address },
+      { subject: fileSubject(path), address: () => address },
       {
         kind: "markdown",
         kinds: threadKinds,
@@ -163,7 +164,7 @@ test("a request no agent took is still held after a restart", async () => {
   try {
     const { path, doc } = await markdownFile("text\n")
     let address: { harness: "claude"; socket: string } | null = null
-    const file = { path, address: () => address }
+    const file = { subject: fileSubject(path), address: () => address }
     const before = await markdownThread(file, doc)
     const held = await before.request(
       parseRequest({ kind: "chat", text: "one" }, threadKinds),
@@ -192,7 +193,7 @@ test("a held request keeps the edit notice it came with", async () => {
     let address: { harness: "claude"; socket: string } | null = null
     const holds: boolean[] = []
     const thread = await Thread.open(
-      { path, address: () => address },
+      { subject: fileSubject(path), address: () => address },
       {
         kind: "markdown",
         kinds: threadKinds,

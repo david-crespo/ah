@@ -42,7 +42,7 @@ import { die, portOption } from "./platform/cli.ts"
 import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
-import { type FileKind, fileKind, type RexState } from "./core/model.ts"
+import type { FileKind, RexState } from "./core/model.ts"
 import {
   onRexHealth,
   type RexHealth,
@@ -147,16 +147,15 @@ async function serve(port: number) {
   core.subscribe((registry) => tabTitles.onRegistry(registry))
   // What windows show, so an agent hears when one it opened closes
   core.watchShowing(() => ({
-    files: [...markdownBackend.files.presence(), ...htmlBackend.files.presence()].map(
-      ({ path, open }) => ({ path, agent: core.binding(path), open }),
-    ),
+    files: [...markdownBackend.files.presence(), ...htmlBackend.files.presence()],
     dashboard: dashboardBackend.presence.open(),
   }))
   // An agent starting or going away: held comments go to whoever is there
   // now, and pages show whether anyone is. The core keeps which files hold
   // any, so it reaches those that aren't open, and those from before a restart.
   const refreshThreads = () => {
-    const held = (kind: FileKind) => core.held.filter((path) => fileKind(path) === kind)
+    const held = (kind: FileKind) =>
+      core.held.flatMap((subject) => (subject.kind === kind ? [subject.path] : []))
     markdownBackend.files.refresh(held("markdown"))
     htmlBackend.files.refresh(held("html"))
   }

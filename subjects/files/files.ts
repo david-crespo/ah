@@ -28,26 +28,34 @@ import { isOneOf } from "../../platform/guards.ts"
 import { fileId } from "../id.ts"
 import { GRACE_MS, Presence } from "../../platform/presence.ts"
 import { describeAddress, addressAlive } from "../../platform/session.ts"
-import type { Address, AgentId, AgentRef, FileKind, Route } from "../../core/model.ts"
+import type {
+  Address,
+  AgentId,
+  AgentRef,
+  FileKind,
+  FileSubject,
+  Requestable,
+  Route,
+} from "../../core/model.ts"
 
-/** Which agent each file's requests go to, and where agents can be reached,
- * which changes as they go through sessions. The server's is the core, which
- * keeps the agent registry (core/core.ts). */
+/** Which agent each subject's requests go to, and where agents can be
+ * reached, which changes as they go through sessions. The server's is the
+ * core, which keeps the agent registry (core/core.ts). */
 export interface AgentDirectory {
   /** The id of the agent `ref` names, if the directory knows it */
   agentId(ref: AgentRef): AgentId | null
   /** Note `address` as where the agent can be reached now */
   bind(agent: AgentId, address: Address | null): void
-  /** Bind the file to `agent`: its requests go there from now on */
-  bindFile(path: string, agent: AgentId): void
-  /** The agent the file is bound to */
-  binding(path: string): AgentId | null
-  /** Where the file's requests go now: `target` if given, else the agent
+  /** Bind the subject to `agent`: its requests go there from now on */
+  bindSubject(subject: Requestable, agent: AgentId): void
+  /** The agent the subject is bound to */
+  binding(subject: Requestable): AgentId | null
+  /** Where the subject's requests go now: `target` if given, else the agent
    * it's bound to; if that one can't be reached, another live agent in its
-   * tab, else one in the file's workspace */
-  route(path: string, target?: AgentId | null): Route | null
-  /** Note whether the file's thread holds requests no agent has taken */
-  hold(path: string, held: boolean): void
+   * tab, else, for a file, one in its workspace */
+  route(subject: Requestable, target?: AgentId | null): Route | null
+  /** Note whether the subject's thread holds requests no agent has taken */
+  hold(subject: Requestable, held: boolean): void
 }
 
 /** Where a page is, as its socket's `in` says: a window or browser tab from
@@ -205,12 +213,16 @@ export class Files<L extends Live> {
     return this.#directory.agentId(ref)
   }
 
+  #subject(path: string): FileSubject {
+    return { kind: this.type.kind, path }
+  }
+
   /** For `ah tool doc` and `page`: bind the file to `agent`, if given, which can be
    * reached at `from`, and expect a page, which is on its way */
   async bind(path: string, from: Address | null, agent: AgentId | null): Promise<FileInfo> {
     if (agent) {
       this.#directory.bind(agent, from)
-      this.#directory.bindFile(path, agent)
+      this.#directory.bindSubject(this.#subject(path), agent)
     }
     this.pages(path).presence.expect()
     // Send this agent what no agent took, and tell the pages if it's there
@@ -220,7 +232,7 @@ export class Files<L extends Live> {
 
   /** The agent the file is bound to */
   binding(path: string): AgentId | null {
-    return this.#directory.binding(path)
+    return this.#directory.binding(this.#subject(path))
   }
 
   /** The info of a file to show without binding it, like the dashboard's;
@@ -299,7 +311,11 @@ export class Files<L extends Live> {
     if (!thread) {
       // The thread asks for the address each time, so a rebind, or the
       // agent moving to another session, reaches it
-      const bound = { path, address: () => this.#directory.route(path)?.address ?? null }
+      const subject = this.#subject(path)
+      const bound = {
+        subject,
+        address: () => this.#directory.route(subject)?.address ?? null,
+      }
       thread = Thread.open(bound, {
         kind: this.type.kind,
         title: this.type.title,
@@ -310,7 +326,7 @@ export class Files<L extends Live> {
           const live = this.#live.get(path)
           return (live && (await (await live).context?.())) ?? null
         },
-        hold: (held) => this.#directory.hold(path, held),
+        hold: (held) => this.#directory.hold(subject, held),
       })
       // A log it couldn't read is tried again next time
       thread.catch(() => this.#threads.delete(path))
@@ -341,10 +357,14 @@ export class Files<L extends Live> {
     return [...this.#pages].filter(([, p]) => p.count).map(([path]) => path)
   }
 
-  /** Every file a page has shown, with whether a window does now or did a
-   * moment ago, for the agent's notices */
-  presence(): { path: string; open: boolean }[] {
-    return [...this.#pages].map(([path, p]) => ({ path, open: p.presence.open() }))
+  /** Every file a page has shown, its agent, and whether a window shows it
+   * now or did a moment ago, for the agent's notices */
+  presence(): { path: string; agent: AgentId | null; open: boolean }[] {
+    return [...this.#pages].map(([path, p]) => ({
+      path,
+      agent: this.binding(path),
+      open: p.presence.open(),
+    }))
   }
 
   /** How many pages are connected, for the server's status */
@@ -353,7 +373,7 @@ export class Files<L extends Live> {
   }
 
   info(path: string): FileInfo {
-    const route = this.#directory.route(path)
+    const route = this.#directory.route(this.#subject(path))
     const id = fileId(path)
     return {
       id,

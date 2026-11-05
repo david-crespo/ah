@@ -243,7 +243,7 @@ export class Conversation {
   }
 
   private key(suffix: string) {
-    return `ah-conversation:${this.snapshot?.file}:${suffix}`
+    return `ah-conversation:${this.snapshot?.subject}:${suffix}`
   }
   /** Grow the compose box to its text, up to its max-height. Only while it
    * shows: hidden, it has no scrollHeight. */
