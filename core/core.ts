@@ -459,11 +459,7 @@ export class Core implements AgentDirectory {
       liveBlocks(this.#rex),
     )
     if (!block) return event
-    return {
-      ...event,
-      block,
-      label: this.registry.shellLabels.get(block) ?? event.label,
-    }
+    return { ...event, block }
   }
 
   #apply(event: RegistryEvent, address: Address | null): string | null {

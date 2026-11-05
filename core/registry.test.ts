@@ -137,6 +137,27 @@ test("a cd in the block hides its agent; the shell label is the fallback", () =>
   expect(tabTitle(["t1"], r)).toBe("ah/app")
 })
 
+test("a session that moves to another workspace takes its label", () => {
+  const r = emptyRegistry()
+  const rootOf = (dir: string) => dir.split("/").slice(0, 3).join("/")
+  apply(r, { kind: "shell", block: "t1", label: "dotfiles" })
+  apply(
+    r,
+    hook("SessionStart", "a", "t1", { label: "dotfiles", cwd: "/r/dotfiles" }),
+    1,
+    rootOf,
+  )
+  apply(
+    r,
+    hook("UserPromptSubmit", "a", "t1", { label: "dotfiles/x", cwd: "/r/dotfiles/x" }),
+    2,
+    rootOf,
+  )
+  expect(r.agents.get("t1")?.label).toBe("dotfiles")
+  apply(r, hook("UserPromptSubmit", "a", "t1", { label: "ah", cwd: "/r/ah" }), 3, rootOf)
+  expect(r.agents.get("t1")?.label).toBe("ah")
+})
+
 test("a hook with no block is keyed by its process and shows nowhere", () => {
   const r = emptyRegistry()
   apply(r, { kind: "shell", block: "t1", label: "console" })

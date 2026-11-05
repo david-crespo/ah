@@ -25,6 +25,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { isOneOf, isRecord, isString, isStringOrNull } from "../platform/guards.ts"
 import { ahStateDir } from "../platform/paths.ts"
+import { type RootOf, rootFinder } from "./workspace.ts"
 import {
   type AgentId,
   type AgentRecord,
@@ -147,7 +148,12 @@ export interface Applied {
   summarize: SummaryJob | null
 }
 
-export function apply(r: Registry, e: RegistryEvent, now = Date.now()): Applied {
+export function apply(
+  r: Registry,
+  e: RegistryEvent,
+  now = Date.now(),
+  rootOf: RootOf = rootFinder(),
+): Applied {
   if (e.kind === "shell") {
     r.shellLabels.set(e.block, e.label)
     const agent = r.agents.get(e.block)
@@ -169,17 +175,19 @@ export function apply(r: Registry, e: RegistryEvent, now = Date.now()): Applied 
   // A new session in the pane (/clear, a restart, another harness) starts
   // over
   const same = previous?.session === e.session && previous.harness === e.harness
-  // The label is the one the session started with in its pane: the shell's
-  // label there if it reported one, else the hook's. It stays even if the
-  // directory changes since.
   // An event with no block (from Codex's daemon, unplaced) keeps the home
   // the session's agent has
   const home: Home | null = e.block
     ? { kind: "block", block: e.block }
     : (previous?.home ?? (e.process ? { kind: "process", process: e.process } : null))
   const block = home?.kind === "block" ? home.block : null
-  const label = (block && r.shellLabels.get(block)) || e.label
-  const fresh = e.event === "SessionStart" || !same
+  // The label is the one the session started with in its pane: the shell's
+  // label there if it reported one, else the hook's. It stays through a cd
+  // within the workspace. A session that moves to another one (/cd) takes
+  // the hook's label for where it is now, since the shell's is from before.
+  const moved = same && !!e.cwd && !!previous.cwd && rootOf(e.cwd) !== rootOf(previous.cwd)
+  const label = (!moved && block && r.shellLabels.get(block)) || e.label
+  const fresh = e.event === "SessionStart" || !same || moved
   const record: AgentRecord = {
     home,
     harness: e.harness,
