@@ -1,9 +1,23 @@
 import { execFileSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, test } from "vitest"
-import { parseGitDiff, parseStackFile, readStack, STACK_FILE } from "./stack_data.ts"
+import {
+  bodyPath,
+  ensureBody,
+  parseGitDiff,
+  parseStackFile,
+  readStack,
+  STACK_FILE,
+} from "./stack_data.ts"
 
 test("parseGitDiff counts each file's lines and reads its status", () => {
   const diff = [
@@ -73,8 +87,12 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     const pr = (n: number, bookmark: string) => ({ n, title: `PR ${n}`, bookmark })
     const file = { title: "Stack", prs: [pr(1, "one"), pr(2, "two"), pr(3, "three")] }
     writeFileSync(join(notes, STACK_FILE), JSON.stringify(file))
+    // A body's heading is the PR's title; one without a heading leaves it
+    writeFileSync(join(notes, "two.md"), "# Two, from the body\n\nText\n")
+    writeFileSync(join(notes, "three.md"), "Text\n")
 
     const stack = await readStack(join(notes, "index.html"))
+    expect(stack.prs.map((p) => p.title)).toEqual(["PR 3", "Two, from the body", "PR 1"])
     const summary = stack.prs.map((p) => ({
       n: p.n,
       base: p.base,
@@ -95,6 +113,30 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     expect(a.description).toBe("Add a\n\nThe body,\nwrapped.\n")
     expect(a.files).toEqual([{ path: "a.txt", status: "A", add: 1, del: 0 }])
     expect(a.short.length).toBeGreaterThanOrEqual(4)
+  } finally {
+    rmSync(dir, { recursive: true })
+  }
+})
+
+test("bodyPath names the body for its bookmark, next to the page", () => {
+  expect(bodyPath("/s/index.html", "vdocs-draft")).toBe("/s/vdocs-draft.md")
+  expect(bodyPath("/s/index.html", "v1.2_x")).toBe("/s/v1.2_x.md")
+  for (const bad of ["../x", "a/b", ".hidden", ""])
+    expect(bodyPath("/s/index.html", bad)).toBeNull()
+})
+
+test("ensureBody starts a PR's body with its title, and keeps one that's there", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-")))
+  const page = join(dir, "index.html")
+  try {
+    const prs = [{ n: 1, title: "One", bookmark: "one" }]
+    writeFileSync(join(dir, STACK_FILE), JSON.stringify({ title: "S", prs }))
+    expect(await ensureBody(page, "one")).toBe(join(dir, "one.md"))
+    expect(readFileSync(join(dir, "one.md"), "utf8")).toBe("# One\n")
+    writeFileSync(join(dir, "one.md"), "# Mine\n")
+    await ensureBody(page, "one")
+    expect(readFileSync(join(dir, "one.md"), "utf8")).toBe("# Mine\n")
+    expect(await ensureBody(page, "other")).toBeNull()
   } finally {
     rmSync(dir, { recursive: true })
   }

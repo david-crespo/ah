@@ -5,7 +5,7 @@
 // other PR's bookmark or trunk, and that is its base.
 
 import { existsSync } from "node:fs"
-import { readFile } from "node:fs/promises"
+import { readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
 import { opHeadsDir } from "../../platform/jj.ts"
@@ -117,15 +117,17 @@ export async function readStack(pagePath: string): Promise<Stack> {
       const others = file.prs.filter((q) => q !== pr).map((q) => symbol(q.bookmark))
       const below = `(trunk() | ((${["none()", ...others].join(" | ")}) & ::(${tip}-)))`
       const base = `heads(::${below} & ::${tip})`
-      const [commits, baseLine, diff] = await Promise.all([
+      const [commits, baseLine, diff, title] = await Promise.all([
         jj("log", "--no-graph", "-r", `${below}..${tip}`, "-T", COMMIT),
         jj("log", "--no-graph", "-r", base, "-T", BASE),
         jj("diff", "--git", "--context", "0", "--from", base, "--to", tip),
+        bodyTitle(pagePath, pr.bookmark),
       ])
       const [change, bookmarks = ""] = baseLine.split("\n")[0].split("\t")
       const names = bookmarks.split(" ").filter(Boolean)
       return {
         ...pr,
+        title: title ?? pr.title,
         base:
           file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0] ?? change,
         files: parseGitDiff(diff),
@@ -145,6 +147,41 @@ export async function readStack(pagePath: string): Promise<Stack> {
     notes: file.notes ?? [],
     prs: prs.sort((a, b) => b.n - a.n),
   }
+}
+
+/** A PR's body, the markdown its GitHub description is drafted in: next to
+ * the page, named for its bookmark. Null for a bookmark that can't be a
+ * file name there. */
+export function bodyPath(pagePath: string, bookmark: string): string | null {
+  return /^[\w-][\w.-]*$/.test(bookmark) ? join(dirname(pagePath), `${bookmark}.md`) : null
+}
+
+/** The title a PR's body gives it, as a heading on its first line. It wins
+ * over stack.json's, since the body is what goes on GitHub. */
+async function bodyTitle(pagePath: string, bookmark: string): Promise<string | null> {
+  const path = bodyPath(pagePath, bookmark)
+  const text = path && (await readFile(path, "utf8").catch(() => null))
+  return text?.match(/^# (.+)/)?.[1].trim() || null
+}
+
+/** The body of the stack's PR with `bookmark`, started with its title as a
+ * heading if there isn't one yet; null if no PR in stack.json has it */
+export async function ensureBody(
+  pagePath: string,
+  bookmark: string,
+): Promise<string | null> {
+  const dir = dirname(pagePath)
+  const file = parseStackFile(await readFile(join(dir, STACK_FILE), "utf8"))
+  const pr = file.prs.find((p) => p.bookmark === bookmark)
+  const path = pr && bodyPath(pagePath, bookmark)
+  if (!path) return null
+  // wx: never over one that's there
+  await writeFile(path, `# ${pr.title}\n`, { flag: "wx" }).catch(
+    (e: NodeJS.ErrnoException) => {
+      if (e.code !== "EEXIST") throw e
+    },
+  )
+  return path
 }
 
 /** Each file's lines added and removed in `jj diff --git` output */

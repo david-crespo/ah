@@ -13,8 +13,8 @@
 // for a tracker, its status.
 // Everything else under <id>/ is the files next to it, so the page's relative
 // links work, except <id>/_ah/, which is ah's: the socket (reloads and the
-// conversation), the request route, and a stack page's data and diff
-// buttons. chat.js, the client, is shared by
+// conversation), the request route, and a stack page's data and its diff
+// and body buttons. chat.js, the client, is shared by
 // every page. All pages share the one origin, so one page could post a
 // request into another's thread; the agent's own activity is only on the API
 // port.
@@ -24,7 +24,7 @@ import { readFile, realpath, stat } from "node:fs/promises"
 import { basename, dirname, extname, join } from "node:path"
 import { Readable } from "node:stream"
 import type { WebSocket } from "ws"
-import type { TrackerStatus } from "../../core/model.ts"
+import type { AgentId, TrackerStatus } from "../../core/model.ts"
 import type { Trackers } from "../../core/trackers.ts"
 import { ClientBundles } from "../../platform/bundle.ts"
 import { plainlyUnder } from "../../platform/paths.ts"
@@ -41,7 +41,7 @@ import { pathOf } from "../../subjects/id.ts"
 import { rootFinder } from "../../core/workspace.ts"
 import { pageFiles, type LiveReload } from "./files.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
-import { readStack } from "./stack_data.ts"
+import { ensureBody, readStack } from "./stack_data.ts"
 import { escapeHtml } from "../escape.ts"
 import { contentTypes } from "../mime.ts"
 
@@ -77,6 +77,9 @@ export function inject(
   return end < 0 ? html + "\n" + tags : html.slice(0, end) + tags + "\n" + html.slice(end)
 }
 
+/** Open a markdown file in its doc page, bound to `agent` */
+export type OpenDoc = (path: string, agent: AgentId | null) => Promise<void>
+
 export class PageBackend {
   files: Files<LiveReload>
   #bundles = new ClientBundles("page")
@@ -84,18 +87,22 @@ export class PageBackend {
   readonly pagesOrigin: string
 
   #trackers: Pick<Trackers, "setStatus" | "statusOf"> | null
+  #openDoc: OpenDoc | null
 
   /** `port` is the server's, for telling the agent which one to answer,
    * `pagesPort` the one pages are served on, `directory` where the agents
    * its files are bound to are now, and `trackers` what a task list's Park,
-   * Done, and Resume buttons go to */
+   * Done, and Resume buttons go to, and `openDoc` what opens a stack page's
+   * PR bodies */
   constructor(
     port: number,
     pagesPort: number,
     directory: AgentDirectory,
     trackers: Pick<Trackers, "setStatus" | "statusOf"> | null = null,
+    openDoc: OpenDoc | null = null,
   ) {
     this.#trackers = trackers
+    this.#openDoc = openDoc
     this.pagesOrigin = `http://127.0.0.1:${pagesPort}`
     this.files = new Files(port, pageFiles, directory, { pageOrigin: this.pagesOrigin })
   }
@@ -176,6 +183,16 @@ export class PageBackend {
       // At the root, since jj reads skepsis's paths relative to where it runs
       const cwd = rootFinder()(dirname(path)) ?? dirname(path)
       return await openSkepsis(cwd, diff, this.files.binding(path)).then(
+        () => new Response(null, { status: 204 }),
+        (e: Error) => new Response(e.message, { status: 500 }),
+      )
+    }
+    if (sub === "_ah/pr-body" && req.method === "POST") {
+      if (!this.#openDoc) return notFound()
+      const { bookmark }: { bookmark?: unknown } = await req.json().catch(() => ({}))
+      const body = typeof bookmark === "string" ? await ensureBody(path, bookmark) : null
+      if (!body) return new Response("not a PR in this stack", { status: 404 })
+      return await this.#openDoc(body, this.files.binding(path)).then(
         () => new Response(null, { status: 204 }),
         (e: Error) => new Response(e.message, { status: 500 }),
       )

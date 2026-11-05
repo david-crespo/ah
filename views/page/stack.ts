@@ -7,7 +7,8 @@
 // commit that opens to its description and files. A graph down the left
 // joins the commits, with a side lane for a PR that a later one shares a
 // base with. Each diff stat is a button that has the server open that diff
-// in skepsis (skepsis.ts). The page reloads on every jj operation, so which
+// in skepsis (skepsis.ts), and each PR's Body button opens its body in a doc
+// page, starting the file if there isn't one. The page reloads on every jj operation, so which
 // sections are open is kept across reloads, and the last stack is drawn at
 // once while the new one loads.
 
@@ -81,6 +82,9 @@ document.addEventListener(
   true,
 )
 
+// Lucide's pencil
+const PENCIL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>`
+
 function prCard(pr: Pr, side: boolean): string {
   const commits = pr.commits.map((c) => {
     const [title, ...rest] = c.description.split("\n")
@@ -99,10 +103,10 @@ function prCard(pr: Pr, side: boolean): string {
   })
   return `<div class="row${side ? " side" : ""}"><section class="pr">
     <div class="pr-head">
-      <h2>${pr.n}. ${esc(pr.title)}</h2>
+      <h2><span class="n">${pr.n}.</span> ${esc(pr.title)}</h2>
       ${stat(pr.files, { from: pr.base, to: pr.bookmark })}
     </div>
-    <div class="pr-meta"><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</div>
+    <div class="pr-meta"><button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button><span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span></div>
     <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
       <summary>Summary and ${pr.files.length} file${pr.files.length === 1 ? "" : "s"}</summary>
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
@@ -173,21 +177,25 @@ addEventListener("resize", drawGraph)
 void document.fonts?.ready.then(drawGraph)
 
 // A diff stat: the server starts skepsis on the diff, or shows the one
-// already running
+// already running. A PR's Body button: the server opens its body's doc page.
 main.addEventListener("click", async (e) => {
-  const button = (e.target as Element).closest<HTMLButtonElement>("button[data-diff]")
+  const button = (e.target as Element).closest<HTMLButtonElement>(
+    "button[data-diff], button[data-body]",
+  )
   if (!button) return
   // In a commit's line, the click shouldn't also open it
   e.preventDefault()
   if (!threadUrl || button.classList.contains("busy")) return
+  const { diff, body } = button.dataset
+  const title = diff ? "Open in skepsis" : "Open the PR body"
   button.classList.add("busy")
   button.classList.remove("failed")
   let error = ""
   try {
-    const res = await fetch(new URL("skepsis", threadUrl), {
+    const res = await fetch(new URL(diff ? "skepsis" : "pr-body", threadUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: button.dataset.diff,
+      body: diff ?? JSON.stringify({ bookmark: body }),
     })
     if (!res.ok) error = (await res.text()) || `${res.status}`
   } catch (e) {
@@ -195,7 +203,7 @@ main.addEventListener("click", async (e) => {
   }
   button.classList.remove("busy")
   button.classList.toggle("failed", !!error)
-  button.title = error || "Open in skepsis"
+  button.title = error || title
 })
 
 const cacheKey = `ah-stack:${location.pathname}`
