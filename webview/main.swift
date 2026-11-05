@@ -86,6 +86,13 @@ func menuItem(_ title: String, _ action: Selector, _ key: String = "") -> NSMenu
   NSMenuItem(title: title, action: action, keyEquivalent: key)
 }
 
+/** ⌥⌘I, as in Safari */
+func inspectorItem() -> NSMenuItem {
+  let item = menuItem("Show Web Inspector", #selector(AppDelegate.showInspector(_:)), "i")
+  item.keyEquivalentModifierMask = [.command, .option]
+  return item
+}
+
 /** WKWebView's editing commands and the window's need a menu to have keys */
 func mainMenu() -> NSMenu {
   let main = NSMenu()
@@ -117,6 +124,8 @@ func mainMenu() -> NSMenu {
     menuItem("Actual Size", #selector(AppDelegate.actualSize(_:)), "0"),
     menuItem("Zoom In", #selector(AppDelegate.zoomIn(_:)), "="),
     menuItem("Zoom Out", #selector(AppDelegate.zoomOut(_:)), "-"),
+    .separator(),
+    inspectorItem(),
   ])
   add("Window", [
     menuItem("Close", #selector(NSWindow.performClose(_:)), "w"),
@@ -249,6 +258,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   }
   @objc func zoomIn(_ sender: Any?) { webView.pageZoom *= 1.1 }
   @objc func zoomOut(_ sender: Any?) { webView.pageZoom /= 1.1 }
+
+  /** Web Inspector, as ⌥⌘I opens it in Safari. isInspectable only adds
+   * Inspect Element to the context menu, and WKWebView has no public call to
+   * open it, so this uses the private _inspector. */
+  @objc func showInspector(_ sender: Any?) {
+    (webView.value(forKey: "_inspector") as? NSObject)?.perform(Selector(("show")))
+  }
 
   // The page's own frames go anywhere; the window itself stays on ah's pages
   func webView(
