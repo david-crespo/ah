@@ -263,6 +263,10 @@ ah-item > details[open] .ah-item-chevron {
   display: none;
 }
 
+.ah-item-go[inert] {
+  visibility: hidden;
+}
+
 ah-item:hover .ah-item-action,
 .ah-item-action:focus-visible,
 .ah-item-action:not([data-state="ready"]) {

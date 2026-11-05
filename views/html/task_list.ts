@@ -483,7 +483,9 @@ export class AhItem extends HTMLElement {
     const rev = this.getAttribute("rev")
     this.#rev.textContent = rev ?? ""
     this.#rev.hidden = !rev
-    this.#go.el.hidden = !threadUrl || !(status === "todo" || status === "hold")
+    // An item that can't go keeps the button's slot, so the revs line up
+    this.#go.el.hidden = !threadUrl
+    this.#go.el.inert = !(status === "todo" || status === "hold")
     this.#go.render(GO_ICON, `Go ahead: ${this.id}`)
     this.#go.el.disabled = this.#go.state === "pending"
     this.#comment.el.hidden = !threadUrl
