@@ -228,16 +228,6 @@ ah-item > details[open] .ah-item-chevron {
   transform: rotate(90deg);
 }
 
-.ah-item-rev {
-  flex: none;
-  margin-left: auto;
-  padding: 0 5px;
-  border: 1px solid var(--t-line);
-  border-radius: 4px;
-  color: var(--t-muted);
-  font-size: 12px;
-}
-
 /* The comment and Go buttons, shown on hover or while their request is open */
 .ah-item-action {
   box-sizing: content-box;
@@ -353,10 +343,6 @@ ah-item:hover .ah-item-action,
 .ah-item-dot[data-status="question"] {
   border-color: var(--t-yellow);
   background: var(--t-yellow);
-}
-
-.ah-item-rev:not([hidden]) + .ah-item-chat {
-  margin-left: 0;
 }
 
 /* The comment box (task_list.ts), under the comment button of its item */
@@ -556,10 +542,6 @@ ah-step[status="dropped"] .ah-step-text {
 
 ah-step[status="dropped"] .ah-step-text {
   text-decoration: line-through;
-}
-
-ah-step .ah-item-rev {
-  margin-left: auto;
 }
 
 @media (max-width: 480px) {

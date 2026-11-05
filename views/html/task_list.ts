@@ -3,16 +3,16 @@
 // A task list's items, served as /view/html/task_list.js; the page loads it
 // and /task_list.css itself. The agent writes each item as
 //
-//   <ah-item id="4" status="done" rev="pstlrplp">
+//   <ah-item id="4" status="done">
 //     <h3>Title</h3>
 //     <p>Detail…</p>
 //   </ah-item>
 //
-// and the element lays it out: a status icon, the id, the title and the rev
-// on one line, with the detail collapsed under it. An item done in several
-// steps lists them in its detail, each with a status and rev of its own:
+// and the element lays it out: a status icon, the id and the title on one
+// line, with the detail collapsed under it. An item done in several steps
+// lists them in its detail, each with a status of its own:
 //
-//   <ah-step status="done" rev="pqqsyksr">What the step does</ah-step>
+//   <ah-step status="done">What the step does</ah-step>
 //
 // and its title line shows a dot per step in its status's color. Steps are lettered in order, so
 // the second step of item 3 is 3B. Open and hold items get a Go button,
@@ -356,11 +356,10 @@ const statusOf = (el: HTMLElement): Status => {
 }
 
 export class AhItem extends HTMLElement {
-  static observedAttributes = ["status", "rev"]
+  static observedAttributes = ["status"]
   #built = false
   #status = statusButton("ah-item-status", this, () => ({ item: this.id }))
   #progress = document.createElement("span")
-  #rev = document.createElement("code")
   #go = new RequestButton("ah-item-action ah-item-go", "go", () => ({ item: this.id }))
   #comment = new RequestButton("ah-item-action ah-item-chat", "item-comment", () => ({
     item: this.id,
@@ -396,7 +395,6 @@ export class AhItem extends HTMLElement {
     id.textContent = this.id
     const title = heading ?? document.createElement("span")
     title.classList.add("ah-item-title")
-    this.#rev.className = "ah-item-rev"
     // Inside a <summary>, a click would also toggle the detail
     const onClick = (button: HTMLElement, action: () => void) =>
       button.addEventListener("click", (e) => {
@@ -436,7 +434,7 @@ export class AhItem extends HTMLElement {
         return dot
       }),
     )
-    head.append(this.#progress, this.#rev, this.#comment.el, this.#go.el)
+    head.append(this.#progress, this.#comment.el, this.#go.el)
 
     if (rest.length) {
       const details = document.createElement("details")
@@ -480,10 +478,7 @@ export class AhItem extends HTMLElement {
   #render() {
     const status = this.status
     this.#status.render()
-    const rev = this.getAttribute("rev")
-    this.#rev.textContent = rev ?? ""
-    this.#rev.hidden = !rev
-    // An item that can't go keeps the button's slot, so the revs line up
+    // An item that can't go keeps the button's slot, so the comment buttons line up
     this.#go.el.hidden = !threadUrl
     this.#go.el.inert = !(status === "todo" || status === "hold")
     this.#go.render(GO_ICON, `Go ahead: ${this.id}`)
@@ -509,16 +504,15 @@ for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
   if (!link.target && link.origin !== location.origin) link.target = "_blank"
 }
 
-/** One step of an item: a status icon, its letter, what it does, and its rev */
+/** One step of an item: a status icon, its letter and what it does */
 export class AhStep extends HTMLElement {
-  static observedAttributes = ["status", "rev"]
+  static observedAttributes = ["status"]
   #built = false
   #letter = ""
   #status = statusButton("ah-step-status", this, () => ({
     item: this.#item()?.id ?? "",
     step: this.#letter,
   }))
-  #rev = document.createElement("code")
 
   #item = () => this.closest<AhItem>("ah-item")
 
@@ -540,8 +534,7 @@ export class AhStep extends HTMLElement {
         this.#status.open(this.#item()?.itemTitle ?? ""),
       )
     } else this.#status.el.disabled = true
-    this.#rev.className = "ah-item-rev"
-    this.replaceChildren(this.#status.el, letter, text, this.#rev)
+    this.replaceChildren(this.#status.el, letter, text)
     this.#render()
   }
 
@@ -556,9 +549,6 @@ export class AhStep extends HTMLElement {
 
   #render() {
     this.#status.render()
-    const rev = this.getAttribute("rev")
-    this.#rev.textContent = rev ?? ""
-    this.#rev.hidden = !rev
   }
 }
 

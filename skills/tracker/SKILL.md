@@ -51,7 +51,7 @@ item in the one that fits:
 - `Unrelated`: found on the way.
 
 ```html
-<ah-item id="4" status="doing" rev="uqlqlkol">
+<ah-item id="4" status="doing">
   <h3>Tracker skill and the CLAUDE.md pointer</h3>
   <p>
     What's wrong or wanted, what to change, with file references
@@ -72,13 +72,12 @@ item in the one that fits:
   put it in the detail, under `<h4>Open</h4>` with the options, and ask it
   in chat too. When it's answered, record the answer under `Decided` and
   move the item on.
-- `rev`: the jj change ID once there is one. Leave it off until then.
 - The `<h3>` is the title: a few words. Everything after it is the detail,
   collapsed under the title. Put all of it there. There's no separate review
   file. Use `<p>`, `<ul>`, `<code>`, `<a>`. The detail should be enough to act
   on without the conversation.
 - Work that takes more than one rev gets steps, in order, each with its own
-  `status` and `rev`. The page shows each step's status icon, and a dot per
+  `status`. The page shows each step's status icon, and a dot per
   step in its status's color on the item's title line, so the user can see
   where things are.
   Update a step's status as you go, like an item's. Steps are lettered in
@@ -91,7 +90,7 @@ item in the one that fits:
 
 ```html
 <h4>Steps</h4>
-<ah-step status="done" rev="pqqsyksr">One record per agent</ah-step>
+<ah-step status="done">One record per agent</ah-step>
 <ah-step status="doing">Pages bind to the agent</ah-step>
 <ah-step>Show when no agent is connected</ah-step>
 <h4>Decided</h4>
@@ -147,7 +146,7 @@ the request:
    `status="doing"`.
 2. Do the work and report it in the terminal, as for any request.
 3. `ah message respond <file> done <request id> --text '<one line>'`, and
-   update the item (`done`, `rev`). The spinner clears.
+   set the item to `status="done"`. The spinner clears.
 
 If you need to ask before going ahead, ask in the terminal and post
 `needs-reply` for the request with the question in a line: the button
