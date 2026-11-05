@@ -3,7 +3,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "vitest"
 import { ansiToHtml } from "./ansi.ts"
-import { isIgnored, opHeadsDir, SnapshotWatcher } from "./jj.ts"
+import { opHeadsDir } from "../../platform/jj.ts"
+import { isIgnored, SnapshotWatcher } from "./jj.ts"
 
 function assertEquals(actual: unknown, expected: unknown) {
   const a = JSON.stringify(actual)

@@ -13,7 +13,8 @@
 // for a tracker, its status.
 // Everything else under <id>/ is the files next to it, so the page's relative
 // links work, except <id>/_ah/, which is ah's: the socket (reloads and the
-// conversation) and the request route. chat.js, the client, is shared by
+// conversation), the request route, and a stack page's data and diff
+// buttons. chat.js, the client, is shared by
 // every page. All pages share the one origin, so one page could post a
 // request into another's thread; the agent's own activity is only on the API
 // port.
@@ -37,7 +38,10 @@ import {
 } from "../../subjects/files/files.ts"
 import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
+import { rootFinder } from "../../core/workspace.ts"
 import { pageFiles, type LiveReload } from "./files.ts"
+import { diffArgs, openSkepsis } from "./skepsis.ts"
+import { readStack } from "./stack_data.ts"
 import { escapeHtml } from "../escape.ts"
 import { contentTypes } from "../mime.ts"
 
@@ -157,6 +161,24 @@ export class PageBackend {
       // The file didn't change, so its watch won't reload its pages
       this.files.pages(path).broadcast(JSON.stringify({ type: "reload" }))
       return new Response(null, { status: 204 })
+    }
+    // A stack's page: its PRs from jj, and its diff buttons, which open
+    // skepsis (stack.ts)
+    if (sub === "_ah/stack") {
+      return await readStack(path).then(
+        (stack) => Response.json(stack, { headers: noStore }),
+        (e: Error) => new Response(e.message, { status: 500 }),
+      )
+    }
+    if (sub === "_ah/skepsis" && req.method === "POST") {
+      const diff = diffArgs(await req.json().catch(() => null))
+      if (!diff) return new Response("bad diff", { status: 400 })
+      // At the root, since jj reads skepsis's paths relative to where it runs
+      const cwd = rootFinder()(dirname(path)) ?? dirname(path)
+      return await openSkepsis(cwd, diff, this.files.binding(path)).then(
+        () => new Response(null, { status: 204 }),
+        (e: Error) => new Response(e.message, { status: 500 }),
+      )
     }
     if (sub === "_ah/request")
       return (

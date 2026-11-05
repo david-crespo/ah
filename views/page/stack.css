@@ -1,0 +1,250 @@
+/* A stack's look (stack.ts draws it). Served at /stack.css on the pages
+   port; the page links it. */
+
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#fbfbfa, #16181b);
+  --fg: light-dark(#1d1f21, #e4e5e7);
+  --muted: light-dark(#6b6f75, #8d939b);
+  --line: light-dark(#e3e3e0, #2c3036);
+  --card: light-dark(#ffffff, #1d2024);
+  --add: light-dark(#1a7f37, #4ac26b);
+  --del: light-dark(#cf222e, #ff7b72);
+  --accent: light-dark(#3b5bdb, #8ea4ff);
+  --hover: light-dark(#eef0f4, #262a30);
+  --graph: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font:
+    15px/1.5 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 24px 16px 96px;
+}
+main a,
+main a:visited {
+  color: var(--accent);
+}
+main h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+main .notes {
+  margin: 12px 0 20px;
+}
+main .error {
+  color: var(--del);
+  white-space: pre-wrap;
+}
+main .empty {
+  color: var(--muted);
+  font-style: italic;
+}
+main code,
+main .mono {
+  font:
+    12.5px/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+
+/* The lineage graph, like jj log's, drawn in an SVG from measured positions */
+main .prs {
+  position: relative;
+}
+main svg.graph {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 60px;
+  pointer-events: none;
+  overflow: visible;
+}
+main svg.graph path {
+  fill: none;
+  stroke: var(--graph);
+  stroke-width: 2;
+}
+main svg.graph circle {
+  fill: var(--bg);
+  stroke: var(--graph);
+  stroke-width: 2;
+}
+main svg.graph rect {
+  fill: var(--graph);
+}
+main .trunk {
+  padding-left: 28px;
+  color: var(--muted);
+  font-size: 13px;
+}
+main .row {
+  padding: 0 0 16px 28px;
+}
+main .row.side {
+  padding-left: 56px;
+}
+
+main .pr {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+main .pr-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+}
+main .pr-head h2 {
+  font-size: 16px;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+main .pr-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+main .pr-meta .mono {
+  font-size: 12px;
+}
+main .summary {
+  margin: 8px 0;
+}
+main .add {
+  color: var(--add);
+}
+main .del {
+  color: var(--del);
+}
+
+main details {
+  margin: 6px 0;
+}
+main summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  list-style: none;
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+main summary::-webkit-details-marker {
+  display: none;
+}
+main summary::before {
+  content: "▶";
+  font-size: 9px;
+  width: 10px;
+  flex: none;
+  align-self: center;
+  text-align: center;
+  transition: transform 0.1s;
+}
+main details[open] > summary::before {
+  transform: rotate(90deg);
+}
+main .more > summary {
+  margin-top: 6px;
+}
+
+main .files {
+  list-style: none;
+  padding: 4px 0 0;
+  margin: 0;
+}
+main .files li {
+  display: grid;
+  grid-template-columns: 1.2em 1fr auto;
+  gap: 6px;
+  align-items: baseline;
+}
+main .files .path {
+  overflow-wrap: anywhere;
+}
+main .files .n {
+  white-space: nowrap;
+  text-align: right;
+}
+
+main .commits {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  border-top: 1px solid var(--line);
+}
+main .commits > li {
+  border-bottom: 1px solid var(--line);
+}
+main .commits > li:last-child {
+  border-bottom: 0;
+}
+main .commit {
+  margin: 0;
+}
+main .commit > summary {
+  gap: 6px 8px;
+  padding: 6px 0;
+  color: var(--fg);
+  font-size: 14px;
+}
+main .commit > summary::before {
+  color: var(--muted);
+  margin-right: -2px;
+}
+main .commit .detail {
+  padding: 0 0 10px 16px;
+}
+main .cid {
+  color: var(--accent);
+  flex: none;
+}
+main .title {
+  flex: 1;
+  min-width: 0;
+}
+main .body {
+  margin: 4px 0;
+}
+
+/* The diff stat, a button that opens the diff in skepsis */
+main button.short {
+  flex: none;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  margin: -1px -6px;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+main button.short:hover {
+  background: var(--hover);
+}
+main button.short.busy {
+  opacity: 0.5;
+  cursor: progress;
+}
+main button.short.failed {
+  outline: 1px solid var(--del);
+}
+main .pr-head .short {
+  margin-left: auto;
+}

@@ -108,6 +108,7 @@ async function serve(port: number) {
 
   const chatCss = await readFile(assetPath("views/thread/chat.css"), "utf8")
   const taskListCss = await readFile(assetPath("views/page/task_list.css"), "utf8")
+  const stackCss = await readFile(assetPath("views/page/stack.css"), "utf8")
 
   // Agents' HTML pages run whatever scripts they include, so they get an
   // origin of their own, which this port refuses (views/page/routes.ts)
@@ -218,6 +219,7 @@ async function serve(port: number) {
     if (rest !== undefined) return pageBackend.handlePage(req, rest)
     if (pathname === "/chat.css") return cssResponse(chatCss)
     if (pathname === "/task_list.css") return cssResponse(taskListCss)
+    if (pathname === "/stack.css") return cssResponse(stackCss)
     return new Response("not found", { status: 404 })
   }
   // The dashboard frames them (its gate takes those loads), and nothing else may

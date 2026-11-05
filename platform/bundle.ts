@@ -18,7 +18,7 @@ export const bundles = {
     "preview.js": "preview.ts",
     "mermaid.js": "mermaid.ts",
   },
-  page: { "chat.js": "client.ts", "task_list.js": "task_list.ts" },
+  page: { "chat.js": "client.ts", "task_list.js": "task_list.ts", "stack.js": "stack.ts" },
   dashboard: { "client.js": "client.ts" },
 } as const satisfies Record<FileKind | "dashboard", Record<string, string>>
 

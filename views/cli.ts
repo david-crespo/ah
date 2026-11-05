@@ -4,7 +4,8 @@
 // messages between pages and agents. `ah tool doc` is a markdown or AsciiDoc
 // file, rendered by ah with a helix pane (views/doc/); `ah tool page` is
 // an HTML file, the agent's own page, served as is on an origin of its own
-// (views/page/). Showing, listing and closing (subjects/files/), the thread
+// (views/page/), as are `ah tool tracker`'s task lists and `ah tool stack`'s
+// stacks of PRs. Showing, listing and closing (subjects/files/), the thread
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
@@ -40,6 +41,8 @@ import {
   workspaceTrackers,
 } from "../core/tracker_api.ts"
 import { taskListPage } from "./page/task_list_file.ts"
+import { STACK_FILE } from "./page/stack_data.ts"
+import { stackJson, stackPage } from "./page/stack_file.ts"
 
 /** Where the file's thread takes the agent's events, or requests from
  * outside its page */
@@ -92,6 +95,20 @@ function ensureTaskList(file: string, title?: string, goal?: string) {
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, taskListPage(title, goal))
   console.log(`wrote ${absolute(file)}`)
+}
+
+/** Write a new stack's page and its stack.json, unless the page is there */
+function ensureStack(file: string, title?: string) {
+  if (existsSync(file)) return
+  if (!/\.html$/i.test(file)) die(`no such file: ${file}`)
+  if (!title) die("ah tool stack: a new stack needs --title")
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, stackPage(title))
+  console.log(`wrote ${absolute(file)}`)
+  const json = join(dirname(file), STACK_FILE)
+  if (existsSync(json)) return
+  writeFileSync(json, stackJson(title))
+  console.log(`wrote ${absolute(json)}`)
 }
 
 /** Any URL, like a diff review tool's page: shown in a window or
@@ -255,6 +272,19 @@ const page = new Command("page")
     await openFile(path, place, port, chat ? {} : { chat: "off" })
   })
 
+const stack = new Command("stack")
+  .summary("A stack of PRs: their commits, diff stats and summaries")
+  .description(
+    `Open a stack's page: the PRs listed in the stack.json next to it, newest first, each with its commits and diff stats from jj, redrawn when a jj operation lands. Each diff stat is a button that opens that commit's or PR's diff in skepsis, whose comments go to the agent the page is bound to; AH_SKEPSIS in the server's environment is the command that runs skepsis, else skepsis on PATH. If the file isn't there, ah writes it and a stack.json to fill in, which needs --title. By convention a stack goes at .claude/notes/<date>-<slug>-stack/index.html. ${BINDING}`,
+  )
+  .argument("<file>")
+  .option("--title <title>", "A new stack's title")
+  .addOption(portOption())
+  .action(async (file, { title, port }) => {
+    ensureStack(file, title)
+    await openFile(openablePathOrDie(file), "window", port)
+  })
+
 export const windows = new Command("window")
   .summary("The windows and tabs tools are open in")
   .description(
@@ -389,11 +419,11 @@ for (const [name, to, summary, description] of [
 }
 
 export const tool = new Command("tool")
-  .summary("Open one of ah's tools: a doc, a page, a tracker, or the dashboard")
+  .summary("Open one of ah's tools: a doc, a page, a tracker, a stack, or the dashboard")
   .description(
     "ah's tools, each a page whose comments and buttons talk back to agent sessions",
   )
   .action(function () {
     this.help()
   })
-for (const command of [doc, page, tracker, dashboard]) tool.addCommand(command)
+for (const command of [doc, page, tracker, stack, dashboard]) tool.addCommand(command)

@@ -1,23 +1,10 @@
-// A workspace's jj log, rerendered whenever an operation lands. New operations
-// rewrite the op heads dir, the same trigger `jj watch` uses.
+// A workspace's jj log, rerendered whenever an operation lands (opHeadsDir).
 
 import { realpathSync, watch, type FSWatcher } from "node:fs"
-import { readFile, stat } from "node:fs/promises"
-import { join, resolve, sep } from "node:path"
+import { sep } from "node:path"
+import { opHeadsDir } from "../../platform/jj.ts"
 import { run } from "../../platform/proc.ts"
 import { ansiToHtml } from "./ansi.ts"
-
-/**
- * In the default workspace `.jj/repo` is the repo dir; in a secondary
- * workspace it's a file holding the repo dir's path, relative to `.jj`.
- */
-export async function opHeadsDir(root: string): Promise<string> {
-  const dotJj = join(root, ".jj")
-  const repo = join(dotJj, "repo")
-  const st = await stat(repo)
-  const repoDir = st.isFile() ? resolve(dotJj, (await readFile(repo, "utf8")).trim()) : repo
-  return join(repoDir, "op_heads", "heads")
-}
 
 // The log's default revset can reach far back in a busy repo
 const LOG_LIMIT = "50"
