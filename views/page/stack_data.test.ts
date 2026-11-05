@@ -135,6 +135,61 @@ test("readStack takes each PR's commits and base from the graph", async () => {
   }
 })
 
+test("readStack drops an earlier PR's commits from one that forks inside it", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-")))
+  const jj = (...args: string[]) =>
+    execFileSync("jj", ["--config", "user.email=t@t", "--config", "user.name=t", ...args], {
+      cwd: dir,
+      stdio: "pipe",
+    })
+  const commit = (file: string, message: string) => {
+    writeFileSync(join(dir, file), `${file}\n`)
+    jj("commit", "-m", message)
+  }
+  try {
+    jj("git", "init")
+    // one is a, b, c, d; two forks from b, not from one's tip; three is on one
+    commit("a.txt", "Add a")
+    commit("b.txt", "Add b")
+    const b = jj("log", "--no-graph", "-r", "@-", "-T", "change_id.short(8)").toString()
+    commit("c.txt", "Add c")
+    commit("d.txt", "Add d")
+    jj("bookmark", "create", "one", "-r", "@-")
+    jj("new", b)
+    commit("e.txt", "Add e")
+    jj("bookmark", "create", "two", "-r", "@-")
+    jj("new", "one")
+    commit("f.txt", "Add f")
+    jj("bookmark", "create", "three", "-r", "@-")
+    const notes = join(dir, "notes")
+    mkdirSync(notes)
+    const pr = (n: number, bookmark: string) => ({ n, title: `PR ${n}`, bookmark })
+    const prs = [pr(1, "one"), pr(2, "two"), pr(3, "three")]
+    writeFileSync(join(notes, STACK_FILE), JSON.stringify({ title: "Stack", prs }))
+
+    const stack = await readStack(join(notes, "index.html"))
+    expect(
+      stack.prs.map((p) => ({
+        n: p.n,
+        base: p.base,
+        commits: p.commits.map((c) => c.description.split("\n")[0]),
+        forksFrom: p.forksFrom,
+      })),
+    ).toEqual([
+      { n: 3, base: "one", commits: ["Add f"], forksFrom: null },
+      { n: 2, base: b, commits: ["Add e"], forksFrom: { n: 1, change: b } },
+      {
+        n: 1,
+        base: expect.any(String),
+        commits: ["Add d", "Add c", "Add b", "Add a"],
+        forksFrom: null,
+      },
+    ])
+  } finally {
+    rmSync(dir, { recursive: true })
+  }
+})
+
 test("bodyPath names the body for its bookmark, next to the page", () => {
   expect(bodyPath("/s/index.html", "vdocs-draft")).toBe("/s/vdocs-draft.md")
   expect(bodyPath("/s/index.html", "v1.2_x")).toBe("/s/v1.2_x.md")

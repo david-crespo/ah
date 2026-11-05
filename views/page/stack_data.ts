@@ -1,8 +1,8 @@
 // A stack page's data, which stack.ts draws: the PRs an agent lists in
 // stack.json next to the page, filled in from jj. The agent writes only what
 // jj doesn't know (titles, notes, how each PR merges, summaries). The rest
-// comes from the graph: a PR is its bookmark's commits down to the nearest
-// other PR's bookmark or trunk, and that is its base.
+// comes from the graph: a PR is its bookmark's commits that trunk and the PRs
+// before it (lower n) don't have, and its base is where it forks from them.
 
 import { existsSync } from "node:fs"
 import { readFile, writeFile } from "node:fs/promises"
@@ -51,6 +51,8 @@ export interface Commit {
  * trunk at. Commits are newest first. */
 export interface Pr extends StackPr {
   base: string
+  /** Set when the base is inside an earlier PR's commits, not at its tip */
+  forksFrom: { n: number; change: string } | null
   /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
   pushed: string | null
   files: FileStat[]
@@ -123,16 +125,16 @@ export async function readStack(pagePath: string): Promise<Stack> {
     `remote_bookmarks.filter(|b| b.remote() != "git").map(|b| b.name()).join(" ")`,
   )
   const prs = await Promise.all(
-    file.prs.map(async (pr): Promise<Pr> => {
+    file.prs.map(async (pr) => {
       const tip = JSON.stringify(pr.bookmark)
-      // Trunk and the other PRs this one is on top of
-      const others = file.prs.filter((q) => q !== pr).map((q) => symbol(q.bookmark))
-      const below = `(trunk() | ((${["none()", ...others].join(" | ")}) & ::(${tip}-)))`
+      // Trunk and the PRs before this one
+      const earlier = file.prs.filter((q) => q.n < pr.n).map((q) => symbol(q.bookmark))
+      const below = `(${["trunk()", ...earlier].join(" | ")})`
       const base = `heads(::${below} & ::${tip})`
       // On a commit, a remote bookmark of this name, other than git's
       const onRemote = `remote_bookmarks.filter(|b| b.remote() != "git" && b.name() == ${tip}).len() > 0`
       const [commits, baseLine, pushed, diff, title] = await Promise.all([
-        jj("log", "--no-graph", "-r", `${below}..${tip}`, "-T", COMMIT),
+        jj("log", "--no-graph", "-r", `::${tip} ~ ::${below}`, "-T", COMMIT),
         jj("log", "--no-graph", "-r", base, "-T", BASE),
         jj(
           "log",
@@ -147,9 +149,10 @@ export async function readStack(pagePath: string): Promise<Stack> {
       ])
       const [change, bookmarks = ""] = baseLine.split("\n")[0].split("\t")
       const names = bookmarks.split(" ").filter(Boolean)
-      return {
+      const result: Pr = {
         ...pr,
         title: title ?? pr.title,
+        forksFrom: null,
         base:
           file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0] ?? change,
         pushed: pushed.split("\n")[0] || null,
@@ -163,13 +166,21 @@ export async function readStack(pagePath: string): Promise<Stack> {
             return c
           }),
       }
+      return [result, change] as const
     }),
   )
+  // A base that's in an earlier PR but isn't its tip: the PR forks mid-way
+  for (const [pr, change] of prs) {
+    for (const [q] of prs) {
+      if (q.n < pr.n && q.commits.slice(1).some((c) => c.change === change))
+        pr.forksFrom = { n: q.n, change }
+    }
+  }
   return {
     title: file.title,
     notes: file.notes ?? [],
     trunk: (await trunk).trim().split(" ")[0],
-    prs: prs.sort((a, b) => b.n - a.n),
+    prs: prs.map(([pr]) => pr).sort((a, b) => b.n - a.n),
   }
 }
 

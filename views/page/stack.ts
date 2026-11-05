@@ -157,7 +157,7 @@ function prCard(pr: Pr, side: boolean, gh: GithubPr | undefined, base: string): 
       <h2><span class="n">${pr.n}.</span> ${esc(gh?.title ?? pr.title)}</h2>
       ${stat(pr.files, { from: pr.base, to: pr.bookmark })}
     </div>
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${gh ? githubMeta(pr, gh, base) : ""}</div>
+    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${pr.forksFrom ? note(`forks from ${pr.forksFrom.change.slice(0, 4)}, inside PR ${pr.forksFrom.n}, not its tip`, "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
       <summary>Summary and ${pr.files.length} file${pr.files.length === 1 ? "" : "s"}</summary>
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
