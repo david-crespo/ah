@@ -51,14 +51,18 @@ export interface Commit {
  * trunk at. Commits are newest first. */
 export interface Pr extends StackPr {
   base: string
+  /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
+  pushed: string | null
   files: FileStat[]
   commits: Commit[]
 }
 
-/** PRs newest first */
+/** PRs newest first. `trunk` is the branch the bottom PR merges into on
+ * GitHub, like main: trunk()'s remote bookmark, or empty without one. */
 export interface Stack {
   title: string
   notes: string[]
+  trunk: string
   prs: Pr[]
 }
 
@@ -110,6 +114,14 @@ export async function readStack(pagePath: string): Promise<Stack> {
   // A string literal is a symbol in a revset; present() allows a PR whose
   // bookmark doesn't exist yet
   const symbol = (bookmark: string) => `present(${JSON.stringify(bookmark)})`
+  const trunk = jj(
+    "log",
+    "--no-graph",
+    "-r",
+    "trunk()",
+    "-T",
+    `remote_bookmarks.filter(|b| b.remote() != "git").map(|b| b.name()).join(" ")`,
+  )
   const prs = await Promise.all(
     file.prs.map(async (pr): Promise<Pr> => {
       const tip = JSON.stringify(pr.bookmark)
@@ -117,9 +129,19 @@ export async function readStack(pagePath: string): Promise<Stack> {
       const others = file.prs.filter((q) => q !== pr).map((q) => symbol(q.bookmark))
       const below = `(trunk() | ((${["none()", ...others].join(" | ")}) & ::(${tip}-)))`
       const base = `heads(::${below} & ::${tip})`
-      const [commits, baseLine, diff, title] = await Promise.all([
+      // On a commit, a remote bookmark of this name, other than git's
+      const onRemote = `remote_bookmarks.filter(|b| b.remote() != "git" && b.name() == ${tip}).len() > 0`
+      const [commits, baseLine, pushed, diff, title] = await Promise.all([
         jj("log", "--no-graph", "-r", `${below}..${tip}`, "-T", COMMIT),
         jj("log", "--no-graph", "-r", base, "-T", BASE),
+        jj(
+          "log",
+          "--no-graph",
+          "-r",
+          `remote_bookmarks(exact:${tip})`,
+          "-T",
+          `if(${onRemote}, commit_id.short(8) ++ "\n")`,
+        ),
         jj("diff", "--git", "--context", "0", "--from", base, "--to", tip),
         bodyTitle(pagePath, pr.bookmark),
       ])
@@ -130,6 +152,7 @@ export async function readStack(pagePath: string): Promise<Stack> {
         title: title ?? pr.title,
         base:
           file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0] ?? change,
+        pushed: pushed.split("\n")[0] || null,
         files: parseGitDiff(diff),
         commits: commits
           .split("\n")
@@ -145,6 +168,7 @@ export async function readStack(pagePath: string): Promise<Stack> {
   return {
     title: file.title,
     notes: file.notes ?? [],
+    trunk: (await trunk).trim().split(" ")[0],
     prs: prs.sort((a, b) => b.n - a.n),
   }
 }

@@ -81,3 +81,14 @@ the page shows it as the PR's title in place of the one in `stack.json`. Each
 PR has a Body button that opens its file in a doc page bound to the same agent
 as the stack page, starting the file with just the title if there isn't one.
 Comments on it come to you as the ah-doc skill describes.
+
+## GitHub
+
+Once a bookmark has a PR on GitHub, the page shows it from `gh`: a link
+with its state (draft, open, merged, closed), its title from GitHub, and,
+while it's open, its review and checks. It flags a PR whose head on GitHub
+isn't the bookmark's commit here (pushing, or someone else's push, would
+fix or explain it) and one whose base on GitHub isn't the PR below it, or
+trunk for the bottom one. GitHub has the body from then on, so the Body
+button goes away. The page asks GitHub again every minute while it's in
+view.

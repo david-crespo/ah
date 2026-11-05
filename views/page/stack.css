@@ -11,6 +11,8 @@
   --add: light-dark(#1a7f37, #4ac26b);
   --del: light-dark(#cf222e, #ff7b72);
   --accent: light-dark(#3b5bdb, #8ea4ff);
+  --merged: light-dark(#8250df, #ab7df8);
+  --warn: light-dark(#9a6700, #d29922);
   --hover: light-dark(#eef0f4, #262a30);
   --graph: color-mix(in srgb, var(--muted) 45%, transparent);
 }
@@ -132,6 +134,65 @@ main .pr-meta {
 }
 main .pr-meta .mono {
   font-size: 12px;
+}
+main .gh-pr {
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--state);
+  border: 1px solid color-mix(in srgb, var(--state) 45%, transparent);
+  background: color-mix(in srgb, var(--state) 10%, transparent);
+}
+main .gh-pr:hover {
+  background: color-mix(in srgb, var(--state) 20%, transparent);
+}
+main .gh-pr.open {
+  --state: var(--add);
+}
+main .gh-pr.draft {
+  --state: var(--muted);
+}
+main .gh-pr.merged {
+  --state: var(--merged);
+}
+main .gh-pr.closed {
+  --state: var(--del);
+}
+main .gh-checks {
+  display: inline-flex;
+  margin-left: -4px;
+}
+main .gh-checks svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+main .gh-checks.pass {
+  color: var(--add);
+}
+main .gh-checks.fail {
+  color: var(--del);
+}
+main .gh-checks.pending {
+  color: var(--warn);
+}
+main .gh-checks.pending svg {
+  fill: currentColor;
+  stroke: none;
+}
+main .gh-note.good {
+  color: var(--add);
+}
+main .gh-note.bad {
+  color: var(--del);
+}
+main .gh-note.warn {
+  color: var(--warn);
 }
 main .summary {
   margin: 8px 0;

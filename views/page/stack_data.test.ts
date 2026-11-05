@@ -82,6 +82,19 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     jj("new", "one")
     commit("d.txt", "Add d")
     jj("bookmark", "create", "three", "-r", "@-")
+    // one is pushed, then changed here
+    execFileSync("git", ["init", "--bare", "--quiet", join(dir, "remote.git")])
+    jj("git", "remote", "add", "origin", join(dir, "remote.git"))
+    jj("git", "push", "--bookmark", "one")
+    const pushed = jj(
+      "log",
+      "--no-graph",
+      "-r",
+      "one",
+      "-T",
+      "commit_id.short(8)",
+    ).toString()
+    jj("describe", "one", "-m", "Add b, edited")
     const notes = join(dir, "notes")
     mkdirSync(notes)
     const pr = (n: number, bookmark: string) => ({ n, title: `PR ${n}`, bookmark })
@@ -92,20 +105,24 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     writeFileSync(join(notes, "three.md"), "Text\n")
 
     const stack = await readStack(join(notes, "index.html"))
+    // No remote, so no trunk bookmark
+    expect(stack.trunk).toBe("")
     expect(stack.prs.map((p) => p.title)).toEqual(["PR 3", "Two, from the body", "PR 1"])
     const summary = stack.prs.map((p) => ({
       n: p.n,
       base: p.base,
+      pushed: p.pushed,
       commits: p.commits.map((c) => c.description.split("\n")[0]),
       files: p.files.map((f) => `${f.status} ${f.path} +${f.add}`),
     }))
     expect(summary).toEqual([
-      { n: 3, base: "one", commits: ["Add d"], files: ["A d.txt +1"] },
-      { n: 2, base: "one", commits: ["Add c"], files: ["A c.txt +1"] },
+      { n: 3, base: "one", pushed: null, commits: ["Add d"], files: ["A d.txt +1"] },
+      { n: 2, base: "one", pushed: null, commits: ["Add c"], files: ["A c.txt +1"] },
       {
         n: 1,
         base: expect.stringMatching(/^[k-z]{8}$/),
-        commits: ["Add b", "Add a"],
+        pushed,
+        commits: ["Add b, edited", "Add a"],
         files: ["A a.txt +1", "A b.txt +1"],
       },
     ])

@@ -42,6 +42,7 @@ import { rootFinder } from "../../core/workspace.ts"
 import { pageFiles, type LiveReload } from "./files.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
 import { ensureBody, readStack } from "./stack_data.ts"
+import { readGithub } from "./stack_github.ts"
 import { escapeHtml } from "../escape.ts"
 import { contentTypes } from "../mime.ts"
 
@@ -169,11 +170,17 @@ export class PageBackend {
       this.files.pages(path).broadcast(JSON.stringify({ type: "reload" }))
       return new Response(null, { status: 204 })
     }
-    // A stack's page: its PRs from jj, and its diff buttons, which open
-    // skepsis (stack.ts)
+    // A stack's page: its PRs from jj and from GitHub, and its diff
+    // buttons, which open skepsis (stack.ts)
     if (sub === "_ah/stack") {
       return await readStack(path).then(
         (stack) => Response.json(stack, { headers: noStore }),
+        (e: Error) => new Response(e.message, { status: 500 }),
+      )
+    }
+    if (sub === "_ah/stack-github") {
+      return await readGithub(path).then(
+        (prs) => Response.json(prs, { headers: noStore }),
         (e: Error) => new Response(e.message, { status: 500 }),
       )
     }
