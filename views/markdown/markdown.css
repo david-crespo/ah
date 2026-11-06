@@ -91,13 +91,16 @@ ah-markdown {
     display: none;
   }
   .diff-added,
-  .diff-removed {
+  .diff-removed,
+  .diff-moved,
+  .diff-moved-from {
     position: relative;
   }
   /* A bar in the margin, at the same place however deep the block is
      (--diff-indent, from preview.ts) */
   .diff-added::before,
-  .diff-removed::before {
+  .diff-removed::before,
+  .diff-moved::before {
     content: "";
     position: absolute;
     top: 2px;
@@ -117,8 +120,44 @@ ah-markdown {
   .diff-removed::before {
     background: #cf222e;
   }
-  .diff-removed > :last-child {
+  .diff-removed > :last-child,
+  .diff-moved > :last-child {
     margin-bottom: 0 !important;
+  }
+  /* A block that moved, and where it was, with its number on the bar */
+  .diff-moved::before {
+    background: #8250df99;
+  }
+  div.diff-moved {
+    margin-bottom: 16px;
+  }
+  .diff-moved[data-move]::after,
+  .diff-moved-from::after {
+    content: attr(data-move);
+    position: absolute;
+    top: calc(0.5lh - 8px);
+    left: calc(-40px - var(--diff-indent, 0px));
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #8250df;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
+    text-align: center;
+  }
+  .diff-moved-from {
+    list-style: none;
+    margin-bottom: 16px;
+    color: #8250df;
+    font-size: 13px;
+    line-height: 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  li.diff-moved-from {
+    margin-bottom: 0;
   }
   .flash {
     animation: ah-markdown-flash 1.8s ease-out;
@@ -428,6 +467,16 @@ ah-markdown {
     }
     .diff-removed::before {
       background: #f85149;
+    }
+    .diff-moved::before {
+      background: #a371f799;
+    }
+    .diff-moved[data-move]::after,
+    .diff-moved-from::after {
+      background: #8957e5;
+    }
+    .diff-moved-from {
+      color: #a371f7;
     }
     .file-note {
       border-color: #3d444d;

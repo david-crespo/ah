@@ -21,7 +21,8 @@ import { languages } from "@codemirror/language-data"
 import { LanguageDescription } from "@codemirror/language"
 import { classHighlighter, highlightCode } from "@lezer/highlight"
 import { createMarkdown } from "./render.ts"
-import { ASCIIDOC, diffMarkdown, leafBlocks, type MarkdownDiff } from "./diff.ts"
+import { ASCIIDOC, diffMarkdown, leafBlocks, MARKDOWN, type MarkdownDiff } from "./diff.ts"
+import { findMoves, type Move, moveBase } from "./moves.ts"
 import { asciidocBlocks, renderAsciidoc } from "./asciidoc.ts"
 import type { DocFormat } from "./doc.ts"
 import { type Conflict, findConflictEnd, parseConflict } from "./conflict.ts"
@@ -306,17 +307,18 @@ export class AhMarkdown extends HTMLElement {
     const text = this.#text ?? ""
     const base = this.#baseText
     const asciidoc = this.#format === "asciidoc"
-    const diff =
-      base === null
-        ? null
-        : asciidoc
-          ? diffMarkdown(
-              base,
-              text,
-              await Promise.all([asciidocBlocks(base), asciidocBlocks(text)]),
-              ASCIIDOC,
-            )
-          : diffMarkdown(base, text, [blocksOf(base), blocksOf(text)])
+    // Blocks that moved show where they are now, and the diff is from the
+    // base with them moved there, so it has only what changed besides
+    const blocksIn = (t: string) => (asciidoc ? asciidocBlocks(t) : blocksOf(t))
+    let moves: Move[] = []
+    let diff: MarkdownDiff | null = null
+    if (base !== null) {
+      const blocks = await Promise.all([blocksIn(base), blocksIn(text)])
+      moves = findMoves(base, text, [blocks[0], blocks[1]])
+      const moved = moveBase(base, text, moves)
+      const from = moves.length ? await blocksIn(moved) : blocks[0]
+      diff = diffMarkdown(moved, text, [from, blocks[1]], asciidoc ? ASCIIDOC : MARKDOWN)
+    }
     const html = asciidoc
       ? await renderAsciidoc(diff?.text ?? text, diff?.old)
       : md.render(diff?.text ?? text, diff ? { diff } : {})
@@ -331,9 +333,9 @@ export class AhMarkdown extends HTMLElement {
     const content = this.content
     const toggled = toggledDetails(content)
     const embeds = hydratedEmbeds(content)
-    this.#changes = diff?.changes ?? 0
+    this.#changes = (diff?.changes ?? 0) + moves.length
     content.innerHTML = html
-    if (diff) showDiff(content, diff, removed)
+    if (diff) showDiff(content, diff, removed, moves)
     restoreDetails(content, toggled)
     markConflictChanges(content)
     highlightCodeBlocks(content)
@@ -391,8 +393,14 @@ function innermostBlocks(content: HTMLElement, ranges: number[][]): HTMLElement[
 const blocksOf = (text: string) => leafBlocks(md.parse(text, { nested: true }))
 
 /** Mark the blocks the diff added, and put back the ones it removed, each
- * before the first block from where it was, rendered as `removed` */
-function showDiff(content: HTMLElement, diff: MarkdownDiff, removed: string[]) {
+ * before the first block from where it was, rendered as `removed`. Mark the
+ * blocks that moved, numbered, with a placeholder where each was. */
+function showDiff(
+  content: HTMLElement,
+  diff: MarkdownDiff,
+  removed: string[],
+  moves: Move[],
+) {
   const blocks = [...content.querySelectorAll<HTMLElement>("[data-line]")]
   const added = new Set(innermostBlocks(content, diff.added).map(outer))
   // The removed go back first, so they go before an added <pre> or <table>,
@@ -415,16 +423,34 @@ function showDiff(content: HTMLElement, diff: MarkdownDiff, removed: string[]) {
     } else if (next) outer(next).before(panel)
     else content.append(panel)
   }
-  // A fence's lines are on its <code> and a table's on its rows, but the
-  // <pre> or <table> would clip the mark's bar, so it goes on a wrapper
-  for (const el of added) {
-    if (el.matches("pre, table")) wrap(el)
-    else el.classList.add("diff-added")
+  for (const el of added) mark(el, "diff-added")
+  for (const [i, move] of moves.entries()) {
+    const n = String(i + 1)
+    const moved = markMoved(content, move.to)
+    if (!moved) continue
+    moved.dataset.move = n
+    // Right after the innermost block it followed, else before the one it
+    // came before
+    const after = blocks
+      .filter((el) => lines(el)[0] < move.was && move.was <= lines(el)[1])
+      .at(-1)
+    const before = blocks.find((el) => lines(el)[0] >= move.was)
+    const at = after ?? before
+    const from = document.createElement(at?.matches("li") ? "li" : "div")
+    from.className = "diff-moved-from"
+    from.dataset.move = n
+    from.textContent = move.was <= move.to[0] ? "Moved down" : "Moved up"
+    from.onclick = () => moved.scrollIntoView({ block: "center", behavior: "smooth" })
+    if (after) outer(after).after(from)
+    else if (before) outer(before).before(from)
+    else content.append(from)
   }
   groupAdded(content)
   const left =
     content.getBoundingClientRect().left + parseFloat(getComputedStyle(content).paddingLeft)
-  for (const el of content.querySelectorAll<HTMLElement>(".diff-added, .diff-removed"))
+  for (const el of content.querySelectorAll<HTMLElement>(
+    ".diff-added, .diff-removed, .diff-moved, .diff-moved-from",
+  ))
     el.style.setProperty("--diff-indent", `${el.getBoundingClientRect().left - left}px`)
 }
 
@@ -462,12 +488,49 @@ function groupAdded(content: HTMLElement) {
   flush()
 }
 
-/** Put `el` in a div marked added */
-function wrap(el: HTMLElement) {
+/** Mark a block with `cls`. A fence's lines are on its <code> and a table's
+ * on its rows, but the <pre> or <table> would clip the mark's bar, so it goes
+ * on a wrapper. Returns what has the mark. */
+function mark(el: HTMLElement, cls: string): HTMLElement {
+  if (!el.matches("pre, table")) {
+    el.classList.add(cls)
+    return el
+  }
   const div = document.createElement("div")
-  div.className = "diff-added"
+  div.className = cls
   el.replaceWith(div)
   div.append(el)
+  return div
+}
+
+/** Mark the blocks on lines [start, end) as moved, each as far out as all
+ * its blocks are, and those side by side outside a list in one div, for one
+ * bar. Returns the first, if any. */
+function markMoved(
+  content: HTMLElement,
+  [start, end]: [number, number],
+): HTMLElement | undefined {
+  const inside = (el: HTMLElement) =>
+    [el, ...el.querySelectorAll<HTMLElement>("[data-line]")].every((b) => {
+      if (!b.dataset.line) return true
+      const [s, e] = lines(b)
+      return s >= start && e <= end
+    })
+  const tops = new Set<HTMLElement>()
+  for (let el of innermostBlocks(content, [[start, end]]).map(outer)) {
+    while (el.parentElement && el.parentElement !== content && inside(el.parentElement))
+      el = el.parentElement
+    tops.add(el)
+  }
+  const els = [...tops]
+  if (els.length > 1 && !els[0].parentElement!.matches("ul, ol, dl")) {
+    const div = document.createElement("div")
+    div.className = "diff-moved"
+    els[0].before(div)
+    div.append(...els)
+    return div
+  }
+  return els.map((el) => mark(el, "diff-moved"))[0]
 }
 
 /** When `panel` is just a list's items, or a description list's terms and
