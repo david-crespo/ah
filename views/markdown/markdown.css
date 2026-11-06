@@ -30,6 +30,13 @@ ah-markdown {
     display: none;
   }
 
+  /* YAML frontmatter (render.ts), its keys down the left */
+  table.front-matter th {
+    text-align: left;
+    vertical-align: top;
+    white-space: nowrap;
+  }
+
   .file-note {
     max-width: 830px;
     margin: 16px auto 0;

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { createMarkdown } from "./render.ts"
+import { createMarkdown, frontMatterEntries } from "./render.ts"
 
 const md = createMarkdown()
 const inline = (text: string) => md.renderInline(text)
@@ -46,4 +46,36 @@ test("a merge conflict says which of the same ones it is", () => {
     ...md.render("{~~a~>b~~} {~~c~>d~~}\n\n{~~a~>b~~}").matchAll(/data-nth="(\d)"/g),
   ]
   expect(nths.map((m) => m[1])).toEqual(["0", "0", "1"])
+})
+
+test("frontmatter shows as a table of its keys", () => {
+  const html = md.render(
+    "---\nname: matrix\ndescription: Read and search\n  message history\n---\n\n# matrix\n",
+  )
+  expect(html).toContain(
+    '<table class="front-matter" data-line="0:5"><tbody><tr><th>name</th><td>matrix</td></tr><tr><th>description</th><td>Read and search message history</td></tr></tbody></table>',
+  )
+  expect(html).toContain('<h1 data-line="6:7">matrix</h1>')
+  expect(html).not.toContain("<hr")
+})
+
+test("frontmatter that isn't a flat map shows as YAML", () => {
+  expect(md.render("---\na:\n  b: c\n# note\n---\n")).toContain(
+    '<pre data-line="0:5"><code class="language-yaml">a:\n  b: c\n# note</code></pre>',
+  )
+})
+
+test("a --- that doesn't open the file, or isn't closed, is a rule", () => {
+  expect(md.render("text\n\n---\na: b\n---\n")).toContain("<hr")
+  expect(md.render("---\na: b\n")).toContain("<hr")
+})
+
+test("frontmatter values join their lines, lists with commas", () => {
+  expect(frontMatterEntries("a: >-\n  one\n  two\nb:\n  - x\n  - \"y\"\nc: 'q'\n")).toEqual(
+    [
+      ["a", "one two"],
+      ["b", "x, y"],
+      ["c", "q"],
+    ],
+  )
 })

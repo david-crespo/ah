@@ -11,6 +11,34 @@ import taskLists from "markdown-it-task-lists"
 
 export function createMarkdown() {
   const md = MarkdownExit({ html: true, linkify: true }).use(taskLists).use(footnote)
+  // YAML frontmatter, which GitHub shows as a table. Before hr, which would
+  // take the opening ---.
+  md.block.ruler.before("hr", "front_matter", (state, startLine, endLine, silent) => {
+    const line = (n: number) => state.src.slice(state.bMarks[n], state.eMarks[n])
+    if (startLine !== 0 || line(0) !== "---") return false
+    let end = 1
+    while (end < endLine && !/^(---|\.\.\.)$/.test(line(end))) end++
+    if (end === endLine) return false
+    if (silent) return true
+    const token = state.push("front_matter", "", 0)
+    token.map = [0, end + 1]
+    token.content = state.getLines(1, end, 0, false)
+    state.line = end + 1
+    return true
+  })
+  md.renderer.rules.front_matter = (tokens, idx, _opts, env) => {
+    const token = tokens[idx]
+    const attrs = md.renderer.renderAttrs(token)
+    const entries = frontMatterEntries(token.content)
+    if (!entries) {
+      return `<pre${attrs}><code class="language-yaml">${md.utils.escapeHtml(token.content)}</code></pre>\n`
+    }
+    const rows = entries.map(
+      ([key, value]) =>
+        `<tr><th>${md.utils.escapeHtml(key)}</th><td>${md.renderInline(value, env)}</td></tr>`,
+    )
+    return `<table class="front-matter"${attrs}><tbody>${rows.join("")}</tbody></table>\n`
+  }
   // Stamp block elements with their source line range so a page can match
   // blocks across re-renders (to flash what changed). Nested renders (conflict
   // panels) set env.nested, where the lines are meaningless.
@@ -93,6 +121,26 @@ export function createMarkdown() {
   })
   return md
 }
+
+/** Frontmatter's top-level keys and their values, or null when it's more than
+ * a flat map. A value continued on indented lines (a `|` or `>` block, or a
+ * list) is joined into one line, the list's items with commas. */
+export function frontMatterEntries(yaml: string): [string, string][] | null {
+  const entries: [string, string[]][] = []
+  for (const line of yaml.split("\n")) {
+    const key = /^([\w-]+):(?:\s+(.*))?$/.exec(line)
+    if (key) entries.push([key[1], key[2] && !/^[|>][-+]?$/.test(key[2]) ? [key[2]] : []])
+    else if (/^\s+\S/.test(line) && entries.length) entries.at(-1)![1].push(line.trim())
+    else if (line.trim()) return null
+  }
+  return entries.map(([key, lines]) => {
+    const items = lines.every((l) => l.startsWith("- ")) && lines.length
+    const parts = items ? lines.map((l) => unquote(l.slice(2))) : lines
+    return [key, items ? parts.join(", ") : unquote(parts.join(" "))]
+  })
+}
+
+const unquote = (s: string) => (/^(["']).*\1$/.test(s) ? s.slice(1, -1) : s)
 
 // GitHub shows a bare link to an issue, PR or discussion as its reference,
 // owner/repo#123, adding "(comment)" when it points at a comment
