@@ -159,7 +159,7 @@ test("marks a reworded sentence in a sidebar inline", async () => {
       )
     ).text,
   ).toBe(
-    "****\n[-It runs on port 7420 by default.-]{+It runs on port 7420 unless told otherwise.+} Pass --port to change it.\n****\n",
+    "****\nIt runs on port 7420 [-by default-]{+unless told otherwise+}. Pass --port to change it.\n****\n",
   )
 })
 

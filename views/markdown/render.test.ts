@@ -1,4 +1,5 @@
 import { expect, test } from "vitest"
+import { CLOSE, OPEN } from "./diff.ts"
 import { createMarkdown, frontMatterEntries } from "./render.ts"
 
 const md = createMarkdown()
@@ -77,5 +78,14 @@ test("frontmatter values join their lines, lists with commas", () => {
       ["b", "x, y"],
       ["c", "q"],
     ],
+  )
+})
+
+test("a URL ends before a diff marker after it", () => {
+  const html = md.render(`See ${OPEN}0}https://a.com/y${CLOSE}.`, {
+    diff: { old: ["https://a.com/x"] },
+  })
+  expect(html).toContain(
+    '<ins class="diff-new"><a href="https://a.com/y">https://a.com/y</a></ins>.',
   )
 })

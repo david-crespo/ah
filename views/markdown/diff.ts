@@ -2,10 +2,10 @@
 // changes since a base marked, for render.ts to show. Old and new are diffed
 // the way the editor pane's merge diffs them (merge.ts), by lines and then
 // words, with a cleanup pass like diff-match-patch's: a short stretch kept
-// between changes joins them, and an addition or removal slides to sentence
-// and line boundaries. A replacement of more than a couple of words widens
-// to whole sentences, so a reworded sentence reads as the old one, then the
-// new one.
+// between changes joins them, more readily in a sentence, so a reworded
+// stretch reads as the old words, then the new, and an addition or removal
+// slides to sentence and line boundaries. A change that cuts into a code
+// span or link widens to take it whole.
 // A block that's mostly rewritten shows whole, old then new.
 //
 // A change inside a paragraph or heading is marked inline, around the new
@@ -33,15 +33,18 @@ export type Syntax = {
   /** Inline markup, which widens a change that touches it to whole
    * sentences, so markers don't cut through it */
   markup: RegExp
-  /** On a change's lines, the start of a span a marker can't go inside,
-   * like a code span or a link's target, which widens it the same way */
-  span: RegExp
+  /** Spans a marker can't go inside, like a code span or a link, matched
+   * whole. A change that cuts into one widens to take all of it, and one
+   * that takes whole spans can still be marked inline. */
+  spans: RegExp
 }
 
 export const MARKDOWN: Syntax = {
   lineMarker: /^\s*(?:(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)+/,
   markup: /[*_`[\]()<>|\\]/,
-  span: /`|\]\(/,
+  // Code spans, links and images, autolinks and bare URLs
+  spans:
+    /(`+)[\s\S]*?[^`]\1(?!`)|!?\[[^\]\n]*\]\([^)\n]*\)|<[a-z][\w+.-]*:[^\s<>]*>|\bhttps?:\/\/[^\s<>()]*[^\s<>().,;:!?'"*_]/gi,
 }
 
 export const ASCIIDOC: Syntax = {
@@ -49,8 +52,10 @@ export const ASCIIDOC: Syntax = {
   lineMarker:
     /^\s*(?:(?:={1,6}|\*{1,5}|-|\.{1,5}|\d+\.|<\d+>|(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION):)\s+|[^\s:][^:\n]*?(?::{2,4}|;;)(?:\s+|$))(?:\[[ xX*]\]\s+)?/,
   markup: /[*_`#+^~[\]<>|\\{}]/,
-  // Code and passthrough spans, macros' targets and attributes, and URLs
-  span: /`|\+|\[|:\/\//,
+  // Code and passthrough spans, macros with their targets and attributes,
+  // URLs, cross references, attribute references and bracketed attributes
+  spans:
+    /(`+)[\s\S]*?[^`]\1(?!`)|(\+{1,3})[\s\S]*?[^+]\2(?!\+)|[\w-]+:{1,2}[^\s[\]]*\[[^\]\n]*\]|\b[a-z][\w+.-]*:\/\/[^\s[\]]+|<<[^>\n]*>>|\{[\w-]+\}|\[[^\]\n]*\]/gi,
 }
 
 /** Inline markers: OPEN, the old words' index and `}` before the new words,
@@ -121,6 +126,8 @@ class Side {
   readonly lineOf: number[] = [0]
   /** The token each line starts at, with one more for the end */
   readonly lineStart: number[] = [0]
+  /** Spans a marker can't go in, as token ranges, each inside one block */
+  readonly spans: [number, number][] = []
 
   constructor(text: string, blocks: Block[], syntax: Syntax) {
     this.t = tokens(text)
@@ -132,6 +139,29 @@ class Side {
       if (tok === "\n") this.lineStart.push(this.lineOf.length - 1)
     }
     this.lineStart.push(this.t.length)
+    // The token each character is in, to place the spans in tokens
+    const tokenAt: number[] = []
+    this.t.forEach((tok, i) => tokenAt.push(...Array(tok.length).fill(i)))
+    tokenAt.push(this.t.length)
+    for (const m of text.matchAll(syntax.spans)) {
+      const span: [number, number] = [
+        tokenAt[m.index],
+        tokenAt[m.index + m[0].length - 1] + 1,
+      ]
+      const { blocks, loose } = this.touched(...span)
+      if (blocks.length === 1 && !loose) this.spans.push(span)
+    }
+  }
+
+  /** The tokens [s, e) take, widened to the whole of each span they cut
+   * into: one they overlap but don't cover, or an insertion inside one */
+  cut(s: number, e: number): [number, number] {
+    let [start, end] = [s, e]
+    for (const [ss, se] of this.spans) {
+      const inside = s === e ? ss < s && s < se : ss < e && s < se
+      if (inside) [start, end] = [Math.min(start, ss), Math.max(end, se)]
+    }
+    return [start, end]
   }
 
   /** The lines tokens [s, e) are on: for an insertion, the line it's in,
@@ -204,9 +234,10 @@ export function diffMarkdown(
   /** A line break and the marker that continues a quote on the next line */
   const continued = new RegExp(`\\n${syntax.lineMarker.source.slice(1)}`, "g")
   const trailing = new RegExp(`\\s*(?:\\n${syntax.lineMarker.source.slice(1)})?$`)
+  const keys = [o.keys(), n.keys()]
   const runs: Run[] = []
   let shift = 0
-  for (const h of hunks(o.keys(), n.keys(), true)) {
+  for (const h of hunks(keys[0], keys[1], true)) {
     const b = h.start + shift
     const last = runs.at(-1)
     if (last && last.aEnd === h.start && last.bEnd === b) {
@@ -216,19 +247,41 @@ export function diffMarkdown(
       runs.push({ a: h.start, aEnd: h.end, b, bEnd: b + h.insert.length, block: false })
     shift += h.insert.length - (h.end - h.start)
   }
+  // Blank lines added or removed between blocks don't show, but in code
+  // they do, and a soft break's key is a space, so a paragraph split in two
+  // still shows
+  const blank = (side: Side, k: string[], s: number, e: number) =>
+    k.slice(s, e).every((key) => key === "\n") &&
+    !side.blocks.some(
+      (b) => b.opaque && b.start <= side.lineOf[s] && side.lineOf[s] < b.end,
+    )
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const r = runs[i]
+    if (blank(o, keys[0], r.a, r.aEnd) && blank(n, keys[1], r.b, r.bEnd)) runs.splice(i, 1)
+  }
 
   // A shortest diff matches whatever it can, as the `.` of `end.` to one in
   // an added `...`, which splits one change into several. As in
   // diff-match-patch's cleanupSemantic, a stretch kept between two changes
-  // that's no longer than either joins them. Not across lines, which the
-  // line diff already aligned.
+  // that's no longer than either joins them. In a sentence, one no longer
+  // than both together does too, so a reworded stretch reads as the old
+  // words, then the new, not the two taking turns. Not across lines, which
+  // the line diff already aligned.
   const chars = (t: string[], s: number, e: number) => t.slice(s, e).join("").length
   const size = (r: Run) => Math.max(chars(o.t, r.a, r.aEnd), chars(n.t, r.b, r.bEnd))
+  const inSentence = (s: number, e: number) => {
+    for (let at = s; at <= e; at++) if (atBoundary(o.t, at, marker)) return false
+    return true
+  }
   for (let i = 1; i < runs.length;) {
     const [prev, r] = [runs[i - 1], runs[i]]
     const gap = o.t.slice(prev.aEnd, r.a)
     const length = gap.join("").length
-    if (!gap.includes("\n") && length <= size(prev) && length <= size(r)) {
+    const [small, big] = [size(prev), size(r)].sort((x, y) => x - y)
+    if (
+      !gap.includes("\n") &&
+      (length <= small || (length <= small + big && inSentence(prev.aEnd, r.a)))
+    ) {
       prev.aEnd = r.aEnd
       prev.bEnd = r.bEnd
       runs.splice(i, 1)
@@ -346,17 +399,11 @@ export function diffMarkdown(
       )
     })
   }
-  /** Whether a run should widen to whole sentences */
+  /** Whether a run should widen to whole sentences: when it has markup
+   * outside the spans, which a marker could cut through */
   const needsSentences = (r: Run) => {
-    const [before, after] = texts(r)
-    // A reworded sentence, but not an addition or removal, which has no other
-    // side to read against
-    if (before && after && (words(before) > 2 || words(after) > 2)) return true
-    if (syntax.markup.test((before + after).replace(continued, "\n"))) return true
-    // Inside a code span or a link's URL, where a marker can't go
-    const [ls, le] = n.lines(r.b, r.bEnd)
-    const lines = n.t.slice(n.lineStart[ls], n.lineStart[le]).join("")
-    return syntax.span.test(lines)
+    const changed = texts(r).join("").replace(syntax.spans, "")
+    return syntax.markup.test(changed.replace(continued, "\n"))
   }
 
   /** Grow run i to whole lines and whole blocks on both sides, until neither
@@ -392,6 +439,16 @@ export function diffMarkdown(
       if (r.block || needsBlocks(r)) {
         i = takeBlocks(i)
         break
+      }
+      const [a, aEnd] = o.cut(r.a, r.aEnd)
+      const [b, bEnd] = n.cut(r.b, r.bEnd)
+      if (a < r.a || aEnd > r.aEnd) {
+        i = grow(i, "a", a, aEnd)
+        continue
+      }
+      if (b < r.b || bEnd > r.bEnd) {
+        i = grow(i, "b", b, bEnd)
+        continue
       }
       if (!needsSentences(r)) break
       let start = r.a

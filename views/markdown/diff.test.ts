@@ -22,6 +22,27 @@ describe("diffMarkdown", () => {
     expect(diff(text, text)).toEqual({ text, old: [], removed: [], added: [], changes: 0 })
   })
 
+  test("leaves blank lines added or removed between blocks alone", () => {
+    for (const [prev, next] of [
+      ["One.\n\n\nTwo.\n", "One.\n\nTwo.\n"],
+      ["- a\n\n- b\n- c\n", "- a\n- b\n- c\n"],
+      ["# A\nOne.\n", "# A\n\n\nOne.\n"],
+    ])
+      expect(diff(prev, next)).toEqual({
+        text: next,
+        old: [],
+        removed: [],
+        added: [],
+        changes: 0,
+      })
+  })
+
+  test("shows a paragraph split in two, and a blank line added in code", () => {
+    expect(diff("One. Two.\n", "One.\n\nTwo.\n").changes).toBeGreaterThan(0)
+    expect(diff("One\nTwo\n", "One\n\nTwo\n").changes).toBeGreaterThan(0)
+    expect(diff("```\na\nb\n```\n", "```\na\n\nb\n```\n").changes).toBe(1)
+  })
+
   test("marks a changed word inline", () => {
     expect(inline("The pane saves after 650ms.\n", "The pane saves after 800ms.\n")).toBe(
       "The pane saves after [-650ms-]{+800ms+}.\n",
@@ -76,25 +97,47 @@ describe("diffMarkdown", () => {
     expect(d.added).toEqual([[2, 3]])
   })
 
-  test("keeps one rewritten sentence of several inline", () => {
+  test("marks a reworded stretch without the sentence's kept ends", () => {
     expect(
       inline(
         "One stays. Two stays. The pane saves after a while. Four stays.\n",
         "One stays. Two stays. The pane saves once you stop typing. Four stays.\n",
       ),
     ).toBe(
-      "One stays. Two stays. [-The pane saves after a while.-]{+The pane saves once you stop typing.+} Four stays.\n",
+      "One stays. Two stays. The pane saves [-after a while-]{+once you stop typing+}. Four stays.\n",
     )
   })
 
-  test("widens a bigger change to its sentence", () => {
+  test("keeps a rewording of less than half its sentence inline", () => {
     expect(
       inline(
-        "It starts. The pane saves after a while. It ends.\n",
-        "It starts. The pane saves once you stop typing. It ends.\n",
+        "Another thing it can't know: preferences you have or we as a team have that people could disagree on.\n",
+        "Another thing it can't know: preferences, yours or the team's, that people could disagree on.\n",
       ),
     ).toBe(
-      "It starts. [-The pane saves after a while.-]{+The pane saves once you stop typing.+} It ends.\n",
+      "Another thing it can't know: preferences[- you have or we as a team have-]{+, yours or the team's,+} that people could disagree on.\n",
+    )
+  })
+
+  test("joins changes close together in a sentence into one", () => {
+    expect(
+      inline(
+        "It starts. Red panes save after short waits. It ends.\n",
+        "It starts. Blue panes quit after long pauses. It ends.\n",
+      ),
+    ).toBe(
+      "It starts. [-Red panes save after short waits-]{+Blue panes quit after long pauses+}. It ends.\n",
+    )
+  })
+
+  test("keeps changes far apart in a sentence apart", () => {
+    expect(
+      inline(
+        "If you have a skill called `/matrix`, and you tell Claude to search Matrix, it knows what to do.\n",
+        "If you have a skill called `matrix`, and you tell Claude to search Matrix, it picks it up.\n",
+      ),
+    ).toBe(
+      "If you have a skill called [-`/matrix`-]{+`matrix`+}, and you tell Claude to search Matrix, it [-knows what to do-]{+picks it up+}.\n",
     )
   })
 
@@ -104,9 +147,36 @@ describe("diffMarkdown", () => {
     )
   })
 
-  test("widens a change inside a code span to its sentence", () => {
+  test("widens a change inside a code span to the span", () => {
     expect(inline("Run `ah view` now.\n", "Run `ah open` now.\n")).toBe(
-      "[-Run `ah view` now.-]{+Run `ah open` now.+}\n",
+      "Run [-`ah view`-]{+`ah open`+} now.\n",
+    )
+    expect(inline("Run `npm test` now.\n", "Run `npm run test` now.\n")).toBe(
+      "Run [-`npm test`-]{+`npm run test`+} now.\n",
+    )
+  })
+
+  test("keeps a change beside a code span inline", () => {
+    expect(
+      inline(
+        "Only `name` and `description` load up front, in order.\n",
+        "Only `name` and `description` load up first, in order.\n",
+      ),
+    ).toBe("Only `name` and `description` load up [-front-]{+first+}, in order.\n")
+    expect(
+      inline("Like a `CLAUDE.md` is.\n", "Like a `CLAUDE.md` or `AGENTS.md` is.\n"),
+    ).toBe("Like a `CLAUDE.md` [--]{+or `AGENTS.md`+} is.\n")
+  })
+
+  test("widens a change in a link's target to the link, and in a URL to the URL", () => {
+    expect(
+      inline(
+        "See [the docs](https://a.com/x) here.\n",
+        "See [the docs](https://a.com/y) here.\n",
+      ),
+    ).toBe("See [-[the docs](https://a.com/x)-]{+[the docs](https://a.com/y)+} here.\n")
+    expect(inline("See https://a.com/x.\n", "See https://a.com/y.\n")).toBe(
+      "See [-https://a.com/x-]{+https://a.com/y+}.\n",
     )
   })
 
@@ -181,7 +251,7 @@ describe("diffMarkdown", () => {
 
   test("marks a renamed heading inline, after its marker", () => {
     expect(inline("### Install the CLI\n", "### Install the command line tool\n")).toBe(
-      "### [-Install the CLI-]{+Install the command line tool+}\n",
+      "### Install the [-CLI-]{+command line tool+}\n",
     )
   })
 
@@ -220,14 +290,15 @@ describe("diffMarkdown", () => {
     expect(d.removed).toEqual([])
   })
 
-  test("shows a paragraph with a formatting change in each sentence whole", () => {
-    const d = diff(
-      "The server **never** writes. Use *ah view open* to show it. Run `npm test` first.\n",
-      "The server **rarely** writes. Use *ah view show* to show it. Run `npm run test` first.\n",
+  test("marks a change inside emphasis inline", () => {
+    expect(
+      inline(
+        "The server **never** writes. Use *ah view open* to show it.\n",
+        "The server **rarely** writes. Use *ah view show* to show it.\n",
+      ),
+    ).toBe(
+      "The server **[-never-]{+rarely+}** writes. Use *ah view [-open-]{+show+}* to show it.\n",
     )
-    expect(d.old).toEqual([])
-    expect(d.added).toEqual([[0, 1]])
-    expect(d.removed).toHaveLength(1)
   })
 
   test("leaves a rewrapped paragraph unmarked", () => {

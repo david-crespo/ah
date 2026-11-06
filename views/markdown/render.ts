@@ -106,6 +106,10 @@ export function createMarkdown() {
     return `${del}<ins class="diff-new">`
   }
   md.renderer.rules.diff_close = () => "</ins>"
+  // Linkify reads a URL from the rest of the paragraph, which would take in
+  // a marker right after it
+  const matchAtStart = md.linkify.matchAtStart.bind(md.linkify)
+  md.linkify.matchAtStart = (text) => matchAtStart(text.split(MARKER)[0])
   md.core.ruler.push("gh_issue_ref", (state) => {
     for (const tok of state.tokens) {
       const kids = tok.children ?? []
@@ -141,6 +145,9 @@ export function frontMatterEntries(yaml: string): [string, string][] | null {
 }
 
 const unquote = (s: string) => (/^(["']).*\1$/.test(s) ? s.slice(1, -1) : s)
+
+// Either of diff.ts's inline markers
+const MARKER = new RegExp(`${OPEN}|${CLOSE}`)
 
 // GitHub shows a bare link to an issue, PR or discussion as its reference,
 // owner/repo#123, adding "(comment)" when it points at a comment
