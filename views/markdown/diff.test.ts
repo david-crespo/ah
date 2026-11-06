@@ -187,6 +187,17 @@ describe("diffMarkdown", () => {
     expect(d.removed).toEqual([])
   })
 
+  test("shows blocks changed one after another as the old ones, then the new", () => {
+    const one = "The first paragraph says one thing about how the skills are set up here.\n"
+    const two = "The second paragraph says another thing about where the skills live now.\n"
+    const three = "A new paragraph takes the place of the first, with nothing in common.\n"
+    const four =
+      "Another new one replaces the second, and again shares no words with it at all.\n"
+    const d = diff(`Kept.\n\n${one}\n${two}\nEnd.\n`, `Kept.\n\n${three}\n${four}\nEnd.\n`)
+    expect(d.removed).toEqual([{ line: 2, text: `${one}\n${two}` }])
+    expect(d.added).toEqual([[2, 5]])
+  })
+
   test("returns a removed paragraph with where it was", () => {
     const d = diff("One.\n\nTwo.\n\nThree.\n", "One.\n\nThree.\n")
     expect(d.removed).toEqual([{ line: 2, text: "Two.\n\n" }])

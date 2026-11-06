@@ -478,6 +478,16 @@ export function diffMarkdown(
     if (changed > 12 && kept * 2 < changed) for (const r of rs) r.block = true
   }
   for (let i = 0; i < runs.length; i++) if (runs[i].block) i = takeBlocks(i)
+  // Blocks changed one after another, with only blank lines kept between
+  // them, read as the old ones, then the new, not the two taking turns
+  for (let i = 1; i < runs.length;) {
+    const [prev, r] = [runs[i - 1], runs[i]]
+    if (prev.block && r.block && !o.t.slice(prev.aEnd, r.a).join("").trim()) {
+      prev.aEnd = r.aEnd
+      prev.bEnd = r.bEnd
+      runs.splice(i, 1)
+    } else i++
+  }
 
   const old: string[] = []
   const removed: MarkdownDiff["removed"] = []

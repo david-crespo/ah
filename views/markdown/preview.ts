@@ -404,10 +404,16 @@ function showDiff(content: HTMLElement, diff: MarkdownDiff, removed: string[]) {
     // Its lines aren't the file's: don't let flashes or ⌘-click find it
     for (const el of panel.querySelectorAll("[data-line]")) el.removeAttribute("data-line")
     const next = blocks.find((el) => lines(el)[0] >= line)
-    if (!(next && putItems(panel, outer(next)))) {
-      if (next) outer(next).before(panel)
-      else content.append(panel)
-    }
+    if (next && putItems(panel, outer(next))) continue
+    if (next?.matches("li")) {
+      // Only items go between items: the rest goes after the list, after
+      // what's already been put back there
+      let at = next.parentElement!
+      while (at.nextElementSibling?.classList.contains("diff-removed"))
+        at = at.nextElementSibling as HTMLElement
+      at.after(panel)
+    } else if (next) outer(next).before(panel)
+    else content.append(panel)
   }
   // A fence's lines are on its <code> and a table's on its rows, but the
   // <pre> or <table> would clip the mark's bar, so it goes on a wrapper
@@ -415,6 +421,7 @@ function showDiff(content: HTMLElement, diff: MarkdownDiff, removed: string[]) {
     if (el.matches("pre, table")) wrap(el)
     else el.classList.add("diff-added")
   }
+  groupAdded(content)
   const left =
     content.getBoundingClientRect().left + parseFloat(getComputedStyle(content).paddingLeft)
   for (const el of content.querySelectorAll<HTMLElement>(".diff-added, .diff-removed"))
@@ -424,6 +431,36 @@ function showDiff(content: HTMLElement, diff: MarkdownDiff, removed: string[]) {
 /** The element a block's lines are marked on: the <pre> of a fence's
  * <code>, the <table> of a row */
 const outer = (el: HTMLElement) => el.closest<HTMLElement>("pre, table") ?? el
+
+/** Give top-level blocks added one after another one bar, as the removed
+ * ones before them have, by putting them in one div marked added. A list or
+ * quote counts when all its blocks were added. */
+function groupAdded(content: HTMLElement) {
+  const isAdded = (el: Element) =>
+    el.classList.contains("diff-added") ||
+    (el.querySelector(".diff-added") !== null &&
+      [...el.querySelectorAll<HTMLElement>("[data-line]")].every(
+        (b) => b.closest(".diff-added") || b.querySelector("[data-line]"),
+      ))
+  let run: Element[] = []
+  const flush = () => {
+    if (run.length > 1 || (run.length === 1 && !run[0].classList.contains("diff-added"))) {
+      const div = document.createElement("div")
+      div.className = "diff-added"
+      run[0].before(div)
+      div.append(...run)
+      for (const el of div.querySelectorAll(".diff-added"))
+        el.classList.remove("diff-added")
+    }
+    run = []
+  }
+  // A copy, since the loop moves them into the div
+  for (const el of Array.from(content.children)) {
+    if (isAdded(el)) run.push(el)
+    else flush()
+  }
+  flush()
+}
 
 /** Put `el` in a div marked added */
 function wrap(el: HTMLElement) {
