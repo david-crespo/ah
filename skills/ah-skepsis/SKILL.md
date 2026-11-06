@@ -1,5 +1,5 @@
 ---
-name: skepsis
+name: ah-skepsis
 description: "Show the user a diff in skepsis, a browser diff review whose comments come back to this session. Use when the user says ska or skepsis, or asks to review a diff in the browser."
 ---
 

@@ -149,8 +149,10 @@ export interface Live {
 
 /** A subject type that's a file, as its backend's files need it */
 export interface FileType<L extends Live> {
-  /** In its URLs, where its logs go, and the skill the thread's header names */
+  /** In its URLs and where its logs go */
   kind: FileKind
+  /** The skill the thread's header says to load */
+  skill: string
   /** The type's name in the thread's header, if not its name capitalized */
   title?: string
   /** The requests its pages send */
@@ -318,6 +320,7 @@ export class Files<L extends Live> {
       }
       thread = Thread.open(bound, {
         kind: this.type.kind,
+        skill: this.type.skill,
         title: this.type.title,
         kinds: this.type.kinds,
         port: this.#port,

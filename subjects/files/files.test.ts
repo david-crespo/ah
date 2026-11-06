@@ -20,6 +20,7 @@ let attached: string[]
 let closed: string[]
 const type = {
   kind: "markdown" as const,
+  skill: "ah-doc",
   kinds,
   attach: async (path: string): Promise<Live> => {
     attached.push(path)

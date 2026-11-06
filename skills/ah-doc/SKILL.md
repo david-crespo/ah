@@ -1,6 +1,6 @@
 ---
-name: markdown
-description: "Review/edit a markdown draft in a browser page served by ah, connected to this session: live preview, selection comments, general conversation, and agent replies. Use when the user wants to iterate on a draft visually, or says /markdown."
+name: ah-doc
+description: "Review/edit a markdown draft in a browser page served by ah, connected to this session: live preview, selection comments, general conversation, and agent replies. Use when the user wants to iterate on a draft visually, or says /ah-doc."
 ---
 
 # Markdown drafts in ah

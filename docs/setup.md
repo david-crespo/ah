@@ -10,7 +10,7 @@
 | Xcode Command Line Tools                                             | Native windows.                                             | Optional for file views: pass `--in tab` to open in a browser tab and skip building the native window app.                                                                           |
 | jj                                                                   | Dashboard workspace discovery and commit log.               | File views work without it. Replacing it with git requires reworking the dashboard's workspace and log queries.                                                                      |
 | [Helix with Steel](helix.md)                                         | The embedded Helix editor and its comment commands.         | Optional. `--no-editor` keeps the preview and commenting working, or you can switch the editor pane to the included CodeMirror or Neovim sample adapters; see [Helix](#helix) below. |
-| skepsis and jq                                                       | Diff review.                                                | Optional. Another diff viewer can be connected by having it call `ah message send`. The [skepsis skill](../skills/skepsis/SKILL.md) needs the path to your local checkout.           |
+| skepsis and jq                                                       | Diff review.                                                | Optional. Another diff viewer can be connected by having it call `ah message send`. The [ah-skepsis skill](../skills/ah-skepsis/SKILL.md) needs the path to your local checkout.     |
 | An LLM CLI                                                           | Tab-title summaries for Claude Code and Codex.              | Optional. Without it, tab titles fall back to the directory name. Easy to swap for another command ([Tab titles](#tab-titles)); OpenCode generates its own summaries.                |
 
 ## Installation
@@ -43,7 +43,7 @@ Codex fires `SessionStart` on the first prompt rather than at launch, so a Codex
 
 ## Skills
 
-`skills/` contains agent-facing instructions for using the `ah` tools (`markdown`, `html`, `tracker`, and `skepsis`) and for opening panes with `rex split`. Copy or symlink them into your harness's skills directory.
+`skills/` contains agent-facing instructions for using the `ah` tools (`ah-doc`, `ah-page`, `ah-tracker`, and `ah-skepsis`) and for opening panes with `rex split` (`ah-panes`). Copy or symlink them into your harness's skills directory.
 
 ## Helix
 

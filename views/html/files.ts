@@ -35,6 +35,7 @@ export class LiveReload implements Live {
 
 export const htmlFiles: FileType<LiveReload> = {
   kind: "html",
+  skill: "ah-page",
   title: "HTML",
   // Any page can be a task list: it says so by loading task_list.js
   kinds: htmlKinds,

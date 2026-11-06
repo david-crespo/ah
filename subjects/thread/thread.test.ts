@@ -45,6 +45,7 @@ async function inbox() {
 const markdownThread = (file: Parameters<typeof Thread.open>[0], doc: LiveDoc) =>
   Thread.open(file, {
     kind: "markdown",
+    skill: "ah-doc",
     kinds: threadKinds,
     port: 7420,
     broadcast: () => {},
@@ -85,7 +86,7 @@ test("a request goes to the bound session, rendered, after the edits it follows"
       .map((l) => JSON.parse(l))
     expect(lines).toHaveLength(1)
     const content: string[] = lines[0].message.content.split("\n")
-    expect(content[0]).toEqual(header({ kind: "markdown" }, path, 7420))
+    expect(content[0]).toEqual(header({ kind: "markdown", skill: "ah-doc" }, path, 7420))
     expect(content[1]).toEqual(
       'Edit notice: since the last request, the file on disk replaced "world" with "there" after "hello "',
     )
@@ -128,6 +129,7 @@ test("requests no agent took go to the next one, unless handled by then", async 
       { subject: fileSubject(path), address: () => address },
       {
         kind: "markdown",
+        skill: "ah-doc",
         kinds: threadKinds,
         port: 7420,
         broadcast: (m) => sent.push(JSON.parse(m)),
@@ -196,6 +198,7 @@ test("a held request keeps the edit notice it came with", async () => {
       { subject: fileSubject(path), address: () => address },
       {
         kind: "markdown",
+        skill: "ah-doc",
         kinds: threadKinds,
         port: 7420,
         broadcast: () => {},
@@ -216,22 +219,22 @@ test("a held request keeps the edit notice it came with", async () => {
 })
 
 test("the header gives the reply command, with the port only when it isn't the default", () => {
-  expect(header({ kind: "markdown" }, "/d.md", 7420)).toEqual(
-    "Markdown requests for /d.md (load the /markdown skill before handling these, and answer on the page with ah message respond /d.md <phase> <request ids>):",
+  expect(header({ kind: "markdown", skill: "ah-doc" }, "/d.md", 7420)).toEqual(
+    "Markdown requests for /d.md (load the /ah-doc skill before handling these, and answer on the page with ah message respond /d.md <phase> <request ids>):",
   )
-  expect(header({ kind: "markdown" }, "/d.md", 7499)).toContain(
+  expect(header({ kind: "markdown", skill: "ah-doc" }, "/d.md", 7499)).toContain(
     "ah message respond -p 7499 /d.md <phase>",
   )
 })
 
 test("the header quotes a path that isn't one shell word", () => {
-  expect(header({ kind: "markdown" }, "/my notes/it's.md", 7420)).toContain(
-    "ah message respond '/my notes/it'\\''s.md' <phase>",
-  )
+  expect(
+    header({ kind: "markdown", skill: "ah-doc" }, "/my notes/it's.md", 7420),
+  ).toContain("ah message respond '/my notes/it'\\''s.md' <phase>")
 })
 
 test("a type can title itself in the header", () => {
-  expect(header({ kind: "html", title: "HTML" }, "/d.html", 7420)).toMatch(
-    /^HTML requests for \/d\.html \(load the \/html skill /,
-  )
+  expect(
+    header({ kind: "html", title: "HTML", skill: "ah-page" }, "/d.html", 7420),
+  ).toMatch(/^HTML requests for \/d\.html \(load the \/ah-page skill /)
 })

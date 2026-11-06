@@ -41,14 +41,14 @@ function logPath(kind: string, key: SubjectKey): string {
  * and the command that answers them, so the agent doesn't have to work out
  * the subject's key or the server's port. The skill explains the rest. */
 export function header(
-  { kind, title }: Pick<ThreadOptions, "kind" | "title">,
+  { kind, title, skill }: Pick<ThreadOptions, "kind" | "title" | "skill">,
   key: SubjectKey,
   port: number,
 ): string {
   const portFlag = port === DEFAULT_PORT ? "" : ` -p ${port}`
   const tool = title ?? kind[0].toUpperCase() + kind.slice(1)
   const respond = `ah message respond${portFlag} ${shellWord(key)} <phase> <request ids>`
-  return `${tool} requests for ${key} (load the /${kind} skill before handling these, and answer on the page with ${respond}):`
+  return `${tool} requests for ${key} (load the /${skill} skill before handling these, and answer on the page with ${respond}):`
 }
 
 /** A path as one shell word, single-quoted only if it needs to be */
@@ -71,9 +71,10 @@ export interface Bound {
 }
 
 export interface ThreadOptions {
-  /** The subject's type: where the log goes, and the skill the header
-   * names */
+  /** The subject's type, which names its log */
   kind: string
+  /** The skill the header says to load */
+  skill: string
   /** The type's name in the header, if not its name capitalized */
   title?: string
   /** The requests the type takes */

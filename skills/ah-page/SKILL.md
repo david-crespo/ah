@@ -1,6 +1,6 @@
 ---
-name: html
-description: "Show the user an HTML page you wrote (a dashboard, a report, a visualization) in a browser page served by ah, live reloaded and connected to this session: the user comments on its text or messages you, and you answer on the page. Use when a page you generate would show something better than chat, or the user says /html."
+name: ah-page
+description: "Show the user an HTML page you wrote (a dashboard, a report, a visualization) in a browser page served by ah, live reloaded and connected to this session: the user comments on its text or messages you, and you answer on the page. Use when a page you generate would show something better than chat, or the user says /ah-page."
 ---
 
 # HTML pages in ah
@@ -51,7 +51,7 @@ for every `ah` command. opencode has no sandbox.
 
 ## On a phone
 
-The user may read the page on a phone (Remote Control, with the tracker
+The user may read the page on a phone (Remote Control, with the ah-tracker
 skill's LAN proxy), so make it work at 390px wide:
 
 - Put `<meta name="viewport" content="width=device-width, initial-scale=1">`

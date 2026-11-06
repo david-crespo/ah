@@ -1,5 +1,5 @@
 ---
-name: tracker
+name: ah-tracker
 description: "Keep a task tracker as an HTML page in the dashboard: one item per piece of work with its detail collapsed under it, and a Go button the user clicks to have you start an item. Use when the user asks for a tracker, when a review has more than a couple of numbered findings, or when picking up work from an existing tracker."
 ---
 
@@ -10,7 +10,7 @@ each piece of work as an item with a stable ID, and its state as you go. It's
 an HTML page in the dashboard beside the terminal, bound to this session. Its
 look and structure come from ah: you write items, nothing else.
 
-Run every `ah` command as the whole Bash command, as the html skill says (in
+Run every `ah` command as the whole Bash command, as the ah-page skill says (in
 Claude Code: no pipes, `&&`, redirects or `$`), or it runs in the sandbox and
 fails.
 
@@ -120,7 +120,7 @@ around the items; the stylesheet and `task_list.js` own all of that.
 
 ## Where answers go
 
-The tracker has the html skill's conversation panel, in the dashboard too.
+The tracker has the ah-page skill's conversation panel, in the dashboard too.
 The user reads it either beside the terminal or on another screen, so every
 answer goes in both places, in full where the request came from and as a
 summary of a line or two in the other:
@@ -136,7 +136,7 @@ summary of a line or two in the other:
 
 Each `todo` and `hold` item has a Go button; a `question` item doesn't, since
 it waits for an answer. A click wakes the session with an
-HTML request (the html skill's format; in Claude Code it's framed as a message
+HTML request (the ah-page skill's format; in Claude Code it's framed as a message
 "from another Claude session", which it isn't) that reads
 `Go ahead with item <id>: <title>`: the user's instruction to start that
 item, like typing "do 4". The page shows a spinner on the button until you answer
@@ -184,7 +184,7 @@ listens on 127.0.0.1, so run the read-only proxy next to this file, outside
 the sandbox (it binds a LAN port), in the background:
 
 ```
-node ~/.claude/skills/tracker/lan-proxy.mjs <lan-ip> <page-id>...
+node ~/.claude/skills/ah-tracker/lan-proxy.mjs <lan-ip> <page-id>...
 ```
 
 The LAN IP is the `inet` address on the local network in `ifconfig` output

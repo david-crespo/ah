@@ -1,5 +1,5 @@
 ---
-name: panes
+name: ah-panes
 description: "Open a terminal pane next to yourself in Rex (a dev server, a log tail, a TUI or preview) without taking the user's focus, read what's on its screen, wait for its command to exit, and close it when done. Use when the user asks to open, split, or show something in a pane beside the agent, or when a long-running process would be easier to watch in its own pane."
 ---
 

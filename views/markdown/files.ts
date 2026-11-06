@@ -32,6 +32,7 @@ export class LiveMarkdown implements Live {
 
 export const markdownFiles: FileType<LiveMarkdown> = {
   kind: "markdown",
+  skill: "ah-doc",
   kinds: threadKinds,
   attach: async (path, pages) =>
     new LiveMarkdown(
