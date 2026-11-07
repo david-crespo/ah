@@ -150,7 +150,7 @@ export async function showPage(
   // Its socket says so, for `ah window ls`
   url.searchParams.set("in", place)
   const name = windowName(path)
-  const html = fileKind(path) === "html"
+  const html = fileKind(path) === "page"
   await showUrl(
     place,
     url.href,

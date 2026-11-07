@@ -142,5 +142,5 @@ Pages reconnect on their own after `ah server restart` or any other stop,
 and which session a page's comments go to outlasts the server.
 `ah message respond` works whether a page shows the file or not, and
 restarts mark work in flight `interrupted`. The conversation history survives in its log under
-`~/.local/state/ah/html/`. When the user is done with the page,
+`~/.local/state/ah/page/`. When the user is done with the page,
 `ah window close <file>`.

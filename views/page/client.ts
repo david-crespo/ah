@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// Browser half of the html backend, served as /view/html/chat.js and added to an
+// Browser half of the page backend, served as /view/page/chat.js and added to an
 // HTML file's page by routes.ts. It reloads the page when the file or
 // anything next to it changes, keeping the scroll position, and adds the
 // thread: the conversation overlay and selection comments on the page's
@@ -8,7 +8,7 @@
 // the chat is off (data-ah-chat="off").
 
 import { Conversation } from "../thread/conversation.ts"
-import { htmlKinds } from "./requests.ts"
+import { pageKinds } from "./requests.ts"
 import { setUpSelectionComments } from "../thread/selection.ts"
 
 const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")!
@@ -41,7 +41,7 @@ function reload() {
 let conversation: Conversation | null = null
 if (chat) {
   let hidePopover = () => {}
-  conversation = new Conversation(() => hidePopover(), htmlKinds, threadUrl)
+  conversation = new Conversation(() => hidePopover(), pageKinds, threadUrl)
   // A page's main content when it marks one, so the comment's surrounding
   // text comes from the page rather than its chrome
   const content = document.querySelector<HTMLElement>("main") ?? document.body

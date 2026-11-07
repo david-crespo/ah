@@ -1,7 +1,7 @@
-// What a backend (markdown's, html's) keeps for files, by absolute path: the
+// What a backend (doc's, page's) keeps for files, by absolute path: the
 // conversation (Thread) of any file something asks about, and for a file a
-// page shows, its pages and whatever its type keeps live for it (markdown's
-// text and helix panes, html's reload watcher). Nothing opens a file: a page's
+// page shows, its pages and whatever its type keeps live for it (doc's
+// text and helix panes, page's reload watcher). Nothing opens a file: a page's
 // URL names its path, signed (subjects/id.ts), so a page that connects brings
 // up the live state, and it stops a few seconds after the last page leaves,
 // long enough for a reload. After a restart, pages reconnect on their own.
@@ -153,8 +153,6 @@ export interface FileType<L extends Live> {
   kind: FileKind
   /** The skill the thread's header says to load */
   skill: string
-  /** The type's name in the thread's header, if not its name capitalized */
-  title?: string
   /** The requests its pages send */
   kinds: RequestKinds
   /** Set up what the type keeps live for a file a page is showing */
@@ -196,7 +194,7 @@ export class Files<L extends Live> {
 
   /** `port` is the server's, for telling the agent which one to answer, and
    * `directory` where each file's requests go. `pageOrigin` is where the
-   * pages are, if not on the server's own origin (html's, on a port of their
+   * pages are, if not on the server's own origin (page's, on a port of their
    * own). */
   constructor(
     port: number,
@@ -321,7 +319,6 @@ export class Files<L extends Live> {
       thread = Thread.open(bound, {
         kind: this.type.kind,
         skill: this.type.skill,
-        title: this.type.title,
         kinds: this.type.kinds,
         port: this.#port,
         broadcast: (message) => this.#pages.get(path)?.broadcast(message),

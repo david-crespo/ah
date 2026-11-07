@@ -13,12 +13,12 @@ export const bundles = {
   // bundle.js for a file's page, and preview.js with just the <ah-markdown>
   // element, for other pages that show a file. Either loads mermaid.js when a
   // file has a diagram.
-  markdown: {
+  doc: {
     "bundle.js": "client.ts",
     "preview.js": "preview.ts",
     "mermaid.js": "mermaid.ts",
   },
-  html: { "chat.js": "client.ts", "task_list.js": "task_list.ts" },
+  page: { "chat.js": "client.ts", "task_list.js": "task_list.ts" },
   dashboard: { "client.js": "client.ts" },
 } as const satisfies Record<FileKind | "dashboard", Record<string, string>>
 

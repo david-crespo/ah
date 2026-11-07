@@ -13,7 +13,7 @@ let rex: RexState
 let trackers: Trackers
 let changes: object[]
 
-const TRACKER = `<script type="module" src="/view/html/task_list.js"></script>`
+const TRACKER = `<script type="module" src="/view/page/task_list.js"></script>`
 const DAY = 24 * 60 * 60 * 1000
 
 /** A jj workspace under the temp dir */
@@ -71,10 +71,10 @@ test("tabs on one workspace share its current tracker", () => {
   expect(trackers.currentPath(a)).toBe(second)
   expect(trackers.currentPath(b)).toBeNull()
   expect(trackers.get(a)).toEqual({
-    current: { kind: "html", path: second },
+    current: { kind: "page", path: second },
     active: [
-      { subject: { kind: "html", path: second }, lastOpen: expect.any(Number) },
-      { subject: { kind: "html", path: first }, lastOpen: expect.any(Number) },
+      { subject: { kind: "page", path: second }, lastOpen: expect.any(Number) },
+      { subject: { kind: "page", path: first }, lastOpen: expect.any(Number) },
     ],
     parked: [],
   })
@@ -128,12 +128,12 @@ test("outside a jj workspace, the directory stands in for one", () => {
   const file = join(plain, "notes.md")
   writeFileSync(file, "# notes")
   trackers.add(plain, file)
-  expect(trackers.get(plain).current).toEqual({ kind: "markdown", path: file })
+  expect(trackers.get(plain).current).toEqual({ kind: "doc", path: file })
 })
 
 test("a file's subject goes by its extension", () => {
-  expect(fileSubject(join(dir, "page.html")).kind).toBe("html")
-  expect(fileSubject(join(dir, "x.md")).kind).toBe("markdown")
+  expect(fileSubject(join(dir, "page.html")).kind).toBe("page")
+  expect(fileSubject(join(dir, "x.md")).kind).toBe("doc")
 })
 
 test("a finished tracker leaves the list, is listed as done, until it's set again", () => {
@@ -182,7 +182,7 @@ test("a parked tracker leaves the list, and resuming brings it back", () => {
   expect(trackers.get(a)).toEqual({
     current: null,
     active: [],
-    parked: [{ subject: { kind: "html", path }, lastOpen: expect.any(Number) }],
+    parked: [{ subject: { kind: "page", path }, lastOpen: expect.any(Number) }],
   })
   // Resuming counts as using it, so it isn't parked again by age
   trackers.setStatus(path, "active")

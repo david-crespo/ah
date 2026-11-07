@@ -4,7 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
 import { fileSubject } from "../../core/model.ts"
-import { LiveDoc } from "../../views/markdown/doc.ts"
+import { LiveDoc } from "../../views/doc/doc.ts"
 import { parseActivity, parseRequest } from "./events.ts"
 import { threadKinds } from "./kinds.ts"
 import { header, Thread } from "./thread.ts"
@@ -41,10 +41,10 @@ async function inbox() {
   return { socket, posts, close: () => server.close() }
 }
 
-/** A thread on a markdown file, set up as the markdown backend does */
+/** A thread on a markdown file, set up as the doc backend does */
 const markdownThread = (file: Parameters<typeof Thread.open>[0], doc: LiveDoc) =>
   Thread.open(file, {
-    kind: "markdown",
+    kind: "doc",
     skill: "ah-doc",
     kinds: threadKinds,
     port: 7420,
@@ -86,7 +86,7 @@ test("a request goes to the bound session, rendered, after the edits it follows"
       .map((l) => JSON.parse(l))
     expect(lines).toHaveLength(1)
     const content: string[] = lines[0].message.content.split("\n")
-    expect(content[0]).toEqual(header({ kind: "markdown", skill: "ah-doc" }, path, 7420))
+    expect(content[0]).toEqual(header({ kind: "doc", skill: "ah-doc" }, path, 7420))
     expect(content[1]).toEqual(
       'Edit notice: since the last request, the file on disk replaced "world" with "there" after "hello "',
     )
@@ -128,7 +128,7 @@ test("requests no agent took go to the next one, unless handled by then", async 
     const thread = await Thread.open(
       { subject: fileSubject(path), address: () => address },
       {
-        kind: "markdown",
+        kind: "doc",
         skill: "ah-doc",
         kinds: threadKinds,
         port: 7420,
@@ -197,7 +197,7 @@ test("a held request keeps the edit notice it came with", async () => {
     const thread = await Thread.open(
       { subject: fileSubject(path), address: () => address },
       {
-        kind: "markdown",
+        kind: "doc",
         skill: "ah-doc",
         kinds: threadKinds,
         port: 7420,
@@ -219,22 +219,16 @@ test("a held request keeps the edit notice it came with", async () => {
 })
 
 test("the header gives the reply command, with the port only when it isn't the default", () => {
-  expect(header({ kind: "markdown", skill: "ah-doc" }, "/d.md", 7420)).toEqual(
-    "Markdown requests for /d.md (load the /ah-doc skill before handling these, and answer on the page with ah message respond /d.md <phase> <request ids>):",
+  expect(header({ kind: "doc", skill: "ah-doc" }, "/d.md", 7420)).toEqual(
+    "Doc requests for /d.md (load the /ah-doc skill before handling these, and answer on the page with ah message respond /d.md <phase> <request ids>):",
   )
-  expect(header({ kind: "markdown", skill: "ah-doc" }, "/d.md", 7499)).toContain(
+  expect(header({ kind: "doc", skill: "ah-doc" }, "/d.md", 7499)).toContain(
     "ah message respond -p 7499 /d.md <phase>",
   )
 })
 
 test("the header quotes a path that isn't one shell word", () => {
-  expect(
-    header({ kind: "markdown", skill: "ah-doc" }, "/my notes/it's.md", 7420),
-  ).toContain("ah message respond '/my notes/it'\\''s.md' <phase>")
-})
-
-test("a type can title itself in the header", () => {
-  expect(
-    header({ kind: "html", title: "HTML", skill: "ah-page" }, "/d.html", 7420),
-  ).toMatch(/^HTML requests for \/d\.html \(load the \/ah-page skill /)
+  expect(header({ kind: "doc", skill: "ah-doc" }, "/my notes/it's.md", 7420)).toContain(
+    "ah message respond '/my notes/it'\\''s.md' <phase>",
+  )
 })

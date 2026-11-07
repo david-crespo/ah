@@ -1,8 +1,8 @@
-// The markdown backend's routes, under /view/markdown/. Showing, listing and
+// The doc backend's routes, under /view/doc/. Showing, listing and
 // closing files are subjects/files/routes.ts. Each file's page lives at
-// /view/markdown/<id>/, with its doc socket, editor pane's socket, local media, and
+// /view/doc/<id>/, with its doc socket, editor pane's socket, local media, and
 // the route its requests go to (subjects/thread/routes.ts). The client bundles, stylesheets,
-// and GitHub embeds are shared by every file and sit at /view/markdown/
+// and GitHub embeds are shared by every file and sit at /view/doc/
 // itself: bundle.js for a file's page, and preview.js with just the
 // <ah-markdown> element, for other pages that show a file.
 
@@ -24,7 +24,7 @@ import {
 } from "../../subjects/files/files.ts"
 import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
-import { type LiveMarkdown, markdownFiles } from "./files.ts"
+import { type LiveMarkdown, docFiles } from "./files.ts"
 import { fetchBlob, resolveAsset } from "./github.ts"
 import { AGENT, MINE, pick } from "./merge.ts"
 import { bases, complaint, fileAt } from "./revisions.ts"
@@ -35,14 +35,14 @@ import { mediaType } from "../mime.ts"
 const css = { "content-type": "text/css; charset=utf-8" }
 const stylesheets = new Set(["markdown.css", "xterm.css"])
 
-export class MarkdownBackend {
+export class DocBackend {
   files: Files<LiveMarkdown>
-  #bundles = new ClientBundles("markdown")
+  #bundles = new ClientBundles("doc")
 
   /** `port` is the server's, for telling the agent which one to answer, and
    * `directory` where the agents its files are bound to are now */
   constructor(port: number, directory: AgentDirectory) {
-    this.files = new Files(port, markdownFiles, directory)
+    this.files = new Files(port, docFiles, directory)
   }
 
   /** `path` for another view's page to show with <ah-markdown>, without
@@ -71,7 +71,7 @@ export class MarkdownBackend {
       ])
   }
 
-  /** `rest` is the path after /view/markdown/ */
+  /** `rest` is the path after /view/doc/ */
   async handle(req: Request, rest: string): Promise<Response> {
     const { searchParams } = new URL(req.url)
     const fileResponse = await fileRoutes(req, rest, this.files, {
@@ -91,7 +91,7 @@ export class MarkdownBackend {
     }
     if (this.#bundles.has(rest)) return await this.#bundles.response(rest)
     if (stylesheets.has(rest)) {
-      const text = await readFile(assetPath(`views/markdown/${rest}`), "utf8")
+      const text = await readFile(assetPath(`views/doc/${rest}`), "utf8")
       return new Response(text, { headers: css })
     }
     if (rest === "gh/blob") return await ghBlob(searchParams)
@@ -106,7 +106,7 @@ export class MarkdownBackend {
     return new Response("not found", { status: 404 })
   }
 
-  /** `sub` is the path after the file's page, /view/markdown/<id>/ */
+  /** `sub` is the path after the file's page, /view/doc/<id>/ */
   async #page(req: Request, path: string, sub: string): Promise<Response> {
     const { searchParams } = new URL(req.url)
     if (sub === "") {

@@ -37,7 +37,7 @@ export function setUpSelectionComments(
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null
     const range = sel.getRangeAt(0).cloneRange()
     // Triple-clicking the last block selects past it, into whatever follows
-    // the content (markdown's editor toggle), so keep the part inside
+    // the content (doc's editor toggle), so keep the part inside
     if (content.contains(range.startContainer) && !content.contains(range.endContainer)) {
       range.setEnd(content, content.childNodes.length)
     }
@@ -48,7 +48,7 @@ export function setUpSelectionComments(
     const after = range.cloneRange()
     after.setEnd(content, content.childNodes.length)
     after.setStart(range.endContainer, range.endOffset)
-    // Embedded content (markdown's .gh-embed) has no counterpart in the
+    // Embedded content (doc's .gh-embed) has no counterpart in the
     // source; a selection inside one also carries the URL that produced it.
     const anchorEl =
       range.commonAncestorContainer instanceof Element

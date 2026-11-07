@@ -19,7 +19,7 @@ let directory: MemoryDirectory
 let attached: string[]
 let closed: string[]
 const type = {
-  kind: "markdown" as const,
+  kind: "doc" as const,
   skill: "ah-doc",
   kinds,
   attach: async (path: string): Promise<Live> => {
@@ -75,7 +75,7 @@ test("binding a file again moves it to the new agent", async () => {
   expect(info).toMatchObject({ path: a, agent: "block:2", views: [] })
   // The URL names the file
   expect(pathOf(info.id)).toEqual(a)
-  expect(info.url).toEqual(`/view/markdown/${info.id}/`)
+  expect(info.url).toEqual(`/view/doc/${info.id}/`)
 })
 
 test("showing a file leaves its binding alone", async () => {

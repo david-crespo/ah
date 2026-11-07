@@ -6,8 +6,8 @@
 // ~/.local/state/ah/<kind>/, is both the history and what a session catching
 // up reads.
 //
-// The backend serving the page brings the transport to it (markdown's doc socket)
-// and anything the agent should read ahead of each comment (markdown's edits
+// The backend serving the page brings the transport to it (doc's doc socket) and
+// anything the agent should read ahead of each comment (doc's edits
 // since the last one).
 
 import { mkdirSync } from "node:fs"
@@ -41,12 +41,12 @@ function logPath(kind: string, key: SubjectKey): string {
  * and the command that answers them, so the agent doesn't have to work out
  * the subject's key or the server's port. The skill explains the rest. */
 export function header(
-  { kind, title, skill }: Pick<ThreadOptions, "kind" | "title" | "skill">,
+  { kind, skill }: Pick<ThreadOptions, "kind" | "skill">,
   key: SubjectKey,
   port: number,
 ): string {
   const portFlag = port === DEFAULT_PORT ? "" : ` -p ${port}`
-  const tool = title ?? kind[0].toUpperCase() + kind.slice(1)
+  const tool = kind[0].toUpperCase() + kind.slice(1)
   const respond = `ah message respond${portFlag} ${shellWord(key)} <phase> <request ids>`
   return `${tool} requests for ${key} (load the /${skill} skill before handling these, and answer on the page with ${respond}):`
 }
@@ -75,8 +75,6 @@ export interface ThreadOptions {
   kind: string
   /** The skill the header says to load */
   skill: string
-  /** The type's name in the header, if not its name capitalized */
-  title?: string
   /** The requests the type takes */
   kinds: RequestKinds
   /** The server's, for telling the agent which one to answer */

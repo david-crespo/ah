@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// Mermaid, as a bundle of its own (/view/markdown/mermaid.js): it's bigger
+// Mermaid, as a bundle of its own (/view/doc/mermaid.js): it's bigger
 // than everything else in the preview put together, so preview.ts loads it
 // only once a file has a mermaid block.
 

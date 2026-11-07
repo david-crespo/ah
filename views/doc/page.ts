@@ -1,6 +1,6 @@
 // The file page: an <ah-markdown> preview (styled by markdown.css) with the editor pane and the thread's
 // comment popover (views/thread/) around it. Its URLs are relative to
-// /view/markdown/<id>/, and the editor pane and the chat are each left out
+// /view/doc/<id>/, and the editor pane and the chat are each left out
 // when turned off.
 
 import { chatStylesheet, selectionPopover } from "../thread/page.ts"
@@ -388,7 +388,7 @@ ${shortcutsDialog({ editor, chat })}
 
 /** Every open file side by side, each an <ah-markdown> from preview.js:
  * the element on a page other than the file page. Served at
- * /view/markdown/, so its URLs are relative to that. */
+ * /view/doc/, so its URLs are relative to that. */
 export function indexPage(files: { id: string; name: string }[]) {
   const columns = files.map(
     (d) =>

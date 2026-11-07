@@ -20,7 +20,7 @@ async function ghHeaders(): Promise<HeadersInit> {
   return token ? { authorization: `Bearer ${token}` } : {}
 }
 
-const cacheDir = join(cacheHome(), "ah", "markdown")
+const cacheDir = join(cacheHome(), "ah", "doc")
 
 // File contents at a ref. A full commit sha is immutable, so those are cached
 // on disk forever; branch names and short shas are fetched every time.

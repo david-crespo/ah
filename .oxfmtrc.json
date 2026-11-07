@@ -5,6 +5,6 @@
     "dist/**",
     ".claude/**",
     "views/github-markdown.min.css",
-    "views/markdown/xterm.css"
+    "views/doc/xterm.css"
   ]
 }

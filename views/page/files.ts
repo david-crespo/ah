@@ -4,7 +4,7 @@
 import { type FSWatcher, watch } from "node:fs"
 import { dirname } from "node:path"
 import type { FileType, Live, Pages } from "../../subjects/files/files.ts"
-import { htmlKinds } from "./requests.ts"
+import { pageKinds } from "./requests.ts"
 
 /** Tells the file's pages to reload when anything in its directory changes:
  * the file itself, or a script, stylesheet or data file next to it */
@@ -33,11 +33,10 @@ export class LiveReload implements Live {
   }
 }
 
-export const htmlFiles: FileType<LiveReload> = {
-  kind: "html",
+export const pageFiles: FileType<LiveReload> = {
+  kind: "page",
   skill: "ah-page",
-  title: "HTML",
   // Any page can be a task list: it says so by loading task_list.js
-  kinds: htmlKinds,
+  kinds: pageKinds,
   attach: async (path, pages) => new LiveReload(path, pages),
 }

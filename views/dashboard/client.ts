@@ -5,7 +5,7 @@
 // tabs in jj workspaces and which is focused, each workspace's jj log, and
 // each workspace's trackers, and each tab's file (its workspace's current
 // tracker), shown with <ah-markdown> from
-// ../markdown/preview.js, or an html file in a frame of its page on the html
+// ../doc/preview.js, or an html file in a frame of its page on the html
 // pages port.
 
 import type { State } from "./workspace.ts"
@@ -27,7 +27,7 @@ const logs = new Map<string, string>() // root -> html
 const scrollTops = new Map<string, number>() // root -> scroll position, kept across tab switches
 let shown: { root: string | null; html: string | null } = { root: null, html: null }
 // tab -> { path, view }, each view an <ah-markdown> (from
-// ../markdown/preview.js) or an <iframe> that stays in the pane while its
+// ../doc/preview.js) or an <iframe> that stays in the pane while its
 // tab has the file, hidden unless focused, so a tab switch keeps its
 // scroll and doesn't reconnect
 const docs = new Map<string, { path: string; view: HTMLElement }>()

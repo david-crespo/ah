@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// <ah-markdown src="/view/markdown/<id>/">: the live, read-only GFM preview
+// <ah-markdown src="/view/doc/<id>/">: the live, read-only GFM preview
 // of one open file, or its AsciiDoc rendered by Asciidoctor (asciidoc.ts),
 // as a custom element so any ah page can hold one. The
 // file page puts one next to its helix pane and comment popover (client.ts);

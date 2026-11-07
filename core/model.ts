@@ -180,29 +180,29 @@ export interface WorkspaceRecord {
 export type ChangeId = string
 
 /** The kinds of subject that are files. A file's is by its extension. */
-export const FILE_KINDS = ["markdown", "html"] as const
+export const FILE_KINDS = ["doc", "page"] as const
 export type FileKind = (typeof FILE_KINDS)[number]
 
-/** A file's kind: html for .html and .htm, markdown for anything else,
- * AsciiDoc included: the markdown view renders both */
+/** A file's kind: page for .html and .htm, doc for anything else,
+ * AsciiDoc included: the doc view renders both */
 export const fileKind = (path: string): FileKind =>
-  /\.html?$/i.test(path) ? "html" : "markdown"
+  /\.html?$/i.test(path) ? "page" : "doc"
 
 /** Subjects there's only one of, known by their kind */
 export const SINGLETONS = ["github-notifications"] as const
 export type Singleton = (typeof SINGLETONS)[number]
 
 /** What a view ah hosts or binds is about. The kind is the subject's type,
- * which decides the views that can show it. A file's is by extension: html
- * or markdown. An html page is its own view, and decides what it is (a task
+ * which decides the views that can show it. A file's is by extension: page
+ * or doc. A page is its own view, and decides what it is (a task
  * list, say) and the requests it sends. Views Rex places without ah (the
  * harness TUI, glow) aren't covered.
  *
  * Partly a target rather than what the code does: only the file kinds are
  * built, and code that handles them mostly takes a path and a `FileKind`. */
 export type Subject =
-  | { kind: "markdown"; path: string }
-  | { kind: "html"; path: string }
+  | { kind: "doc"; path: string }
+  | { kind: "page"; path: string }
   /** Not built: the GitHub tool's, for the threads it shows */
   | { kind: Singleton }
   /** Not built: there's no diff view yet */
@@ -222,7 +222,7 @@ export type FileSubject = Extract<Subject, { kind: FileKind }>
 export const fileSubject = (path: string): FileSubject => ({ kind: fileKind(path), path })
 
 export const isFile = (subject: Subject): subject is FileSubject =>
-  subject.kind === "markdown" || subject.kind === "html"
+  subject.kind === "doc" || subject.kind === "page"
 
 /** A requestable subject as a string, for keeping its thread, binding and
  * held requests by, in the registry and in its log's name: a file's

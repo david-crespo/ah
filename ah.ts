@@ -5,7 +5,7 @@
 // under it, and all of them the model's types (core/model.ts):
 //
 // - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
-//   and the markdown and html subject types that serve a file's views. What
+//   and the doc and page subject types that serve a file's views. What
 //   more than one view uses is at the top of views/ (the terminal theme,
 //   GitHub's markdown styles) and in views/thread/ (the conversation panel
 //   and selection popover).
@@ -28,8 +28,8 @@ import type { Duplex } from "node:stream"
 import { WebSocketServer, type WebSocket } from "ws"
 import { debugTabs } from "./views/dashboard/cli.ts"
 import { Dashboard } from "./views/dashboard/routes.ts"
-import { MarkdownBackend } from "./views/markdown/routes.ts"
-import { HtmlBackend } from "./views/html/routes.ts"
+import { DocBackend } from "./views/doc/routes.ts"
+import { PageBackend } from "./views/page/routes.ts"
 import { message, tool, windows } from "./views/cli.ts"
 import { debugAgents, workspace } from "./core/cli.ts"
 import { hook } from "./core/hook.ts"
@@ -107,25 +107,25 @@ async function serve(port: number) {
   )
 
   const chatCss = await readFile(assetPath("views/thread/chat.css"), "utf8")
-  const taskListCss = await readFile(assetPath("views/html/task_list.css"), "utf8")
+  const taskListCss = await readFile(assetPath("views/page/task_list.css"), "utf8")
 
   // Agents' HTML pages run whatever scripts they include, so they get an
-  // origin of their own, which this port refuses (views/html/routes.ts)
+  // origin of their own, which this port refuses (views/page/routes.ts)
   const pagesPort = port + 1
   // The core: the agents, and where pages find the ones they're bound to
   const core = Core.load()
-  const markdownBackend = new MarkdownBackend(port, core)
-  const htmlBackend = new HtmlBackend(port, pagesPort, core, core.trackers)
+  const docBackend = new DocBackend(port, core)
+  const pageBackend = new PageBackend(port, pagesPort, core, core.trackers)
   const dashboardBackend = new Dashboard({
-    markdown: markdownBackend,
-    html: htmlBackend,
+    doc: docBackend,
+    page: pageBackend,
     core,
   })
   const tabTitles = new TitleSetter()
   const routes = {
     dashboard: dashboardBackend,
-    markdown: markdownBackend,
-    html: htmlBackend,
+    doc: docBackend,
+    page: pageBackend,
   } satisfies Record<string, ViewRoutes>
 
   // One watcher for everything that follows the terminal, and one agent
@@ -147,7 +147,7 @@ async function serve(port: number) {
   core.subscribe((registry) => tabTitles.onRegistry(registry))
   // What windows show, so an agent hears when one it opened closes
   core.watchShowing(() => ({
-    files: [...markdownBackend.files.presence(), ...htmlBackend.files.presence()],
+    files: [...docBackend.files.presence(), ...pageBackend.files.presence()],
     dashboard: dashboardBackend.presence.open(),
   }))
   // An agent starting or going away: held comments go to whoever is there
@@ -156,8 +156,8 @@ async function serve(port: number) {
   const refreshThreads = () => {
     const held = (kind: FileKind) =>
       core.held.flatMap((subject) => (subject.kind === kind ? [subject.path] : []))
-    markdownBackend.files.refresh(held("markdown"))
-    htmlBackend.files.refresh(held("html"))
+    docBackend.files.refresh(held("doc"))
+    pageBackend.files.refresh(held("page"))
   }
   refreshThreads()
   core.subscribe(refreshThreads)
@@ -177,7 +177,7 @@ async function serve(port: number) {
     const view: ViewRoutes = routes[name]
     return { name, view, rest: m[2] }
   }
-  const pageRoute = (pathname: string) => pathname.match(/^\/view\/html\/(.*)$/)?.[1]
+  const pageRoute = (pathname: string) => pathname.match(/^\/view\/page\/(.*)$/)?.[1]
 
   const cssResponse = (text: string) =>
     new Response(text, { headers: { "content-type": "text/css; charset=utf-8" } })
@@ -199,7 +199,7 @@ async function serve(port: number) {
       return Response.json({
         pid: process.pid,
         pages: dashboardBackend.pages,
-        views: markdownBackend.files.pageCount + htmlBackend.files.pageCount,
+        views: docBackend.files.pageCount + pageBackend.files.pageCount,
         startedAt,
         rex: rexHealth(),
       } satisfies Status)
@@ -215,7 +215,7 @@ async function serve(port: number) {
   const pagesRoutes = (req: Request) => {
     const { pathname } = new URL(req.url)
     const rest = pageRoute(pathname)
-    if (rest !== undefined) return htmlBackend.handlePage(req, rest)
+    if (rest !== undefined) return pageBackend.handlePage(req, rest)
     if (pathname === "/chat.css") return cssResponse(chatCss)
     if (pathname === "/task_list.css") return cssResponse(taskListCss)
     return new Response("not found", { status: 404 })
@@ -283,7 +283,7 @@ async function serve(port: number) {
     pagesHandler,
     (pathname, query) => {
       const rest = pageRoute(pathname)
-      return rest === undefined ? null : htmlBackend.upgradePage(rest, query)
+      return rest === undefined ? null : pageBackend.upgradePage(rest, query)
     },
     () => console.error(`ah: serving html pages on http://127.0.0.1:${pagesPort}`),
     port,

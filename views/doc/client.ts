@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// Browser half of ah's markdown file page, served as /view/markdown/bundle.js
+// Browser half of ah's markdown file page, served as /view/doc/bundle.js
 // (see platform/bundle.ts). The preview itself is the <ah-markdown>
 // element (preview.ts); this adds what only the file page has: the editor in a
 // collapsible pane (editor.ts), the thread's conversation and

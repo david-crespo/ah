@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// A task list's items, served as /view/html/task_list.js; the page loads it
+// A task list's items, served as /view/page/task_list.js; the page loads it
 // and /task_list.css itself. The agent writes each item as
 //
 //   <ah-item id="4" status="done">
@@ -17,7 +17,7 @@
 // and its title line shows a dot per step in its status's color. Steps are lettered in order, so
 // the second step of item 3 is 3B. Open and hold items get a Go button,
 // which posts a `go` request with the item's id and title into the page's
-// thread (views/html/requests.ts); a question item waits for the user's
+// thread (views/page/requests.ts); a question item waits for the user's
 // answer instead. Every item gets a comment button, which opens a box for an
 // `item-comment` request. Each status icon opens a menu of statuses, and a
 // pick posts a `status` request for the agent to set it. Each button shows its last request's state from

@@ -34,4 +34,4 @@ const target = (args: Record<string, string>) =>
   args.step ? `step ${args.item}${args.step}` : `item ${args.item}`
 
 /** What an HTML page takes: the chat panel's requests and a task list's */
-export const htmlKinds: RequestKinds = { ...threadKinds, ...taskListKinds }
+export const pageKinds: RequestKinds = { ...threadKinds, ...taskListKinds }

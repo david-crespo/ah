@@ -3,15 +3,15 @@
 // to onRex; the dashboard keeps a live jj log for
 // every open workspace (jj.ts), and pushes both to the page (page.html, with
 // its script in client.ts), along with each tab's file, its workspace's
-// current tracker (core/trackers.ts), which the page shows with markdown's <ah-markdown>
+// current tracker (core/trackers.ts), which the page shows with doc's <ah-markdown>
 // element, or in a frame for an html file. The focused workspace gets
 // snapshotted once edits settle, so @ stays current between jj commands.
 
 import { readFile } from "node:fs/promises"
 import { assetPath } from "../../platform/assets.ts"
 import { ClientBundles } from "../../platform/bundle.ts"
-import type { HtmlBackend } from "../html/routes.ts"
-import type { MarkdownBackend } from "../markdown/routes.ts"
+import type { PageBackend } from "../page/routes.ts"
+import type { DocBackend } from "../doc/routes.ts"
 import type { Core } from "../../core/core.ts"
 import {
   fileKind,
@@ -69,8 +69,8 @@ const docEvent = (tab: string, doc: ShownDoc | null) =>
 export interface DashboardOptions {
   /** The page shows each file with <ah-markdown> or in a frame of an html
    * page, so the backend has to hold the file open before the page hears about it */
-  markdown: MarkdownBackend
-  html: HtmlBackend
+  doc: DocBackend
+  page: PageBackend
   /** The agents, whose files the tabs show */
   core: Core
 }
@@ -158,11 +158,11 @@ export class Dashboard {
   /** Open the file in the backend that shows it. An html page is dark and
    * see-through, to match the dashboard. */
   async #show(path: string): Promise<ShownDoc | null> {
-    if (fileKind(path) === "html") {
-      const info = await this.options.html.show(path)
+    if (fileKind(path) === "page") {
+      const info = await this.options.page.show(path)
       return info && { path, url: `${info.url}?in=dashboard`, frame: true }
     }
-    const info = await this.options.markdown.show(path)
+    const info = await this.options.doc.show(path)
     return info && { path, url: info.url, frame: false }
   }
 

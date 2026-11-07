@@ -1,6 +1,6 @@
 ; Keep every helix buffer up to date with its file on disk: reload the
 ; agent's edits, or merge them into unsaved text, by the rules in
-; views/markdown/editor.ts. ah.scm requires this, so it runs in every helix
+; views/doc/editor.ts. ah.scm requires this, so it runs in every helix
 ; that loads ah's Steel config, not just ah's editor pane. Runs on
 ; mattwparas's steel-event-system.
 ;

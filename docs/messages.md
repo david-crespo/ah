@@ -13,7 +13,7 @@ Everything `ah` sends an agent is plain text. It appears to the agent as if you 
 Requests from a page (comments, chat messages, Go buttons) belong to a thread, with one thread per file. Each message sent to the agent has a header line, any context lines, and then one line per request:
 
 ```
-Markdown requests for /Users/david/repos/ah/README.md (load the /ah-doc skill before handling these, and answer on the page with ah message respond /Users/david/repos/ah/README.md <phase> <request ids>):
+Doc requests for /Users/david/repos/ah/README.md (load the /ah-doc skill before handling these, and answer on the page with ah message respond /Users/david/repos/ah/README.md <phase> <request ids>):
 Request 22e00d40-34dd-4d34-a7f7-1f04315e1416: a comment on the passage "a session ID":
 accurate?
 ```
@@ -22,7 +22,7 @@ The header tells the agent which file the message is for, which agent skill says
 
 Each request starts with `Request <id>: `, or `Request <id>, answering <earlier id>: ` when you're replying to a question from the agent. The agent passes that request ID back to `ah message respond`.
 
-The rest of the request depends on its kind (`subjects/thread/kinds.ts`, `views/html/requests.ts`):
+The rest of the request depends on its kind (`subjects/thread/kinds.ts`, `views/page/requests.ts`):
 
 | Kind           | From                            | What the agent reads                                                                                                   |
 | -------------- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
@@ -37,7 +37,7 @@ Selections are quoted from the rendered text, not the source, with up to 60 char
 
 ### Edit notices
 
-On a markdown file, a request can be preceded by a context line describing how the file changed on disk since the last request. This covers both your own saves in Helix and the agent's edits (`views/markdown/doc.ts`):
+On a markdown file, a request can be preceded by a context line describing how the file changed on disk since the last request. This covers both your own saves in Helix and the agent's edits (`views/doc/doc.ts`):
 
 ```
 Edit notice: since the last request, the file on disk replaced "<old>" with "<new>" after "<40 characters before>"
@@ -97,7 +97,7 @@ Each run of work on one or more requests has a work ID, which defaults to `w-<fi
 
 ## The log
 
-Each thread is stored as an append-only JSON Lines file in `~/.local/state/ah/<markdown|html>/`, named after the file's absolute path with slashes replaced by dashes and ending in `.comments.jsonl` (`subjects/thread/events.ts`). It holds the conversation history that pages show. A new agent session can read it to catch up, but doesn't receive that history automatically. There are three record types:
+Each thread is stored as an append-only JSON Lines file in `~/.local/state/ah/<doc|page>/`, named after the file's absolute path with slashes replaced by dashes and ending in `.comments.jsonl` (`subjects/thread/events.ts`). It holds the conversation history that pages show. A new agent session can read it to catch up, but doesn't receive that history automatically. There are three record types:
 
 ```json
 {"type":"request","kind":"comment","text":"accurate?","args":{"selection":"a session ID"},"id":"22e00d40-…","seq":176,"at":"2026-10-26T18:44:10.101Z"}
@@ -157,7 +157,7 @@ This registers the file, binds it to that agent, and opens the page. The printed
 Click **Say hello**. The POST returns a `request` object with an `id`, along with `agentConnected` to indicate whether it reached the agent. The agent receives:
 
 ```text
-HTML requests for /path/to/workspace/hello/index.html (load the /ah-page skill before handling these, and answer on the page with ah message respond /path/to/workspace/hello/index.html <phase> <request ids>):
+Page requests for /path/to/workspace/hello/index.html (load the /ah-page skill before handling these, and answer on the page with ah message respond /path/to/workspace/hello/index.html <phase> <request ids>):
 Request <request-id>: Say hello in this page's chat.
 ```
 
@@ -171,10 +171,10 @@ ah message respond hello/index.html done <request-id> --text 'Hello!'
 
 | Origin                  | Endpoint                           | Purpose                                         |
 | ----------------------- | ---------------------------------- | ----------------------------------------------- |
-| `http://127.0.0.1:7420` | `POST /view/markdown/<id>/request` | Submit a markdown page request.                 |
-| `http://127.0.0.1:7421` | `POST /view/html/<id>/_ah/request` | Submit an HTML page request.                    |
-| `ws://127.0.0.1:7420`   | `/view/markdown/<id>/doc`          | Receive document changes and thread updates.    |
-| `ws://127.0.0.1:7421`   | `/view/html/<id>/_ah/socket`       | Receive page reload notices and thread updates. |
+| `http://127.0.0.1:7420` | `POST /view/doc/<id>/request`      | Submit a markdown page request.                 |
+| `http://127.0.0.1:7421` | `POST /view/page/<id>/_ah/request` | Submit an HTML page request.                    |
+| `ws://127.0.0.1:7420`   | `/view/doc/<id>/doc`               | Receive document changes and thread updates.    |
+| `ws://127.0.0.1:7421`   | `/view/page/<id>/_ah/socket`       | Receive page reload notices and thread updates. |
 
 Both request endpoints take chat messages and selection comments. For example:
 
@@ -215,4 +215,4 @@ Then finish the work using the same `workId`:
 { "phase": "done", "requests": ["<request-id>"], "workId": "w1", "text": "Hello!" }
 ```
 
-Request kinds and fields are defined in [subjects/thread/kinds.ts](../subjects/thread/kinds.ts) and [views/html/requests.ts](../views/html/requests.ts), and activity validation is in [subjects/thread/events.ts](../subjects/thread/events.ts).
+Request kinds and fields are defined in [subjects/thread/kinds.ts](../subjects/thread/kinds.ts) and [views/page/requests.ts](../views/page/requests.ts), and activity validation is in [subjects/thread/events.ts](../subjects/thread/events.ts).

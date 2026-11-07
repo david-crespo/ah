@@ -130,7 +130,7 @@ the id is what `ah message respond` takes.
   changed blocks. Post a short completion summary to the page. General
   answers can be longer and use Markdown. Keep draft-related replies in the
   page rather than requiring the user to switch back to the TUI.
-- Comments are also logged under `~/.local/state/ah/markdown/`, one file per
+- Comments are also logged under `~/.local/state/ah/doc/`, one file per
   draft named by its absolute path with slashes flattened. If a delivery
   failed or the session restarted, `ah message pending <file>` lists
   what's unhandled.
@@ -184,7 +184,7 @@ The preview expands the same bare URLs GitHub does in issue and PR bodies:
 - A blob permalink with a line range on its own line
   (`https://github.com/o/r/blob/<sha>/path#L10-L20`) renders as a code
   snippet with line numbers and highlighting. Use full commit shas: contents
-  are cached forever under `~/.cache/ah/markdown/` since a sha is immutable.
+  are cached forever under `~/.cache/ah/doc/` since a sha is immutable.
   Branch refs work but are refetched on every render.
 - A `github.com/user-attachments/assets/<id>` URL on its own line renders as
   an image or video. Only public-repo assets load; private ones are gated on

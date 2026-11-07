@@ -17,8 +17,8 @@ const upstream = { host: "127.0.0.1", port: 7421 }
 const listenPort = 7430
 
 const allowed = (path) =>
-  pageIds.some((id) => path.startsWith(`/view/html/${id}/`)) ||
-  /^\/view\/html\/[\w.-]+\.(js|css)$/.test(path) ||
+  pageIds.some((id) => path.startsWith(`/view/page/${id}/`)) ||
+  /^\/view\/page\/[\w.-]+\.(js|css)$/.test(path) ||
   /^\/[\w.-]+\.css$/.test(path)
 
 http
@@ -40,5 +40,5 @@ http
     up.end()
   })
   .listen(listenPort, lanIp, () => {
-    for (const id of pageIds) console.log(`http://${lanIp}:${listenPort}/view/html/${id}/`)
+    for (const id of pageIds) console.log(`http://${lanIp}:${listenPort}/view/page/${id}/`)
   })

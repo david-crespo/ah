@@ -2,9 +2,9 @@
 // an agent wrote, with a conversation back to the agent, and the workspace's
 // trackers, which the dashboard shows; the windows they're in; and the
 // messages between pages and agents. `ah tool doc` is a markdown or AsciiDoc
-// file, rendered by ah with a helix pane (views/markdown/); `ah tool page` is
+// file, rendered by ah with a helix pane (views/doc/); `ah tool page` is
 // an HTML file, the agent's own page, served as is on an origin of its own
-// (views/html/). Showing, listing and closing (subjects/files/), the thread
+// (views/page/). Showing, listing and closing (subjects/files/), the thread
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
@@ -29,9 +29,9 @@ import { currentAgent } from "../platform/session.ts"
 import { focusHere } from "../platform/focus.ts"
 import { openFloat } from "../platform/rex.ts"
 import { ensureDashboardPage } from "./dashboard/api.ts"
-import { mergeDisk } from "./markdown/merge.ts"
+import { mergeDisk } from "./doc/merge.ts"
 import { dashboard } from "./dashboard/cli.ts"
-import { docFormat } from "./markdown/doc.ts"
+import { docFormat } from "./doc/doc.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
 import { sendToTab } from "../core/send.ts"
 import {
@@ -39,7 +39,7 @@ import {
   setTrackerStatus,
   workspaceTrackers,
 } from "../core/tracker_api.ts"
-import { taskListPage } from "./html/task_list_file.ts"
+import { taskListPage } from "./page/task_list_file.ts"
 
 /** Where the file's thread takes the agent's events, or requests from
  * outside its page */
@@ -153,7 +153,7 @@ doc
   .action(async (file, { in: place, editor, chat, diffFrom, port }) => {
     if (!file) return doc.help()
     const path = openablePathOrDie(file)
-    if (fileKind(path) === "html") die(`ah tool doc: ${file} is HTML; use ah tool page`)
+    if (fileKind(path) === "page") die(`ah tool doc: ${file} is HTML; use ah tool page`)
     const glow = place === "split" || place === "float" || place === "here"
     if (glow && docFormat(path) === "asciidoc") {
       die(`ah tool doc --in ${place}: glow only shows markdown`)
@@ -251,7 +251,7 @@ const page = new Command("page")
     if (name !== undefined)
       die("ah tool page --name: URLs only; a file's window is named after it")
     const path = openablePathOrDie(file)
-    if (fileKind(path) !== "html") die(`ah tool page: ${file} isn't HTML; use ah tool doc`)
+    if (fileKind(path) !== "page") die(`ah tool page: ${file} isn't HTML; use ah tool doc`)
     await openFile(path, place, port, chat ? {} : { chat: "off" })
   })
 

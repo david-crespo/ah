@@ -1,4 +1,4 @@
-// The html backend's routes, under /view/html/, on two ports. An agent's HTML can
+// The page backend's routes, under /view/page/, on two ports. An agent's HTML can
 // run any script, a CDN's included, so its pages get a port of their own (the
 // server's port + 1): a separate origin, which the API port refuses
 // (platform/origin.ts), so a page can't read files, list sessions, or post into
@@ -8,7 +8,7 @@
 // each file's thread, where the agent answers (subjects/files/routes.ts). A
 // page's URL there redirects to the pages port.
 //
-// The pages port has a file's page, /view/html/<id>/: the file as is, with the
+// The pages port has a file's page, /view/page/<id>/: the file as is, with the
 // thread's stylesheet, popover and client script added before </body>, and
 // for a tracker, its status.
 // Everything else under <id>/ is the files next to it, so the page's relative
@@ -37,7 +37,7 @@ import {
 } from "../../subjects/files/files.ts"
 import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
-import { htmlFiles, type LiveReload } from "./files.ts"
+import { pageFiles, type LiveReload } from "./files.ts"
 import { escapeHtml } from "../escape.ts"
 import { contentTypes } from "../mime.ts"
 
@@ -62,7 +62,7 @@ export function inject(
     status = null,
   }: { chat: boolean; dashboard?: boolean; status?: TrackerStatus | null },
 ): string {
-  const script = `<script type="module" src="/view/html/chat.js" data-ah-thread="/view/html/${id}/_ah/"${chat ? "" : ' data-ah-chat="off"'}></script>`
+  const script = `<script type="module" src="/view/page/chat.js" data-ah-thread="/view/page/${id}/_ah/"${chat ? "" : ' data-ah-chat="off"'}></script>`
   const tags = [
     ...(status ? [`<meta name="ah-status" content="${status}">`] : []),
     ...(dashboard ? [dashboardStyle] : []),
@@ -73,9 +73,9 @@ export function inject(
   return end < 0 ? html + "\n" + tags : html.slice(0, end) + tags + "\n" + html.slice(end)
 }
 
-export class HtmlBackend {
+export class PageBackend {
   files: Files<LiveReload>
-  #bundles = new ClientBundles("html")
+  #bundles = new ClientBundles("page")
   /** Where the pages are */
   readonly pagesOrigin: string
 
@@ -93,7 +93,7 @@ export class HtmlBackend {
   ) {
     this.#trackers = trackers
     this.pagesOrigin = `http://127.0.0.1:${pagesPort}`
-    this.files = new Files(port, htmlFiles, directory, { pageOrigin: this.pagesOrigin })
+    this.files = new Files(port, pageFiles, directory, { pageOrigin: this.pagesOrigin })
   }
 
   /** `path` for the dashboard to show in a frame, leaving any binding
@@ -103,14 +103,14 @@ export class HtmlBackend {
     return this.files.show(path)
   }
 
-  /** On the API port; `rest` is the path after /view/html/ */
+  /** On the API port; `rest` is the path after /view/page/ */
   async handle(req: Request, rest: string): Promise<Response> {
     const fileResponse = await fileRoutes(req, rest, this.files, {
       shown: () => this.#bundles.prebuild("chat.js"),
       page: async (req, _path, id, sub) => {
         if (req.method !== "GET") return notFound()
         const { search } = new URL(req.url)
-        const url = new URL(`/view/html/${id}/${sub}${search}`, this.pagesOrigin)
+        const url = new URL(`/view/page/${id}/${sub}${search}`, this.pagesOrigin)
         return Response.redirect(url, 302)
       },
     })
@@ -120,7 +120,7 @@ export class HtmlBackend {
     return notFound()
   }
 
-  /** On the pages port; `rest` is the path after /view/html/ */
+  /** On the pages port; `rest` is the path after /view/page/ */
   async handlePage(req: Request, rest: string): Promise<Response> {
     if (this.#bundles.has(rest)) return await this.#bundles.response(rest)
     const m = rest.match(/^([^/]+)(\/?)(.*)$/)
@@ -128,7 +128,7 @@ export class HtmlBackend {
     if (!m || !path || !(await isFile(path))) return notFound()
     const [, id, slash, sub] = m
     // The page's URLs are relative to its directory
-    if (!slash) return Response.redirect(new URL(`/view/html/${id}/`, req.url), 302)
+    if (!slash) return Response.redirect(new URL(`/view/page/${id}/`, req.url), 302)
     return await this.#page(req, path, id, sub)
   }
 
@@ -143,7 +143,7 @@ export class HtmlBackend {
       ])
   }
 
-  /** `sub` is the path after the file's page, /view/html/<id>/ */
+  /** `sub` is the path after the file's page, /view/page/<id>/ */
   async #page(req: Request, path: string, id: string, sub: string): Promise<Response> {
     // A task list's Park, Done, and Resume buttons: the server sets its
     // status, without the agent

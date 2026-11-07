@@ -3,15 +3,15 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, test } from "vitest"
 import { MemoryDirectory } from "../../subjects/files/testing.ts"
-import { HtmlBackend, inject } from "./routes.ts"
+import { PageBackend, inject } from "./routes.ts"
 
 test("ah's tags go before the last </body>", () => {
   const html = '<body><script>const s = "</body>"</script></BODY >\n</html>'
   const out = inject(html, "dash-1a2b3c4d", { chat: true })
-  const at = out.indexOf('<script type="module" src="/view/html/chat.js"')
+  const at = out.indexOf('<script type="module" src="/view/page/chat.js"')
   expect(at).toBeGreaterThan(out.indexOf('"</body>"'))
   expect(at).toBeLessThan(out.indexOf("</BODY >"))
-  expect(out).toContain('data-ah-thread="/view/html/dash-1a2b3c4d/_ah/"')
+  expect(out).toContain('data-ah-thread="/view/page/dash-1a2b3c4d/_ah/"')
   expect(out).toContain('<div id="popover">')
 })
 
@@ -32,11 +32,11 @@ test("in the dashboard, dark and see-through over the page's own style", () => {
 
 describe("the API and pages ports", () => {
   let dir: string
-  let backend: HtmlBackend
+  let backend: PageBackend
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), "ah-html-"))
     process.env.XDG_STATE_HOME = join(dir, "state")
-    backend = new HtmlBackend(7420, 7421, new MemoryDirectory())
+    backend = new PageBackend(7420, 7421, new MemoryDirectory())
   })
   afterEach(async () => {
     delete process.env.XDG_STATE_HOME
@@ -46,10 +46,10 @@ describe("the API and pages ports", () => {
   // `rest` is the path alone, as the server passes it
   const rest = (path: string) => path.split("?")[0]
   const api = (path: string, init?: RequestInit) =>
-    backend.handle(new Request(`http://127.0.0.1:7420/view/html/${path}`, init), rest(path))
+    backend.handle(new Request(`http://127.0.0.1:7420/view/page/${path}`, init), rest(path))
   const pages = (path: string, init?: RequestInit) =>
     backend.handlePage(
-      new Request(`http://127.0.0.1:7421/view/html/${path}`, init),
+      new Request(`http://127.0.0.1:7421/view/page/${path}`, init),
       rest(path),
     )
 
@@ -66,14 +66,14 @@ describe("the API and pages ports", () => {
 
   test("a page lives on the pages port, and the API port sends it there", async () => {
     const { id, url } = await open("report.html")
-    expect(url).toEqual(`http://127.0.0.1:7421/view/html/${id}/`)
+    expect(url).toEqual(`http://127.0.0.1:7421/view/page/${id}/`)
     const page = await pages(`${id}/`)
     expect(await page.text()).toContain("<p>hi</p>")
     expect((await pages(`${id}/data.json`)).status).toEqual(200)
     const redirect = await api(`${id}/data.json?x=1`)
     expect(redirect.status).toEqual(302)
     expect(redirect.headers.get("location")).toEqual(
-      `http://127.0.0.1:7421/view/html/${id}/data.json?x=1`,
+      `http://127.0.0.1:7421/view/page/${id}/data.json?x=1`,
     )
   })
 
