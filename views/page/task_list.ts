@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// A task list's items, served as /view/page/task_list.js; the page loads it
+// A task list's items, served as /task_list.js on the pages port; the page loads it
 // and /task_list.css itself. The agent writes each item as
 //
 //   <ah-item id="4" status="done">

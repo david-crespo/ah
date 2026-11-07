@@ -39,6 +39,7 @@ import {
   type AgentId,
   type AgentRef,
   type BlockId,
+  fileSubject,
   HARNESSES,
   isFile,
   keySubject,
@@ -48,9 +49,11 @@ import {
   type Route,
   type SubjectKey,
   subjectKey,
+  type WorkspaceRoot,
 } from "./model.ts"
 import { Notices, type Showing, startContext } from "./notices.ts"
 import { Trackers } from "./trackers.ts"
+import { doctorNotice, type Outdated, Upgrades } from "./upgrades.ts"
 import { focusedBlock, pickBlock, readTuis } from "./tuis.ts"
 import { rootFinder } from "./workspace.ts"
 import {
@@ -144,6 +147,10 @@ export class Core implements AgentDirectory {
   #gotRex = () => {}
   #listeners: Listener[] = []
   #notices = new Notices()
+  /** Files in people's repos that use an old ah format */
+  #upgrades = new Upgrades([])
+  /** How many problems `ah doctor` finds with ah's setup */
+  #setupProblems = () => 0
   /** What windows show, from the backends (watchShowing) */
   #showing: () => Showing = () => ({ files: [], dashboard: false })
   /** Blocks named by an event in the last few seconds, which the
@@ -191,6 +198,17 @@ export class Core implements AgentDirectory {
    * opened stops showing */
   watchShowing(showing: () => Showing) {
     this.#showing = showing
+  }
+
+  /** Where files that use an old ah format are kept track of, and how to
+   * count problems with ah's setup, for telling agents and for `ah doctor`.
+   * Checks every tracker it has a record of. */
+  useUpgrades(upgrades: Upgrades, setupProblems: () => number) {
+    this.#upgrades = upgrades
+    this.#setupProblems = setupProblems
+    upgrades.scan(
+      [...this.registry.trackers.values()].flatMap((w) => w.trackers.map((t) => t.path)),
+    )
   }
 
   /** Hear about every change, with the blocks whose tabs it touched */
@@ -431,6 +449,25 @@ export class Core implements AgentDirectory {
     return tabOf(this.#rex, block)?.id ?? null
   }
 
+  /** The files that use an old ah format in the workspace at `root`, or in
+   * all with null. A file is in the workspace its path is in, any whose
+   * trackers it's among, and the one the agent it's bound to is in. */
+  #outdatedIn(root: WorkspaceRoot | null): Outdated[] {
+    const all = this.#upgrades.outdated()
+    if (root === null) return all
+    const rootOf = rootFinder()
+    const inRoot = (path: string) => {
+      const own = rootOf(path)
+      // Outside jj, a workspace is a directory, holding what's under it
+      if (own === root || (own === null && path.startsWith(`${root}/`))) return true
+      if (this.registry.trackers.get(root)?.trackers.some((t) => t.path === path))
+        return true
+      const cwd = this.registry.agents.get(this.binding(fileSubject(path)) ?? "")?.cwd
+      return !!cwd && (rootOf(cwd) ?? cwd) === root
+    }
+    return all.filter((o) => inRoot(o.path))
+  }
+
   async #workspaceOf(ref: AgentRef): Promise<string | null> {
     const home = await this.homeOf(ref)
     return home && this.trackers.workspaceOf(home)
@@ -449,7 +486,9 @@ export class Core implements AgentDirectory {
       const active = this.trackers
         .get(root)
         .active.flatMap((t) => ("path" in t.subject ? [t.subject.path] : []))
-      return startContext(current, active)
+      const doctor = doctorNotice(this.#outdatedIn(root), this.#setupProblems())
+      const lines = [startContext(current, active), doctor].filter(Boolean)
+      return lines.length ? lines.join("\n\n") : null
     }
     const lines = this.#notices.since(agent, current, this.#showing())
     return lines.length ? lines.join("\n") : null
@@ -607,6 +646,9 @@ export class Core implements AgentDirectory {
         done: this.trackers.done(root),
       })
     }
+    if (rest === "upgrades" && req.method === "GET")
+      // ?root=: the files that use an old format, in that workspace or all
+      return Response.json(this.#outdatedIn(new URL(req.url).searchParams.get("root")))
     if (rest === "agents-near" && req.method === "GET") {
       // ?block=: the live agents in its tab, in its layout order
       const block = new URL(req.url).searchParams.get("block")

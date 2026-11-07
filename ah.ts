@@ -30,15 +30,19 @@ import { debugTabs } from "./views/dashboard/cli.ts"
 import { Dashboard } from "./views/dashboard/routes.ts"
 import { DocBackend } from "./views/doc/routes.ts"
 import { PageBackend } from "./views/page/routes.ts"
+import { pageScripts } from "./views/page/upgrade.ts"
 import { message, tool, windows } from "./views/cli.ts"
-import { debugAgents, workspace } from "./core/cli.ts"
+import { debugAgents, doctor, workspace } from "./core/cli.ts"
 import { hook } from "./core/hook.ts"
 import { watchOpencode } from "./core/opencode.ts"
 import { Core } from "./core/core.ts"
+import { Upgrades } from "./core/upgrades.ts"
 import { TitleSetter } from "./core/tabtitle/setter.ts"
 import { assetPath } from "./platform/assets.ts"
+import { upgradeState } from "./platform/state_version.ts"
 import { boxCss } from "./views/dashboard/box.ts"
 import { die, portOption } from "./platform/cli.ts"
+import { installProblems } from "./platform/install_check.ts"
 import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
@@ -97,6 +101,8 @@ interface ViewRoutes {
 async function serve(port: number) {
   const startedAt = Date.now()
   scrubSessionEnv(process.env)
+  // Before anything reads ah's state
+  for (const line of upgradeState()) console.error(line)
   const css = themeCss() + boxCss()
   // The stylesheet follows the OS theme, as the markdown pages do. The
   // dashboard is always dark, like the terminal, so its copy drops the light
@@ -116,6 +122,9 @@ async function serve(port: number) {
   const pagesPort = port + 1
   // The core: the agents, and where pages find the ones they're bound to
   const core = Core.load()
+  // Files in people's repos that use an old ah format, and ah's setup
+  const upgrades = new Upgrades([pageScripts])
+  core.useUpgrades(upgrades, () => installProblems().length)
   const docBackend = new DocBackend(port, core)
   // A stack page's PR body opens in the doc page, as `ah tool doc` would open it
   const openDoc = async (path: string, agent: AgentId | null) => {
@@ -130,7 +139,14 @@ async function serve(port: number) {
       views.includes("window"),
     )
   }
-  const pageBackend = new PageBackend(port, pagesPort, core, core.trackers, openDoc)
+  const pageBackend = new PageBackend(
+    port,
+    pagesPort,
+    core,
+    core.trackers,
+    openDoc,
+    upgrades,
+  )
   const dashboardBackend = new Dashboard({
     doc: docBackend,
     page: pageBackend,
@@ -229,6 +245,8 @@ async function serve(port: number) {
   // The pages port has only what html pages load
   const pagesRoutes = (req: Request) => {
     const { pathname } = new URL(req.url)
+    const script = pageBackend.publicScript(pathname)
+    if (script) return script
     const rest = pageRoute(pathname)
     if (rest !== undefined) return pageBackend.handlePage(req, rest)
     if (pathname === "/chat.css") return cssResponse(chatCss)
@@ -382,7 +400,7 @@ const debug = new Command("debug").description(
 )
 debug.addCommand(debugTabs)
 debug.addCommand(debugAgents)
-for (const command of [tool, windows, message, workspace, server, hook, debug])
+for (const command of [tool, windows, message, workspace, doctor, server, hook, debug])
   program.addCommand(command)
 
 // `-h` is enough; no `help` subcommand, which isn't inherited, so at every

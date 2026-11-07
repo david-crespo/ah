@@ -10,7 +10,10 @@
 //
 // The pages port has a file's page, /view/page/<id>/: the file as is, with the
 // thread's stylesheet, popover and client script added before </body>, and
-// for a tracker, its status.
+// for a tracker, its status. Each page served is checked for old ah
+// formats (upgrade.ts, core/upgrades.ts). The scripts pages load, like
+// task_list.js, are at the root of the pages port, where renaming this
+// folder can't move them (publicScript).
 // Everything else under <id>/ is the files next to it, so the page's relative
 // links work, except <id>/_ah/, which is ah's: the socket (reloads and the
 // conversation), the request route, and a stack page's data and its diff
@@ -26,6 +29,7 @@ import { Readable } from "node:stream"
 import type { WebSocket } from "ws"
 import type { AgentId, TrackerStatus } from "../../core/model.ts"
 import type { Trackers } from "../../core/trackers.ts"
+import type { Upgrades } from "../../core/upgrades.ts"
 import { ClientBundles } from "../../platform/bundle.ts"
 import { plainlyUnder } from "../../platform/paths.ts"
 import { chatStylesheet, selectionPopover } from "../thread/page.ts"
@@ -43,6 +47,7 @@ import { pageFiles, type LiveReload } from "./files.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
 import { ensureBody, readStack } from "./stack_data.ts"
 import { readGithub } from "./stack_github.ts"
+import { PUBLIC_SCRIPTS, retiredScript, retiredStub } from "./upgrade.ts"
 import { escapeHtml } from "../escape.ts"
 import { contentTypes } from "../mime.ts"
 
@@ -89,21 +94,24 @@ export class PageBackend {
 
   #trackers: Pick<Trackers, "setStatus" | "statusOf"> | null
   #openDoc: OpenDoc | null
+  #upgrades: Pick<Upgrades, "check"> | null
 
   /** `port` is the server's, for telling the agent which one to answer,
    * `pagesPort` the one pages are served on, `directory` where the agents
    * its files are bound to are now, and `trackers` what a task list's Park,
-   * Done, and Resume buttons go to, and `openDoc` what opens a stack page's
-   * PR bodies */
+   * Done, and Resume buttons go to, `openDoc` what opens a stack page's
+   * PR bodies, and `upgrades` what checks each page served for old formats */
   constructor(
     port: number,
     pagesPort: number,
     directory: AgentDirectory,
     trackers: Pick<Trackers, "setStatus" | "statusOf"> | null = null,
     openDoc: OpenDoc | null = null,
+    upgrades: Pick<Upgrades, "check"> | null = null,
   ) {
     this.#trackers = trackers
     this.#openDoc = openDoc
+    this.#upgrades = upgrades
     this.pagesOrigin = `http://127.0.0.1:${pagesPort}`
     this.files = new Files(port, pageFiles, directory, { pageOrigin: this.pagesOrigin })
   }
@@ -130,6 +138,18 @@ export class PageBackend {
     if (rest === "")
       return indexPage(this.files.shown().map((path) => this.files.info(path)))
     return notFound()
+  }
+
+  /** A script pages load, at /<name> on the pages port, or at a path
+   * pages used to load it from; null for any other path */
+  publicScript(pathname: string): Promise<Response> | Response | null {
+    const name = pathname.slice(1)
+    if (PUBLIC_SCRIPTS.includes(name)) return this.#bundles.response(name)
+    const retired = retiredScript(pathname)
+    if (!retired) return null
+    return new Response(retiredStub(retired, pathname), {
+      headers: { "content-type": "text/javascript; charset=utf-8", ...noStore },
+    })
   }
 
   /** On the pages port; `rest` is the path after /view/page/ */
@@ -219,6 +239,7 @@ export class PageBackend {
       } catch {
         return new Response(`can't read ${path}`, { status: 404 })
       }
+      this.#upgrades?.check(path, html)
       const status = this.#trackers?.statusOf(path) ?? null
       return new Response(inject(html, id, { chat, dashboard, status }), {
         headers: { "content-type": "text/html; charset=utf-8", ...noStore },

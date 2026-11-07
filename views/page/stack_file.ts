@@ -14,7 +14,7 @@ export function stackPage(title: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <link rel="stylesheet" href="/stack.css">
-<script type="module" src="/view/page/stack.js"></script>
+<script type="module" src="/stack.js"></script>
 </head>
 <body>
 <!-- Drawn from stack.json, next to this file -->

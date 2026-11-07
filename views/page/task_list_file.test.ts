@@ -8,5 +8,5 @@ test("the page has every group and the escaped title and goal", () => {
   for (const g of ["Needed", "Cleanup", "Unrelated"]) {
     expect(page).toContain(`<ah-group name="${g}">`)
   }
-  expect(page).toContain('<script type="module" src="/view/page/task_list.js">')
+  expect(page).toContain('<script type="module" src="/task_list.js">')
 })

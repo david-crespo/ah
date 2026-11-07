@@ -1,10 +1,11 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import { type Address, fileSubject, type RexState } from "./model.ts"
 import { emptyRegistry, type RegistryEvent } from "./registry.ts"
 import { Core, RELAYED } from "./core.ts"
+import { Upgrades } from "./upgrades.ts"
 
 /** What `ah message send` posted, and whether posts fail, as when the agent's
  * session is gone */
@@ -368,4 +369,66 @@ test("hooks tell the agent its trackers, then what changed", async () => {
     `ah: the dashboard now shows ${a} as this workspace's current tracker`,
   )
   expect(await context(hook("UserPromptSubmit"))).toBeNull()
+})
+
+test("a starting agent hears about old files in its workspace, wherever they are", async () => {
+  // A secondary workspace whose tracker is a file of the default one, as
+  // through a linked .claude/notes, and a page bound to an agent there
+  const [main, second] = [join(dir, "main"), join(dir, "second")]
+  for (const root of [main, second]) mkdirSync(join(root, ".jj"), { recursive: true })
+  const [tracker, page, elsewhere] = ["tracker.html", "page.html", "elsewhere.html"].map(
+    (name) => {
+      const path = join(main, name)
+      writeFileSync(path, "old")
+      return path
+    },
+  )
+  core.trackers.add(second, tracker)
+  const upgrades = new Upgrades([{ what: "old", needs: (t) => t === "old", how: "" }])
+  let problems = 0
+  core.useUpgrades(upgrades, () => problems)
+  upgrades.scan([page, elsewhere])
+  const hook = (cwd: string, process: string) =>
+    report({ ...start("claude", process, undefined, ""), process, cwd })
+  await hook(second, "claude-2")
+  core.bindSubject(fileSubject(page), "claude-2")
+  const context = async (cwd: string, process: string) =>
+    ((await (await hook(cwd, process)).json()) as { context: string | null }).context
+  expect(await context(second, "claude-3")).toContain(
+    "`ah doctor` finds 2 files in this workspace that use an old ah format. Run it",
+  )
+  expect(await context(main, "claude-4")).toContain("finds 3 files")
+  writeFileSync(tracker, "new")
+  writeFileSync(page, "new")
+  problems = 1
+  expect(await context(second, "claude-5")).toContain(
+    "`ah doctor` finds 1 problem with how ah is set up. Run it",
+  )
+})
+
+test("outside jj, a directory's old files are the ones under it", async () => {
+  const [here, neighbor] = [join(dir, "plain"), join(dir, "plain-2")]
+  const [page, nested, other] = [
+    join(here, "page.html"),
+    join(here, ".claude", "notes", "t.html"),
+    join(neighbor, "page.html"),
+  ]
+  for (const path of [page, nested, other]) {
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, "old")
+  }
+  const upgrades = new Upgrades([{ what: "old", needs: (t) => t === "old", how: "" }])
+  core.useUpgrades(upgrades, () => 0)
+  upgrades.scan([page, nested, other])
+  const paths = async (root: string) =>
+    (
+      (await (
+        await core.handle(
+          new Request(`http://ah/core/upgrades?root=${encodeURIComponent(root)}`),
+          "upgrades",
+        )
+      ).json()) as { path: string }[]
+    ).map((o) => o.path)
+  expect(await paths(here)).toEqual([page, nested])
+  expect(await paths(neighbor)).toEqual([other])
 })

@@ -18,7 +18,7 @@ export function taskListPage(title: string, goal: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <link rel="stylesheet" href="/task_list.css">
-<script type="module" src="/view/page/task_list.js"></script>
+<script type="module" src="/task_list.js"></script>
 </head>
 <body>
 <main>

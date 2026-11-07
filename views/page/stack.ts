@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 
-// A stack's page, served as /view/page/stack.js; the page (stack_file.ts)
+// A stack's page, served as /stack.js on the pages port; the page (stack_file.ts)
 // loads it and /stack.css. It draws the page's stack (stack_data.ts, served
 // at _ah/stack) newest first, like jj log: each PR's title, its bookmark and
 // how it merges, its summary and files collapsed under it, and a line per

@@ -13,7 +13,7 @@ let rex: RexState
 let trackers: Trackers
 let changes: object[]
 
-const TRACKER = `<script type="module" src="/view/page/task_list.js"></script>`
+const TRACKER = `<script type="module" src="/task_list.js"></script>`
 const DAY = 24 * 60 * 60 * 1000
 
 /** A jj workspace under the temp dir */

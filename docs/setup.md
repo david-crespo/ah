@@ -17,7 +17,7 @@
 
 Run `npm install` and put `ah.ts` on your `PATH` as `ah`. `ah.ts` has a `#!/usr/bin/env node` shebang so Node 24 can run it directly.
 
-`ah` commands that need the `ah` server will start it if it isn't running, and so will the agent hooks below. The server listens on `127.0.0.1:7420`, and serves HTML pages on `127.0.0.1:7421`. It talks to Rex over Rex's socket, so it has to start outside any agent sandbox. In practice a hook starts it when the first agent session starts. An `ah` command in a sandbox that blocks localhost can't reach or start the server, and exits saying so. Use `ah server status`, `restart`, and `stop` to manage the server.
+`ah` commands that need the `ah` server will start it if it isn't running, and so will the agent hooks below. The server listens on `127.0.0.1:7420`, and serves HTML pages on `127.0.0.1:7421`. It talks to Rex over Rex's socket, so it has to start outside any agent sandbox. In practice a hook starts it when the first agent session starts. An `ah` command in a sandbox that blocks localhost can't reach or start the server, and exits saying so. Use `ah server status`, `restart`, and `stop` to manage the server. To upgrade, pull and run `ah server restart`; [upgrading](upgrading.md) lists the changes that need more, which `ah doctor` checks for.
 
 ## Hooks
 

@@ -1,17 +1,21 @@
 // `ah workspace` and `ah debug agents`, which read the registry as the
 // server last saved it, so they work with the server down, except
-// `ah workspace agents`, which asks the server.
+// `ah workspace agents`, which asks the server; and `ah doctor`.
 
 import { Command } from "@commander-js/extra-typings"
 import { resolve } from "node:path"
 import type { RexState, Tab, WorkspaceRoot } from "./model.ts"
-import { die, ensureStarted, portOption } from "../platform/cli.ts"
+import { assetPath } from "../platform/assets.ts"
+import { callServer, die, ensureStarted, portOption, serverUrl } from "../platform/cli.ts"
+import { installProblems } from "../platform/install_check.ts"
+import { currentAddress } from "../platform/session.ts"
 import { agentsNear } from "../subjects/files/cli.ts"
 import { readRex } from "../platform/rex.ts"
 import { blockOf, emptyRegistry, loadRegistry } from "./registry.ts"
 import { rootFinder, tabRoot } from "./workspace.ts"
 import { isCurrent } from "./core.ts"
 import { listAgents, readClaudeProcesses } from "./agent_view.ts"
+import type { Outdated } from "./upgrades.ts"
 
 /** `ah debug agents` */
 export const debugAgents = new Command("agents")
@@ -120,4 +124,35 @@ workspace
     if (!block) return
     await ensureStarted(port)
     for (const agent of await agentsNear(port, block)) console.log(JSON.stringify(agent))
+  })
+
+/** `ah doctor` */
+export const doctor = new Command("doctor")
+  .summary("List files that use an old ah format, and problems with ah's setup")
+  .description(
+    `List the files in this workspace (or with --all, every one) that use an old ah format, such as tracker pages loading their script from a path ah no longer serves, with what to change in each. ah finds them among the trackers it has records of and the pages it serves. Agents write these files, so ah changes none of them: an agent makes each change and checks the result. ${assetPath("docs/upgrading.md")} has more on each change. Then list what's wrong with how the harnesses have ah's skills and hooks, with the command that fixes each, which it doesn't run. ah's own state needs nothing: the server migrates it when it starts.`,
+  )
+  .option("--all", "Files in every workspace, not only the one this directory is in")
+  .addOption(portOption())
+  .action(async ({ all, port }) => {
+    await ensureStarted(port)
+    // As the session notice counts them: the jj workspace, or outside one
+    // the directory
+    const cwd = process.cwd()
+    const query = all ? "" : `?root=${encodeURIComponent(rootFinder()(cwd) ?? cwd)}`
+    const outdated = await callServer<Outdated[]>(serverUrl(port, `core/upgrades${query}`))
+    const byWhat = Map.groupBy(outdated, (o) => o.what)
+    for (const [what, files] of byWhat) {
+      console.log(`${what}\n  ${files[0].how}`)
+      for (const { path } of files) console.log(`  ${path}`)
+    }
+    const problems = installProblems()
+    if (problems.length) console.log("Setup:")
+    for (const { problem, fix } of problems) console.log(`  ${problem}\n    fix: ${fix}`)
+    if (!outdated.length && !problems.length) console.log("Nothing to change.")
+    // The files are agent-written, so an agent reads each and makes the edit
+    else if (outdated.length && !currentAddress())
+      console.log(
+        `\nAsk an agent working in ${all ? "each of these workspaces" : "this workspace"} to run \`ah doctor\` and make the changes to these files.`,
+      )
   })
