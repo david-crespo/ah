@@ -60,6 +60,11 @@ test("frontmatter shows as a table of its keys", () => {
   expect(html).not.toContain("<hr")
 })
 
+test("frontmatter cells don't repeat the document's footnotes", () => {
+  const html = md.render("---\ntitle: Skills\n---\n\nText.[^a]\n\n[^a]: A note\n")
+  expect(html.match(/<section class="footnotes"/g)).toHaveLength(1)
+})
+
 test("frontmatter that isn't a flat map shows as YAML", () => {
   expect(md.render("---\na:\n  b: c\n# note\n---\n")).toContain(
     '<pre data-line="0:5"><code class="language-yaml">a:\n  b: c\n# note</code></pre>',

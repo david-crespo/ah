@@ -33,9 +33,12 @@ export function createMarkdown() {
     if (!entries) {
       return `<pre${attrs}><code class="language-yaml">${md.utils.escapeHtml(token.content)}</code></pre>\n`
     }
+    // Without the document's footnotes, which markdown-it-footnote would
+    // otherwise append to each cell.
+    const cellEnv = { ...env, footnotes: undefined }
     const rows = entries.map(
       ([key, value]) =>
-        `<tr><th>${md.utils.escapeHtml(key)}</th><td>${md.renderInline(value, env)}</td></tr>`,
+        `<tr><th>${md.utils.escapeHtml(key)}</th><td>${md.renderInline(value, cellEnv)}</td></tr>`,
     )
     return `<table class="front-matter"${attrs}><tbody>${rows.join("")}</tbody></table>\n`
   }
