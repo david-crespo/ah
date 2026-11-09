@@ -18,7 +18,6 @@ export const RENAMED_SKILLS: Record<string, string> = {
   panes: "ah-panes",
   skepsis: "ah-skepsis",
   tracker: "ah-tracker",
-  stack: "ah-stack",
 }
 
 /** The Claude Code events ah's hook has to run on (docs/setup.md) */

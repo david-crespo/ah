@@ -14,8 +14,20 @@ A session starting in a workspace with old files, or on a machine with setup pro
 
 **State version 1.** The thread logs moved from `~/.local/state/ah/markdown/` and `html/` to `doc/` and `page/`, and the GitHub cache from `~/.cache/ah/markdown/` to `doc/`. Where both directories had a log for the same file, the newer one was kept.
 
-**Pages.** Tracker and stack pages load `/task_list.js` and `/stack.js` from the root of the pages port, where they'll stay, in place of `/view/html/…` (and briefly `/view/page/…`). In each page's script tag, change the `src` to the new path: `<script type="module" src="/task_list.js"></script>` (or `/stack.js`). Nothing else on the page changes. Pages in `.claude/notes` aren't versioned, so check each edit before moving on.
+**Pages.** Tracker pages load `/task_list.js` from the root of the pages port, where it'll stay, in place of `/view/html/task_list.js`. In each page's script tag, change the `src` to the new path: `<script type="module" src="/task_list.js"></script>`. Nothing else on the page changes. Pages in `.claude/notes` aren't versioned, so check each edit before moving on.
 
-**Setup.** The skills are named `ah-doc`, `ah-page`, `ah-panes`, `ah-skepsis`, `ah-stack` and `ah-tracker`, in place of `markdown`, `html`, `panes`, `skepsis`, `stack` and `tracker`. Links to the old names no longer resolve, and copies under them are stale: `ah doctor` lists both. Comment headers now start "Doc requests" and "Page requests".
+**Setup.** The skills are named `ah-doc`, `ah-page`, `ah-panes`, `ah-skepsis`, `ah-stack` and `ah-tracker`. All but `ah-stack`, which is new, replace a skill without the prefix: `markdown`, `html`, `panes`, `skepsis` and `tracker`. Links to the old names no longer resolve, and copies under them are stale: `ah doctor` lists both. Comment headers now start "Doc requests" and "Page requests".
 
 **Open windows** on `/view/markdown/…` or `/view/html/…` URLs show a 404 after the restart. Open the file again.
+
+## Commands grouped under `ah tool` and `ah window`
+
+The commands that open a UI are under `ah tool`, and the ones that list and close windows under `ah window`. The old names are gone, with no aliases, so change them wherever they're written down: shell aliases, editor config, a skepsis `--open-cmd`. ah's own skills and Helix modules already use the new ones, and `ah doctor` doesn't look for the old ones.
+
+| Before                                   | Now                                                               |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| `ah view open <file>`                    | `ah tool doc <file>` for markdown, `ah tool page <file>` for HTML |
+| `ah view merge`                          | `ah tool doc merge`                                               |
+| `ah view ls`, `ah view close`            | `ah window ls`, `ah window close`                                 |
+| `ah tracker add`, `ls`, `park`, `finish` | `ah tool tracker add`, `ls`, `park`, `finish`                     |
+| `ah dashboard open`                      | `ah tool dashboard`                                               |

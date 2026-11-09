@@ -36,7 +36,7 @@ test("a copy under an old name, but not someone else's skill of that name", () =
   const codex = join(dir, "codex", "skills")
   skill(join(codex, "markdown"))
   skill(join(codex, "ah-page"))
-  skill(join(codex, "stack"), "Some other stack skill")
+  skill(join(codex, "panes"), "Some other panes skill")
   expect(installProblems([codex], skills, [])).toEqual([
     {
       problem: `${join(codex, "markdown")} is a copy of ah's markdown skill, which is ah-doc now`,

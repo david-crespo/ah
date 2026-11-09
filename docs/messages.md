@@ -192,7 +192,7 @@ The WebSockets send a snapshot on connect and whenever the thread changes: `type
 
 ### API endpoints
 
-These endpoints run on `http://127.0.0.1:7420` for the CLI and other local tools; scripts on HTML pages can't call them. `<kind>` is `markdown` or `html`, and `<file>` is a URL-encoded absolute path.
+These endpoints run on `http://127.0.0.1:7420` for the CLI and other local tools; scripts on HTML pages can't call them. `<kind>` is `doc` or `page`, and `<file>` is a URL-encoded absolute path.
 
 | Endpoint                                      | Purpose                                                                                                                                                                                                                                          |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
