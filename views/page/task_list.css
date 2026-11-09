@@ -263,6 +263,11 @@ ah-item:hover .ah-item-action,
   opacity: 1;
 }
 
+/* A step's shows for its own row, not the whole item's */
+ah-step:not(:hover) .ah-step-chat[data-state="ready"]:not(:focus-visible) {
+  opacity: 0;
+}
+
 .ah-item-action:hover:not(:disabled) {
   border-color: var(--t-line);
   background: var(--t-page);

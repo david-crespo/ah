@@ -27,6 +27,15 @@ test("an item comment needs text and an item", () => {
   expect(render(comment, taskListKinds)).toEqual(
     "Request r1, answering r0: a comment on item 5: Fix it\n\nWhy?",
   )
+  const onStep = request({
+    kind: "item-comment",
+    text: "Why?",
+    args: { item: "5", step: "B", title: "Write the test" },
+  })
+  expect(render(onStep, taskListKinds)).toEqual(
+    "Request r1: a comment on step 5B: Write the test\n\nWhy?",
+  )
+  expect(taskListKinds["item-comment"].feed?.(onStep).label).toBe("Comment on step 5B")
   expect(() => request({ kind: "item-comment", args: { item: "5" } })).toThrow(InputError)
   expect(() => request({ kind: "item-comment", text: "x", args: {} })).toThrow(InputError)
 })

@@ -18,7 +18,7 @@
 // the second step of item 3 is 3B. Open and hold items get a Go button,
 // which posts a `go` request with the item's id and title into the page's
 // thread (views/page/requests.ts); a question item waits for the user's
-// answer instead. Every item gets a comment button, which opens a box for an
+// answer instead. Every item and step gets a comment button, which opens a box for an
 // `item-comment` request. Each status icon opens a menu of statuses, and a
 // pick posts a `status` request for the agent to set it. Each button shows its last request's state from
 // the thread the page's socket carries (chat.js re-dispatches it as `ah-thread` on
@@ -79,7 +79,7 @@ const threadUrl = (() => {
 
 const openKey = `ah-tracker-open:${location.pathname}`
 const openItems = new Set<string>(read(openKey) ?? [])
-// The comment being written, if any: which item, and its text so far
+// The comment being written, if any: which item or step, and its text so far
 const draftKey = `ah-tracker-draft:${location.pathname}`
 
 let thread: ThreadSnapshot | null = null
@@ -178,11 +178,20 @@ class RequestButton {
   }
 }
 
-/** The page's one comment box, under the item it's for */
+/** What a comment can be on: an item, or a step, named as chat names it
+ * ("3", "3B") */
+interface Commentable {
+  readonly label: string
+  readonly commentButton: HTMLElement
+  /** Post a comment on it; false if it couldn't be sent */
+  comment(text: string): Promise<boolean>
+}
+
+/** The page's one comment box, under the item or step it's for */
 class CommentBox {
   el = document.createElement("div")
   #text = document.createElement("textarea")
-  #item: AhItem | null = null
+  #item: Commentable | null = null
 
   constructor() {
     this.el.className = "ah-item-comment"
@@ -221,12 +230,12 @@ class CommentBox {
   }
 
   /** Open it under `item`, or close it if it's already there */
-  toggle(item: AhItem, text = "") {
+  toggle(item: Commentable, text = "") {
     if (this.#item === item) return this.close()
     if (!this.el.isConnected) document.body.append(this.el)
     this.#item = item
     this.#text.value = text
-    this.#text.placeholder = `Comment on ${item.id}`
+    this.#text.placeholder = `Comment on ${item.label}`
     this.el.hidden = false
     this.#place()
     this.#text.focus()
@@ -251,7 +260,7 @@ class CommentBox {
   }
 
   #saveDraft() {
-    if (this.#item) write(draftKey, [this.#item.id, this.#text.value])
+    if (this.#item) write(draftKey, [this.#item.label, this.#text.value])
   }
 
   async #send() {
@@ -263,6 +272,14 @@ class CommentBox {
 }
 
 const commentBox = new CommentBox()
+
+/** Open the box again for a comment that was being written on `on` when the
+ * page reloaded */
+function restoreDraft(on: Commentable) {
+  const [label, draft] = read(draftKey) ?? []
+  if (threadUrl && label === on.label)
+    requestAnimationFrame(() => commentBox.toggle(on, draft ?? ""))
+}
 
 /** The statuses the user can pick: a question is the agent's */
 const PICKABLE = ["todo", "doing", "done", "dropped", "hold"] as const
@@ -355,7 +372,7 @@ const statusOf = (el: HTMLElement): Status => {
   return (STATUSES as readonly string[]).includes(s) ? (s as Status) : "todo"
 }
 
-export class AhItem extends HTMLElement {
+export class AhItem extends HTMLElement implements Commentable {
   static observedAttributes = ["status"]
   #built = false
   #status = statusButton("ah-item-status", this, () => ({ item: this.id }))
@@ -372,6 +389,10 @@ export class AhItem extends HTMLElement {
 
   get commentButton(): HTMLElement {
     return this.#comment.el
+  }
+
+  get label(): string {
+    return this.id
   }
 
   /** The title as the page shows it */
@@ -453,12 +474,7 @@ export class AhItem extends HTMLElement {
       this.replaceChildren(head)
     }
     this.#render()
-
-    // A comment that was being written when the page reloaded
-    const [draftId, draft] = read(draftKey) ?? []
-    if (threadUrl && draftId === this.id) {
-      requestAnimationFrame(() => commentBox.toggle(this, draft ?? ""))
-    }
+    restoreDraft(this)
   }
 
   attributeChangedCallback() {
@@ -504,17 +520,35 @@ for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
   if (!link.target && link.origin !== location.origin) link.target = "_blank"
 }
 
-/** One step of an item: a status icon, its letter and what it does */
-export class AhStep extends HTMLElement {
+/** One step of an item: a status icon, its letter, what it does, and a
+ * comment button like the item's */
+export class AhStep extends HTMLElement implements Commentable {
   static observedAttributes = ["status"]
   #built = false
   #letter = ""
-  #status = statusButton("ah-step-status", this, () => ({
-    item: this.#item()?.id ?? "",
-    step: this.#letter,
-  }))
+  #text = ""
+  #target = () => ({ item: this.#item()?.id ?? "", step: this.#letter })
+  #status = statusButton("ah-step-status", this, this.#target)
+  #comment = new RequestButton(
+    "ah-item-action ah-item-chat ah-step-chat",
+    "item-comment",
+    this.#target,
+  )
 
   #item = () => this.closest<AhItem>("ah-item")
+
+  get commentButton(): HTMLElement {
+    return this.#comment.el
+  }
+
+  get label(): string {
+    return `${this.#item()?.id ?? ""}${this.#letter}`
+  }
+
+  /** Post a comment on this step, with its text as the page shows it */
+  comment(text: string): Promise<boolean> {
+    return this.#comment.post(text, this.#text, () => this.#render())
+  }
 
   connectedCallback() {
     if (this.#built) return
@@ -522,6 +556,7 @@ export class AhStep extends HTMLElement {
     const text = document.createElement("span")
     text.className = "ah-step-text"
     text.append(...this.childNodes)
+    this.#text = text.textContent?.trim().replace(/\s+/g, " ") ?? ""
     // Dropped steps keep their letter, so the later ones don't shift
     const letter = document.createElement("span")
     letter.className = "ah-step-letter"
@@ -533,8 +568,13 @@ export class AhStep extends HTMLElement {
       this.#status.el.addEventListener("click", () =>
         this.#status.open(this.#item()?.itemTitle ?? ""),
       )
-    } else this.#status.el.disabled = true
-    this.replaceChildren(this.#status.el, letter, text)
+      this.#comment.el.addEventListener("click", () => commentBox.toggle(this))
+      this.replaceChildren(this.#status.el, letter, text, this.#comment.el)
+      restoreDraft(this)
+    } else {
+      this.#status.el.disabled = true
+      this.replaceChildren(this.#status.el, letter, text)
+    }
     this.#render()
   }
 
@@ -549,6 +589,7 @@ export class AhStep extends HTMLElement {
 
   #render() {
     this.#status.render()
+    this.#comment.render(COMMENT_ICON, `Comment on ${this.label}`)
   }
 }
 

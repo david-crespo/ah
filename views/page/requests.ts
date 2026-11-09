@@ -1,6 +1,6 @@
 // The requests a task list's items send (task_list.ts), besides the chat
-// panel's: Go, a comment on an item, and a status the user picked for an
-// item or step
+// panel's: Go, a comment on an item or step, and a status the user picked
+// for one
 
 import type { RequestKinds } from "../../subjects/thread/events.ts"
 import { threadKinds } from "../../subjects/thread/kinds.ts"
@@ -17,9 +17,10 @@ export const taskListKinds: RequestKinds = {
   },
   "item-comment": {
     text: "required",
-    args: item,
-    render: (r) => `a comment on item ${r.args.item}: ${r.args.title ?? ""}\n\n${r.text}`,
-    feed: (r) => ({ label: `Comment on item ${r.args.item}`, body: r.text ?? "" }),
+    // For a step, the title is the step's text
+    args: { ...item, step: { max: 1 } },
+    render: (r) => `a comment on ${target(r.args)}: ${r.args.title ?? ""}\n\n${r.text}`,
+    feed: (r) => ({ label: `Comment on ${target(r.args)}`, body: r.text ?? "" }),
   },
   status: {
     text: "none",

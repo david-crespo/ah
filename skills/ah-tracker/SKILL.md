@@ -169,6 +169,9 @@ button shows the same spinner and states as Go until then. A comment is not a
 Go: don't start the item's work unless the comment asks for it. Selection
 comments on an item's text work the same way.
 
+Each step has a comment button too, at the end of its row. Its comment
+arrives as `a comment on step 3B: <the step's text>`, and is about that step.
+
 Clicking an item's or step's status icon opens a menu of statuses, and a
 pick arrives as `set item <id> to <status>: <title>` (or `step 3B`). Set
 that status in the file, as the user's own change, and post `done` for the
