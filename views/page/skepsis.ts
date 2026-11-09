@@ -2,13 +2,13 @@
 // review whose comments go to the agent the page is bound to. AH_SKEPSIS is
 // the command that runs it, split on spaces, like
 // `node /Users/me/skepsis/cli.ts`; without it, skepsis on PATH. Each diff
-// gets one skepsis, kept running while the server is, and a later click on
-// the same diff shows its page again.
+// gets one skepsis, kept running while its window is open, and a later click
+// on the same diff shows its page again.
 
 import { type ChildProcess, spawn } from "node:child_process"
 import type { AgentId } from "../../core/model.ts"
 import { isRecord } from "../../platform/guards.ts"
-import { showUrl } from "../../platform/window.ts"
+import { showUrl, windowsShowing } from "../../platform/window.ts"
 
 const command = (process.env.AH_SKEPSIS || "skepsis").trim().split(/\s+/)
 
@@ -28,11 +28,19 @@ export function diffArgs(body: unknown): string[] | null {
 export const sendCommand = (agent: AgentId) =>
   `jq -r .prompt | ah message send --agent '${agent.replaceAll("'", `'\\''`)}'`
 
-const running = new Map<string, Promise<string>>()
-const children = new Set<ChildProcess>()
+/** A skepsis: its process, its page's URL once it's listening, and when
+ * its window was last opened */
+type Running = { child: ChildProcess; listening: Promise<string>; url?: string; at: number }
+
+const running = new Map<string, Running>()
 process.on("exit", () => {
-  for (const child of children) child.kill()
+  for (const { child } of running.values()) child.kill()
 })
+
+/** How long skepsis has to say where it's listening */
+const START_TIMEOUT = 15_000
+/** How long a window can take to show up in the process table */
+const WINDOW_GRACE = 10_000
 
 /** Show the diff in skepsis, run in `cwd`, starting it unless it's running */
 export async function openSkepsis(cwd: string, diff: string[], agent: AgentId | null) {
@@ -42,29 +50,53 @@ export async function openSkepsis(cwd: string, diff: string[], agent: AgentId | 
     ...(agent ? ["--send", sendCommand(agent)] : []),
     "--no-open",
   ]
+  reap()
   const key = JSON.stringify([cwd, args])
-  let url = running.get(key)
-  if (!url) {
-    url = start(args, cwd, () => running.delete(key))
-    running.set(key, url)
+  let skepsis = running.get(key)
+  if (!skepsis) {
+    // Unless it was reaped, and another has taken its place
+    const started = start(args, cwd, () => {
+      if (running.get(key) === started) running.delete(key)
+    })
+    running.set(key, (skepsis = started))
   }
-  await showUrl("window", await url, { name: "skepsis", badge: "S", color: "#475569" })
+  const url = await skepsis.listening
+  // Before and after, since showing it closes the window it had
+  skepsis.at = Date.now()
+  await showUrl("window", url, { name: "skepsis", badge: "S", color: "#475569" })
+  skepsis.url = url
+  skepsis.at = Date.now()
 }
 
-/** Run skepsis, resolving with its page's URL once it's listening */
-function start(args: string[], cwd: string, gone: () => void): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command[0], args, { cwd, stdio: ["ignore", "pipe", "pipe"] })
-    children.add(child)
+/** Stop each skepsis whose window has been closed, so a day of diffs leaves
+ * only the ones still open. Run at each click, which is when more start. */
+export function reap(now = Date.now()) {
+  for (const [key, { child, url, at }] of running) {
+    if (!url || now - at <= WINDOW_GRACE || windowsShowing(url).length) continue
+    // Forgotten now, not when it exits, so a click on its diff starts another
+    running.delete(key)
+    child.kill()
+  }
+}
+
+/** Run skepsis; `listening` resolves with its page's URL */
+function start(args: string[], cwd: string, gone: () => void): Running {
+  const child = spawn(command[0], args, { cwd, stdio: ["ignore", "pipe", "pipe"] })
+  const listening = new Promise<string>((resolve, reject) => {
     // Its output up to the line with the URL, and then nothing
     let out: string | null = ""
     let err = ""
+    const timer = setTimeout(() => {
+      err = `skepsis didn't start in ${START_TIMEOUT / 1000}s`
+      child.kill()
+    }, START_TIMEOUT)
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
       if (out === null) return
       out += chunk
       const url = out.match(/^skepsis on (\S+)/m)?.[1]
       if (url) {
         out = null
+        clearTimeout(timer)
         resolve(url)
       }
     })
@@ -72,7 +104,7 @@ function start(args: string[], cwd: string, gone: () => void): Promise<string> {
       err = (err + chunk).slice(-2000)
     })
     const end = (e: Error) => {
-      children.delete(child)
+      clearTimeout(timer)
       gone()
       reject(e)
     }
@@ -87,4 +119,7 @@ function start(args: string[], cwd: string, gone: () => void): Promise<string> {
     )
     child.on("exit", (code) => end(new Error(err.trim() || `skepsis exited with ${code}`)))
   })
+  // Rejected for whoever asked; a later exit has no one to tell
+  listening.catch(() => {})
+  return { child, listening, at: Date.now() }
 }

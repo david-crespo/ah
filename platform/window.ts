@@ -75,7 +75,7 @@ async function namedApp(base: string, name: string): Promise<string> {
 const SHOWING = /\/ah-webview --url (\S+)/
 
 /** The pids of the windows showing `url`, oldest first */
-function windowsShowing(url: string): number[] {
+export function windowsShowing(url: string): number[] {
   return processTable().flatMap((p) => (p.args.match(SHOWING)?.[1] === url ? [p.pid] : []))
 }
 

@@ -122,6 +122,15 @@ describe("the API and pages ports", () => {
     })
   })
 
+  test("only a stack's page can open skepsis", async () => {
+    const { id } = await open("index.html")
+    const res = await pages(`${id}/_ah/skepsis`, {
+      method: "POST",
+      body: JSON.stringify({ rev: "@" }),
+    })
+    expect(res.status).toBe(404)
+  })
+
   test("a page's URL is the one ah gave out", async () => {
     const { id } = await open("report.html")
     const [slug, , signature] = id.split("~")

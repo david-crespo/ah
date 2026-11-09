@@ -45,7 +45,7 @@ import { pathOf } from "../../subjects/id.ts"
 import { rootFinder } from "../../core/workspace.ts"
 import { pageFiles, type LiveReload } from "./files.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
-import { ensureBody, readStack } from "./stack_data.ts"
+import { ensureBody, readStack, STACK_FILE } from "./stack_data.ts"
 import { readGithub } from "./stack_github.ts"
 import { PUBLIC_SCRIPTS, retiredScript, retiredStub } from "./upgrade.ts"
 import { escapeHtml } from "../escape.ts"
@@ -205,6 +205,9 @@ export class PageBackend {
       )
     }
     if (sub === "_ah/skepsis" && req.method === "POST") {
+      // Only a stack's page starts processes
+      if (!(await stat(join(dirname(path), STACK_FILE)).catch(() => null)))
+        return notFound()
       const diff = diffArgs(await req.json().catch(() => null))
       if (!diff) return new Response("bad diff", { status: 400 })
       // At the root, since jj reads skepsis's paths relative to where it runs
