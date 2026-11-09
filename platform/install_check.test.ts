@@ -26,6 +26,7 @@ test("a dangling link to a renamed skill, and a missing one", () => {
       fix: `ln -sfn ${join(skills, "ah-page")} ${join(claude, "ah-page")} && rm ${join(claude, "html")}`,
     },
     {
+      optional: true,
       problem: `${claude} doesn't have ah's ah-doc skill`,
       fix: `ln -s ${join(skills, "ah-doc")} ${claude}/`,
     },
@@ -41,6 +42,22 @@ test("a copy under an old name, but not someone else's skill of that name", () =
     {
       problem: `${join(codex, "markdown")} is a copy of ah's markdown skill, which is ah-doc now`,
       fix: `rm -r ${join(codex, "markdown")} && cp -R ${join(skills, "ah-doc")} ${codex}/`,
+    },
+  ])
+})
+
+test("a copy that differs from the current skill, and a skill the harness never had", () => {
+  const codex = join(dir, "codex", "skills")
+  skill(join(codex, "ah-page"), "Run `ah view open`")
+  expect(installProblems([codex], skills, [])).toEqual([
+    {
+      problem: `${join(codex, "ah-page")} is a copy of ah's ah-page skill that differs from the current one`,
+      fix: `rm -r ${join(codex, "ah-page")} && cp -R ${join(skills, "ah-page")} ${codex}/`,
+    },
+    {
+      optional: true,
+      problem: `${codex} doesn't have ah's ah-doc skill`,
+      fix: `cp -R ${join(skills, "ah-doc")} ${codex}/`,
     },
   ])
 })

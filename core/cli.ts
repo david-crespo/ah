@@ -7,7 +7,7 @@ import { resolve } from "node:path"
 import type { RexState, Tab, WorkspaceRoot } from "./model.ts"
 import { assetPath } from "../platform/assets.ts"
 import { callServer, die, ensureStarted, portOption, serverUrl } from "../platform/cli.ts"
-import { installProblems } from "../platform/install_check.ts"
+import { installProblems, type Problem } from "../platform/install_check.ts"
 import { currentAddress } from "../platform/session.ts"
 import { agentsNear } from "../subjects/files/cli.ts"
 import { readRex } from "../platform/rex.ts"
@@ -146,13 +146,21 @@ export const doctor = new Command("doctor")
       console.log(`${what}\n  ${files[0].how}`)
       for (const { path } of files) console.log(`  ${path}`)
     }
-    const problems = installProblems()
-    if (problems.length) console.log("Setup:")
-    for (const { problem, fix } of problems) console.log(`  ${problem}\n    fix: ${fix}`)
+    const setup = installProblems()
+    const problems = setup.filter((p) => !p.optional)
+    const list = (heading: string, items: Problem[]) => {
+      if (items.length) console.log(heading)
+      for (const { problem, fix } of items) console.log(`  ${problem}\n    fix: ${fix}`)
+    }
+    list("Setup:", problems)
     if (!outdated.length && !problems.length) console.log("Nothing to change.")
     // The files are agent-written, so an agent reads each and makes the edit
     else if (outdated.length && !currentAddress())
       console.log(
         `\nAsk an agent working in ${all ? "each of these workspaces" : "this workspace"} to run \`ah doctor\` and make the changes to these files.`,
       )
+    list(
+      "Skills a harness doesn't have, which is fine if that's on purpose:",
+      setup.filter((p) => p.optional),
+    )
   })

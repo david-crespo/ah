@@ -124,7 +124,7 @@ async function serve(port: number) {
   const core = Core.load()
   // Files in people's repos that use an old ah format, and ah's setup
   const upgrades = new Upgrades([pageScripts])
-  core.useUpgrades(upgrades, () => installProblems().length)
+  core.useUpgrades(upgrades, () => installProblems().filter((p) => !p.optional).length)
   const docBackend = new DocBackend(port, core)
   // A stack page's PR body opens in the doc page, as `ah tool doc` would open it
   const openDoc = async (path: string, agent: AgentId | null) => {

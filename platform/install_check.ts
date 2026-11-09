@@ -1,7 +1,9 @@
 // Checks on how ah is set up in the agent harnesses, for `ah doctor`: the
 // skills each harness has of ah's, and Claude Code's hooks. They're the
 // user's config, so this says what's wrong and how to fix it, and changes
-// nothing. Claude Code takes skills as links; Codex, opencode and pi need
+// nothing. What an upgrade leaves wrong (a link that dangles, a copy that's
+// out of date, a missing hook) is a problem; a skill a harness never had is
+// only listed. Claude Code takes skills as links; Codex, opencode and pi need
 // copies, since their scanners skip links.
 
 import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync } from "node:fs"
@@ -46,6 +48,9 @@ function hookCommands(path: string, event: string): string[] {
 export interface Problem {
   problem: string
   fix: string
+  /** A skill the harness doesn't have, which may be on purpose: listed by
+   * `ah doctor`, and not counted in the notice sessions get */
+  optional?: true
 }
 
 const readdir = (dir: string) => {
@@ -67,16 +72,17 @@ export function harnessSkillDirs(): string[] {
   ].filter((d) => existsSync(d))
 }
 
-/** Whether the skill at `dir` is one of ah's, by its instructions using ah */
-const usesAh = (dir: string) => {
+const skillText = (dir: string) => {
   try {
-    return /\bah (tool|view|app|message|window|server)\b/.test(
-      readFileSync(join(dir, "SKILL.md"), "utf8"),
-    )
+    return readFileSync(join(dir, "SKILL.md"), "utf8")
   } catch {
-    return false
+    return null
   }
 }
+
+/** Whether the skill at `dir` is one of ah's, by its instructions using ah */
+const usesAh = (dir: string) =>
+  /\bah (tool|view|app|message|window|server)\b/.test(skillText(dir) ?? "")
 
 /** What's wrong with ah's skills in each of `dirs`, a harness's skills
  * directory, and with the hooks of each Claude config dir that has them.
@@ -110,8 +116,15 @@ export function installProblems(
             ? `ln -sfn ${join(skills, renamed)} ${join(dir, renamed)} && rm ${path}`
             : `rm ${path}`,
         })
-      } else if (shipped.includes(name)) copies = true
-      else if (renamed && usesAh(path)) {
+      } else if (shipped.includes(name)) {
+        copies = true
+        // A copy doesn't follow the checkout as a link does
+        if (skillText(path) !== skillText(join(skills, name)))
+          problems.push({
+            problem: `${path} is a copy of ah's ${name} skill that differs from the current one`,
+            fix: `rm -r ${path} && cp -R ${join(skills, name)} ${dir}/`,
+          })
+      } else if (renamed && usesAh(path)) {
         copies = true
         added.add(renamed)
         problems.push({
@@ -125,6 +138,7 @@ export function installProblems(
     for (const skill of shipped) {
       if (added.has(skill) || existsSync(join(dir, skill))) continue
       problems.push({
+        optional: true,
         problem: `${dir} doesn't have ah's ${skill} skill`,
         fix: links
           ? `ln -s ${join(skills, skill)} ${dir}/`

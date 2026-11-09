@@ -83,5 +83,5 @@ export function doctorNotice(outdated: Outdated[], problems: number): string | n
       count(problems, "problem with how ah is set up", "problems with how ah is set up"),
   ].filter(Boolean)
   if (!found.length) return null
-  return `ah: \`ah doctor\` finds ${found.join(" and ")}. Run it to see what to change, then tell the user and offer to make the changes. Don't make them unasked.`
+  return `ah: \`ah doctor\` finds ${found.join(" and ")}. Run it, as the whole Bash command so it runs outside the sandbox, to see what to change, then tell the user and offer to make the changes. Don't make them unasked.`
 }
