@@ -5,7 +5,7 @@
 // before it (lower n) don't have, and its base is where it forks from them.
 
 import { existsSync } from "node:fs"
-import { readFile, writeFile } from "node:fs/promises"
+import { readdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
 import { opHeadsDir } from "../../platform/jj.ts"
@@ -97,13 +97,40 @@ const BASE = `change_id.short(8) ++ "\\t" ++ local_bookmarks.map(|b| b.name()).j
 /** jj's status names, as letters */
 const letter = (status: string) => (status === "removed" ? "D" : status[0].toUpperCase())
 
-/** The stack.json next to `pagePath`, filled in from the jj repo it's in */
+/** The last stack jj was asked for, per page, and what it was read from */
+const stacks = new Map<string, { key: string; stack: Promise<Stack> }>()
+
+/** The stack.json next to `pagePath`, filled in from the jj repo it's in.
+ * jj is only asked again once stack.json or the repo's operations have
+ * changed, since a page asks on every save of a PR's body too. */
 export async function readStack(pagePath: string): Promise<Stack> {
   const dir = dirname(pagePath)
-  const file = parseStackFile(await readFile(join(dir, STACK_FILE), "utf8"))
+  const text = await readFile(join(dir, STACK_FILE), "utf8")
+  const file = parseStackFile(text)
   // At the root, since a template's paths are relative to where jj runs
   const root = rootFinder()(dir)
   if (!root) throw new Error(`${dir} isn't in a jj workspace`)
+  // The op heads dir has a file per head, named for its operation
+  const key = `${(await readdir(await opHeadsDir(root))).join()}\n${text}`
+  let hit = stacks.get(pagePath)
+  if (hit?.key !== key) {
+    const stack = readCommits(file, root)
+    hit = { key, stack }
+    stacks.set(pagePath, hit)
+    // A failure shouldn't stick
+    stack.catch(() => stacks.delete(pagePath))
+  }
+  const stack = await hit.stack
+  // A body's title wins over stack.json's, since the body is what goes on
+  // GitHub
+  const prs = stack.prs.map(async (pr) => ({
+    ...pr,
+    title: (await bodyTitle(pagePath, pr.bookmark)) ?? pr.title,
+  }))
+  return { ...stack, prs: await Promise.all(prs) }
+}
+
+async function readCommits(file: StackFile, root: string): Promise<Stack> {
   const jj = async (...args: string[]) => {
     const { success, stdout, stderr } = await run(
       "jj",
@@ -133,7 +160,7 @@ export async function readStack(pagePath: string): Promise<Stack> {
       const base = `heads(::${below} & ::${tip})`
       // On a commit, a remote bookmark of this name, other than git's
       const onRemote = `remote_bookmarks.filter(|b| b.remote() != "git" && b.name() == ${tip}).len() > 0`
-      const [commits, baseLine, pushed, diff, title] = await Promise.all([
+      const [commits, baseLine, pushed, diff] = await Promise.all([
         jj("log", "--no-graph", "-r", `::${tip} ~ ::${below}`, "-T", COMMIT),
         jj("log", "--no-graph", "-r", base, "-T", BASE),
         jj(
@@ -145,13 +172,11 @@ export async function readStack(pagePath: string): Promise<Stack> {
           `if(${onRemote}, commit_id.short(8) ++ "\n")`,
         ),
         jj("diff", "--git", "--context", "0", "--from", base, "--to", tip),
-        bodyTitle(pagePath, pr.bookmark),
       ])
       const [change, bookmarks = ""] = baseLine.split("\n")[0].split("\t")
       const names = bookmarks.split(" ").filter(Boolean)
       const result: Pr = {
         ...pr,
-        title: title ?? pr.title,
         forksFrom: null,
         base:
           file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0] ?? change,
@@ -191,8 +216,7 @@ export function bodyPath(pagePath: string, bookmark: string): string | null {
   return /^[\w-][\w.-]*$/.test(bookmark) ? join(dirname(pagePath), `${bookmark}.md`) : null
 }
 
-/** The title a PR's body gives it, as a heading on its first line. It wins
- * over stack.json's, since the body is what goes on GitHub. */
+/** The title a PR's body gives it, as a heading on its first line */
 async function bodyTitle(pagePath: string, bookmark: string): Promise<string | null> {
   const path = bodyPath(pagePath, bookmark)
   const text = path && (await readFile(path, "utf8").catch(() => null))

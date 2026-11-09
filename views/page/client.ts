@@ -74,6 +74,8 @@ function connect() {
       // For the page's own scripts, such as task_list.js, even with the chat off
       document.dispatchEvent(new CustomEvent("ah-thread", { detail: msg }))
     } else if (msg.type === "reload") reload()
+    // For a page that draws its own data, such as a stack's (stack.js)
+    else if (msg.type === "data") document.dispatchEvent(new CustomEvent("ah-data"))
     else if (msg.type === "closed") closed = true
   }
   ws.onopen = () => {

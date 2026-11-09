@@ -11,9 +11,11 @@
 // body in a doc page, starting the file if there isn't one. Once it is, GitHub
 // has the body, so the button gives way to a link to the PR, with GitHub's
 // title and where the PR stands there (stack_github.ts, served at
-// _ah/stack-github, which comes after the stack since gh is slow). The page
-// reloads on every jj operation, so which sections are open is kept across
-// reloads, and the last stack is drawn at once while the new one loads.
+// _ah/stack-github, which comes after the stack since gh is slow). The stack
+// is read again, without a reload, when the server says its data changed:
+// on every jj operation, and when stack.json or a body is saved. Which
+// sections are open is kept across reloads and redraws, and after a reload
+// the last stack is drawn at once while the new one loads.
 
 import type { FileStat, Pr, Stack } from "./stack_data.ts"
 import type { GithubPr, GithubPrs } from "./stack_github.ts"
@@ -295,15 +297,23 @@ async function loadGithub() {
   redraw()
 }
 
+/** The stack, then GitHub's side, which takes longer */
+async function load() {
+  try {
+    current = await get<Stack>("stack")
+    currentError = ""
+    write(sessionStorage, cacheKey, current)
+  } catch (e) {
+    currentError = (e as Error).message
+  }
+  redraw()
+  await loadGithub()
+}
+
 if (threadUrl) {
-  get<Stack>("stack")
-    .then((stack) => {
-      current = stack
-      write(sessionStorage, cacheKey, stack)
-    })
-    .catch((e: Error) => (currentError = e.message))
-    .then(redraw)
-    .then(loadGithub)
+  void load()
+  // The server says when stack.json, a body or the repo's commits change
+  document.addEventListener("ah-data", () => void load())
   setInterval(() => {
     if (document.visibilityState === "visible") void loadGithub()
   }, 60_000)

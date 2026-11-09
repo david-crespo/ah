@@ -51,8 +51,9 @@ it in a window, and binds it to this session. Run the same command without
 - `notes` and `summary` are plain text with blank lines between paragraphs
   and backticks for code. Write the summary for a reviewer: what the PR does,
   then where to start reading.
-- The page reloads when `stack.json` changes and when a jj operation lands, so
-  rewriting commits or moving bookmarks shows up on its own.
+- The page redraws when `stack.json` or a PR's body changes and when a jj
+  operation lands, so rewriting commits or moving bookmarks shows up on its
+  own.
 
 ## Commit summaries
 

@@ -130,6 +130,16 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     expect(a.description).toBe("Add a\n\nThe body,\nwrapped.\n")
     expect(a.files).toEqual([{ path: "a.txt", status: "A", add: 1, del: 0 }])
     expect(a.short.length).toBeGreaterThanOrEqual(4)
+
+    // With only a body changed, its title is read again and jj isn't
+    writeFileSync(join(notes, "two.md"), "# Two, retitled\n")
+    const retitled = await readStack(join(notes, "index.html"))
+    expect(retitled.prs[1].title).toBe("Two, retitled")
+    expect(retitled.prs[1].commits).toBe(stack.prs[1].commits)
+    // After an operation, jj is
+    jj("describe", "two", "-m", "Add c, edited")
+    const edited = await readStack(join(notes, "index.html"))
+    expect(edited.prs[1].commits[0].description).toBe("Add c, edited\n")
   } finally {
     rmSync(dir, { recursive: true })
   }
