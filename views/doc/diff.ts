@@ -139,17 +139,16 @@ class Side {
       if (tok === "\n") this.lineStart.push(this.lineOf.length - 1)
     }
     this.lineStart.push(this.t.length)
-    // The token each character is in, to place the spans in tokens
-    const tokenAt: number[] = []
-    this.t.forEach((tok, i) => tokenAt.push(...Array(tok.length).fill(i)))
-    tokenAt.push(this.t.length)
-    for (const m of text.matchAll(syntax.spans)) {
-      const span: [number, number] = [
-        tokenAt[m.index],
-        tokenAt[m.index + m[0].length - 1] + 1,
-      ]
-      const { blocks, loose } = this.touched(...span)
-      if (blocks.length === 1 && !loose) this.spans.push(span)
+    // Spans are matched a block at a time: over the whole text, an unpaired
+    // backtick would pair with the opening one of a later block's span
+    for (const block of blocks) {
+      if (block.opaque) continue
+      const first = this.lineStart[block.start]
+      const toks = this.t.slice(first, this.lineStart[block.end])
+      // The token each character is in, to place the spans in tokens
+      const tokenAt = toks.flatMap((tok, i) => Array<number>(tok.length).fill(first + i))
+      for (const m of toks.join("").matchAll(syntax.spans))
+        this.spans.push([tokenAt[m.index], tokenAt[m.index + m[0].length - 1] + 1])
     }
   }
 

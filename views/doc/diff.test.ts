@@ -156,6 +156,15 @@ describe("diffMarkdown", () => {
     )
   })
 
+  test("widens to a code span after an unpaired backtick in an earlier block", () => {
+    expect(
+      inline(
+        "A stray ` tick here.\n\nRun `ah view` now.\n",
+        "A stray ` tick here.\n\nRun `ah open` now.\n",
+      ),
+    ).toBe("A stray ` tick here.\n\nRun [-`ah view`-]{+`ah open`+} now.\n")
+  })
+
   test("keeps a change beside a code span inline", () => {
     expect(
       inline(
