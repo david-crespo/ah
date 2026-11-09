@@ -140,6 +140,14 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     jj("describe", "two", "-m", "Add c, edited")
     const edited = await readStack(join(notes, "index.html"))
     expect(edited.prs[1].commits[0].description).toBe("Add c, edited\n")
+
+    // A PR listed before its bookmark exists has no commits, and the rest
+    // are as they were
+    const four = { ...file, prs: [...file.prs, pr(4, "four")] }
+    writeFileSync(join(notes, STACK_FILE), JSON.stringify(four))
+    const withFour = await readStack(join(notes, "index.html"))
+    expect(withFour.prs[0]).toMatchObject({ n: 4, missing: true, commits: [], files: [] })
+    expect(withFour.prs.slice(1)).toEqual(edited.prs)
   } finally {
     rmSync(dir, { recursive: true })
   }

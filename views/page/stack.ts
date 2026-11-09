@@ -157,9 +157,9 @@ function prCard(pr: Pr, side: boolean, gh: GithubPr | undefined, base: string): 
   return `<div class="row${side ? " side" : ""}"><section class="pr">
     <div class="pr-head">
       <h2><span class="n">${pr.n}.</span> ${esc(gh?.title ?? pr.title)}</h2>
-      ${stat(pr.files, { from: pr.base, to: pr.bookmark })}
+      ${pr.missing ? "" : stat(pr.files, { from: pr.base, to: pr.bookmark })}
     </div>
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${pr.forksFrom ? note(`forks from ${pr.forksFrom.change.slice(0, 4)}, inside PR ${pr.forksFrom.n}, not its tip`, "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${pr.forksFrom ? note(`forks from ${pr.forksFrom.change.slice(0, 4)}, inside PR ${pr.forksFrom.n}, not its tip`, "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
       <summary>Summary and ${pr.files.length} file${pr.files.length === 1 ? "" : "s"}</summary>
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
@@ -176,7 +176,8 @@ let githubError = ""
 function draw(stack: Stack, error = "") {
   document.title = stack.title
   // A PR is on a side lane when a later one has the same base
-  const side = (pr: Pr) => stack.prs.some((q) => q.n > pr.n && q.base === pr.base)
+  const side = (pr: Pr) =>
+    !pr.missing && stack.prs.some((q) => q.n > pr.n && q.base === pr.base)
   // On GitHub, the PR below it, or trunk once that one has merged, since
   // GitHub then retargets this one
   const base = (pr: Pr) =>
@@ -192,7 +193,9 @@ function draw(stack: Stack, error = "") {
       stack.prs.length
         ? `<div class="prs"><svg class="graph"></svg>${stack.prs
             .map((pr) => prCard(pr, side(pr), github[pr.bookmark], base(pr)))
-            .join("")}<div class="trunk mono">${esc(stack.prs.at(-1)!.base)}</div></div>`
+            .join(
+              "",
+            )}<div class="trunk mono">${esc(stack.prs.findLast((pr) => !pr.missing)?.base ?? "")}</div></div>`
         : `<p class="empty">No PRs in stack.json yet</p>`
     }`
   drawGraph()

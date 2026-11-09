@@ -50,6 +50,8 @@ export interface Commit {
 /** `base` is the PR's parent PR's bookmark, or the commit it forks from
  * trunk at. Commits are newest first. */
 export interface Pr extends StackPr {
+  /** Its bookmark doesn't exist yet, so it has no base and no commits */
+  missing: boolean
   base: string
   /** Set when the base is inside an earlier PR's commits, not at its tip */
   forksFrom: { n: number; change: string } | null
@@ -151,8 +153,22 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     "-T",
     `remote_bookmarks.filter(|b| b.remote() != "git").map(|b| b.name()).join(" ")`,
   )
+  const existing = (await jj("bookmark", "list", "-T", `name ++ "\n"`)).split("\n")
   const prs = await Promise.all(
     file.prs.map(async (pr) => {
+      // Listed before its bookmark exists: shown with no commits
+      if (!existing.includes(pr.bookmark)) {
+        const missing: Pr = {
+          ...pr,
+          missing: true,
+          base: "",
+          forksFrom: null,
+          pushed: null,
+          files: [],
+          commits: [],
+        }
+        return [missing, ""] as const
+      }
       const tip = JSON.stringify(pr.bookmark)
       // Trunk and the PRs before this one
       const earlier = file.prs.filter((q) => q.n < pr.n).map((q) => symbol(q.bookmark))
@@ -177,6 +193,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
       const names = bookmarks.split(" ").filter(Boolean)
       const result: Pr = {
         ...pr,
+        missing: false,
         forksFrom: null,
         base:
           file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0] ?? change,
