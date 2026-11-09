@@ -76,6 +76,12 @@ item in the one that fits:
   collapsed under the title. Put all of it there. There's no separate review
   file. Use `<p>`, `<ul>`, `<code>`, `<a>`. The detail should be enough to act
   on without the conversation.
+- When you know the fix, say what it is, apart from what's wrong: under
+  `<h4>Fix</h4>`, or after "Fix:" in each entry of a list of small problems.
+  The user is deciding whether to have it done, and a description of the
+  problem alone leaves them guessing what Go would do. When there's more
+  than one way, give the one you'd take and put the choice under `Open`. When
+  you don't know yet, say what has to be found out first.
 - Work that takes more than one rev gets steps, in order, each with its own
   `status`. The page shows each step's status icon, and a dot per
   step in its status's color on the item's title line, so the user can see
@@ -84,7 +90,7 @@ item in the one that fits:
   order, so the second step of item 3 is 3B; refer to them that way in chat.
   Mark a step dropped rather than deleting it, so the letters don't shift.
 - A detail that grows past a few paragraphs gets structure: `<h4>` for its
-  sections (Steps, Decided, Open), a `<dl>` for labeled lists, and
+  sections (Fix, Steps, Decided, Open), a `<dl>` for labeled lists, and
   `<details><summary>` to fold away what's only background or history.
   Keep what's needed to act next unfolded.
 
