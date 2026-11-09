@@ -1,5 +1,22 @@
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { expect, test } from "vitest"
-import { githubRepo, summarizeChecks } from "./stack_github.ts"
+import { STACK_FILE } from "./stack_data.ts"
+import { githubRepo, readGithub, summarizeChecks } from "./stack_github.ts"
+
+test("readGithub has no PRs, and no error, for a repo with no GitHub remote", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-github-")))
+  try {
+    execFileSync("jj", ["git", "init"], { cwd: dir, stdio: "pipe" })
+    const prs = [{ n: 1, title: "One", bookmark: "one" }]
+    writeFileSync(join(dir, STACK_FILE), JSON.stringify({ title: "Stack", prs }))
+    expect(await readGithub(join(dir, "index.html"))).toEqual({})
+  } finally {
+    rmSync(dir, { recursive: true })
+  }
+})
 
 test("githubRepo takes origin's owner/name, over other remotes", () => {
   const remotes = [

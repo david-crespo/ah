@@ -44,6 +44,8 @@ export function readGithub(pagePath: string): Promise<GithubPrs> {
   return prs
 }
 
+let warnedNoGh = false
+
 async function fetchPrs(pagePath: string): Promise<GithubPrs> {
   const dir = dirname(pagePath)
   const file = parseStackFile(await readFile(join(dir, STACK_FILE), "utf8"))
@@ -52,11 +54,21 @@ async function fetchPrs(pagePath: string): Promise<GithubPrs> {
   // By name, since a jj workspace other than the first has no .git for gh
   const remotes = await run("jj", ["git", "remote", "list"], { cwd: root })
   const repo = githubRepo(remotes.stdout)
-  if (!repo) throw new Error("no GitHub remote")
+  // Nothing to show, as for PRs that aren't on GitHub yet
+  if (!repo) return {}
   const entries = await Promise.all(
     file.prs.map(async ({ bookmark }) => {
       const args = ["pr", "list", "--repo", repo, "--head", bookmark, "--state", "all"]
-      const out = await run("gh", [...args, "--limit", "1", "--json", FIELDS])
+      const out = await run("gh", [...args, "--limit", "1", "--json", FIELDS]).catch(
+        (e: NodeJS.ErrnoException) => {
+          if (e.code !== "ENOENT") throw e
+          if (!warnedNoGh)
+            console.error("ah: gh isn't installed, so stack pages show no PRs")
+          warnedNoGh = true
+          return null
+        },
+      )
+      if (!out) return null
       if (!out.success) throw new Error(out.stderr.trim() || "gh pr list failed")
       const [pr]: (Omit<GithubPr, "checks"> & { statusCheckRollup: Check[] })[] =
         JSON.parse(out.stdout)
