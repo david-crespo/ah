@@ -489,9 +489,7 @@ export class Core implements AgentDirectory {
     if (event.event === "SessionStart") {
       this.#notices.start(agent, current, this.#showing())
       if (!root) return null
-      const active = this.trackers
-        .get(root)
-        .active.flatMap((t) => ("path" in t.subject ? [t.subject.path] : []))
+      const active = this.trackers.get(root).active.map((t) => t.path)
       const doctor = doctorNotice(this.#outdatedIn(root), this.#setupProblems())
       const lines = [startContext(current, active), doctor].filter(Boolean)
       return lines.length ? lines.join("\n\n") : null

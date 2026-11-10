@@ -40,8 +40,7 @@ const tab = (id: string, cwd: string) => ({
   blocks: [{ id: `${id}-block`, cwd }],
 })
 
-const paths = (entries: TrackerEntry[]) =>
-  entries.map((e) => ("path" in e.subject ? e.subject.path : null))
+const paths = (entries: TrackerEntry[]) => entries.map((e) => e.path)
 
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), "ah-trackers-"))
@@ -71,10 +70,10 @@ test("tabs on one workspace share its current tracker", () => {
   expect(trackers.currentPath(a)).toBe(second)
   expect(trackers.currentPath(b)).toBeNull()
   expect(trackers.get(a)).toEqual({
-    current: { kind: "page", path: second },
+    current: second,
     active: [
-      { subject: { kind: "page", path: second }, lastOpen: expect.any(Number) },
-      { subject: { kind: "page", path: first }, lastOpen: expect.any(Number) },
+      { path: second, lastOpen: expect.any(Number) },
+      { path: first, lastOpen: expect.any(Number) },
     ],
     parked: [],
   })
@@ -128,7 +127,7 @@ test("outside a jj workspace, the directory stands in for one", () => {
   const file = join(plain, "notes.md")
   writeFileSync(file, "# notes")
   trackers.add(plain, file)
-  expect(trackers.get(plain).current).toEqual({ kind: "doc", path: file })
+  expect(trackers.get(plain).current).toBe(file)
 })
 
 test("a file's subject goes by its extension", () => {
@@ -182,7 +181,7 @@ test("a parked tracker leaves the list, and resuming brings it back", () => {
   expect(trackers.get(a)).toEqual({
     current: null,
     active: [],
-    parked: [{ subject: { kind: "page", path }, lastOpen: expect.any(Number) }],
+    parked: [{ path, lastOpen: expect.any(Number) }],
   })
   // Resuming counts as using it, so it isn't parked again by age
   trackers.setStatus(path, "active")

@@ -12,7 +12,6 @@
 
 import { statSync } from "node:fs"
 import {
-  fileSubject,
   type RexState,
   type TrackerEntry,
   type TrackerRecord,
@@ -94,11 +93,10 @@ export class Trackers {
       byRecent(
         listed
           .filter((t) => t.status === status)
-          .map((t) => ({ subject: fileSubject(t.path), lastOpen: t.used })),
+          .map((t) => ({ path: t.path, lastOpen: t.used })),
       )
-    const current = this.currentPath(root)
     return {
-      current: current ? fileSubject(current) : null,
+      current: this.currentPath(root),
       active: entries("active"),
       parked: entries("parked"),
     }
@@ -109,7 +107,7 @@ export class Trackers {
     return byRecent(
       this.#listed(root, Date.now())
         .filter((t) => t.status === "done")
-        .map((t) => ({ subject: fileSubject(t.path), lastOpen: t.used })),
+        .map((t) => ({ path: t.path, lastOpen: t.used })),
     )
   }
 

@@ -142,7 +142,7 @@ export type TrackerStatus = "active" | "parked" | "done"
 
 /** A tracker whose work isn't done */
 export interface TrackerEntry {
-  subject: Requestable
+  path: string
   /** When it was last open in a view, ms since the epoch */
   lastOpen: number
 }
@@ -152,7 +152,7 @@ export interface TrackerEntry {
  * current one. Done ones aren't listed. */
 export interface WorkspaceTrackers {
   /** What "the tracker" means here, and what the dashboard shows */
-  current: Requestable | null
+  current: string | null
   active: TrackerEntry[]
   parked: TrackerEntry[]
 }

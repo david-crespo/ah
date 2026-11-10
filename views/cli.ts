@@ -14,7 +14,7 @@ import { text } from "node:stream/consumers"
 import { basename, dirname, join, relative } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { threadCommands } from "../subjects/thread/cli.ts"
-import { FILE_KINDS, fileKind, type TrackerEntry } from "../core/model.ts"
+import { FILE_KINDS, fileKind } from "../core/model.ts"
 import { die, portOption, serverUrl } from "../platform/cli.ts"
 import { showUrl } from "../platform/window.ts"
 import {
@@ -379,17 +379,14 @@ tracker
   .action(async ({ done, port }) => {
     if (!(await status(port))) die("ah tool tracker ls: server not running")
     const t = await workspaceTrackers(port, process.cwd())
-    const pathsOf = (entries: TrackerEntry[]) =>
-      entries.flatMap((a) => ("path" in a.subject ? [a.subject.path] : []))
     if (done) {
-      for (const path of pathsOf(t.done)) console.log(path)
+      for (const { path } of t.done) console.log(path)
       return
     }
-    const current = t.current && "path" in t.current ? t.current.path : null
-    for (const path of pathsOf(t.active))
-      console.log(`${path === current ? "*" : " "} ${path}`)
-    const parked = pathsOf(t.parked)
-    if (parked.length) console.log(`parked:\n${parked.map((p) => `  ${p}`).join("\n")}`)
+    for (const { path } of t.active)
+      console.log(`${path === t.current ? "*" : " "} ${path}`)
+    if (t.parked.length)
+      console.log(`parked:\n${t.parked.map((p) => `  ${p.path}`).join("\n")}`)
   })
 
 for (const [name, to, summary, description] of [

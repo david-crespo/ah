@@ -42,13 +42,12 @@ const logEvent = (root: string, html: string) => JSON.stringify({ root, html })
 const trackersEvent = (root: string, t: WorkspaceTrackers) =>
   JSON.stringify({
     root,
-    current: t.current && "path" in t.current ? t.current.path : null,
+    current: t.current,
     active: paths(t.active),
     parked: paths(t.parked),
   })
 
-const paths = (entries: TrackerEntry[]) =>
-  entries.flatMap((a) => ("path" in a.subject ? [a.subject.path] : []))
+const paths = (entries: TrackerEntry[]) => entries.map((a) => a.path)
 
 /** A tab's file as the page shows it: `frame` for an html page, in an
  * <iframe> of `url`, otherwise in <ah-markdown> */
@@ -137,7 +136,7 @@ export class Dashboard {
     const next = new Map<string, string>()
     for (const tab of this.#state.tabs) {
       const current = trackers.get(tab.root)?.current
-      if (current && "path" in current) next.set(tab.id, current.path)
+      if (current) next.set(tab.id, current)
     }
     for (const tab of new Set([...this.#files.keys(), ...next.keys()])) {
       const path = next.get(tab) ?? null
