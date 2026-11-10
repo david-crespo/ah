@@ -6,8 +6,11 @@
 import { chatStylesheet, selectionPopover } from "../thread/page.ts"
 
 // Both pages load only their own scripts and styles, and talk only to the
-// server, over HTTP or its sockets; images and video can come from anywhere
-const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src 'none'; object-src 'none'">`
+// server, over HTTP or its sockets; images and video can come from anywhere.
+// A file's HTML can't submit a form, which could post to the API, or set a
+// <base>, which would move where the page's requests go. Neither directive
+// falls back to default-src.
+const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">`
 
 /** The ? dialog listing the page's keyboard shortcuts, for the parts it has */
 function shortcutsDialog({ editor, chat }: { editor: boolean; chat: boolean }) {

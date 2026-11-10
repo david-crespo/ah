@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <!-- As the markdown file page's: the jj log and the file's preview are
          set as HTML, and a markdown file can hold any. Frames are the html
-         app's pages, on the server's port + 1. -->
+         app's pages, on the server's port + 1. No forms or <base>, as there. -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src http://127.0.0.1:*; object-src 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src * data: blob:; media-src *; connect-src 'self' ws://localhost:* ws://127.0.0.1:*; frame-src http://127.0.0.1:*; object-src 'none'; form-action 'none'; base-uri 'none'"
     />
     <title>Workspace</title>
     <!-- The terminal theme's vars (views/theme.ts) and the box-drawing rules -->
