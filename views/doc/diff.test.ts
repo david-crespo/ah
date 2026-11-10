@@ -297,6 +297,26 @@ describe("diffMarkdown", () => {
     )
   })
 
+  test("takes a change inside a tag as its block, where a mark would break the tag", () => {
+    const link = (page: string) =>
+      `See <a href="https://a.com/${page}">the docs</a> here.\n`
+    expect(diff(link("x"), link("y"))).toEqual({
+      text: link("y"),
+      old: [],
+      removed: [{ line: 0, text: link("x") }],
+      added: [[0, 1]],
+      changes: 1,
+    })
+    expect(diff("A <b>word</b> here.\n", "A <i>word</i> here.\n").added).toEqual([[0, 1]])
+    // Between tags, and in a tag that's code, it's text like any other
+    expect(inline("A <b>word</b> here.\n", "A <b>term</b> here.\n")).toBe(
+      "A <b>[-word-]{+term+}</b> here.\n",
+    )
+    expect(inline('Use `<b class="x">` here.\n', 'Use `<b class="y">` here.\n')).toBe(
+      'Use [-`<b class="x">`-]{+`<b class="y">`+} here.\n',
+    )
+  })
+
   test("marks a word added in a quoted, wrapped paragraph inline", () => {
     expect(
       inline(

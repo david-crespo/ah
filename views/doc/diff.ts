@@ -37,6 +37,10 @@ export type Syntax = {
    * whole. A change that cuts into one widens to take all of it, and one
    * that takes whole spans can still be marked inline. */
   spans: RegExp
+  /** Inline tags outside those spans. A change that cuts into one takes
+   * its block: with a marker in it the tag wouldn't be one, and around it,
+   * the marker's own tags wouldn't nest with it. */
+  tags?: RegExp
 }
 
 export const MARKDOWN: Syntax = {
@@ -45,6 +49,7 @@ export const MARKDOWN: Syntax = {
   // Code spans, links and images, autolinks and bare URLs
   spans:
     /(`+)[\s\S]*?[^`]\1(?!`)|!?\[[^\]\n]*\]\([^)\n]*\)|<[a-z][\w+.-]*:[^\s<>]*>|\bhttps?:\/\/[^\s<>()]*[^\s<>().,;:!?'"*_]/gi,
+  tags: /<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>/gi,
 }
 
 export const ASCIIDOC: Syntax = {
@@ -128,6 +133,8 @@ class Side {
   readonly lineStart: number[] = [0]
   /** Spans a marker can't go in, as token ranges, each inside one block */
   readonly spans: [number, number][] = []
+  /** Inline tags outside them, as token ranges */
+  readonly tags: [number, number][] = []
 
   constructor(text: string, blocks: Block[], syntax: Syntax) {
     this.t = tokens(text)
@@ -147,16 +154,25 @@ class Side {
       const toks = this.t.slice(first, this.lineStart[block.end])
       // The token each character is in, to place the spans in tokens
       const tokenAt = toks.flatMap((tok, i) => Array<number>(tok.length).fill(first + i))
-      for (const m of toks.join("").matchAll(syntax.spans))
-        this.spans.push([tokenAt[m.index], tokenAt[m.index + m[0].length - 1] + 1])
+      const text = toks.join("")
+      const range = (m: RegExpExecArray): [number, number] => [
+        tokenAt[m.index],
+        tokenAt[m.index + m[0].length - 1] + 1,
+      ]
+      const spans = [...text.matchAll(syntax.spans)].map(range)
+      this.spans.push(...spans)
+      for (const m of syntax.tags ? text.matchAll(syntax.tags) : []) {
+        const [s, e] = range(m)
+        if (!spans.some(([ss, se]) => ss <= s && e <= se)) this.tags.push([s, e])
+      }
     }
   }
 
   /** The tokens [s, e) take, widened to the whole of each span they cut
    * into: one they overlap but don't cover, or an insertion inside one */
-  cut(s: number, e: number): [number, number] {
+  cut(s: number, e: number, spans = this.spans): [number, number] {
     let [start, end] = [s, e]
-    for (const [ss, se] of this.spans) {
+    for (const [ss, se] of spans) {
       const inside = s === e ? ss < s && s < se : ss < e && s < se
       if (inside) [start, end] = [Math.min(start, ss), Math.max(end, se)]
     }
@@ -397,11 +413,14 @@ export function diffMarkdown(
     ]
     return sides.some(([side, s, e]) => {
       const { blocks, loose } = side.touched(s, e)
+      const [tagStart, tagEnd] = side.cut(s, e, side.tags)
       return (
         loose ||
         blocks.length > 1 ||
         blocks.some((b) => b.opaque) ||
-        side.inMarker(s, s === e)
+        side.inMarker(s, s === e) ||
+        tagStart < s ||
+        tagEnd > e
       )
     })
   }
