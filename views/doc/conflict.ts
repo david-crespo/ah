@@ -5,15 +5,19 @@
 // Recognised formats (marker length is 7 or more, matching jj's habit of
 // growing markers when the content contains marker-like lines):
 //
-//   jj "diff" (default)      jj "snapshot"              git / jj "git" / diff3
-//   <<<<<<< Conflict 1 of 1  <<<<<<< Conflict 1 of 1    <<<<<<< HEAD
-//   %%%%%%% Changes from …   +++++++ Contents of side 1  side 1 text
-//   -base line               side 1 text                ||||||| Base
-//   +side 1 line             ------- Contents of base    base text
-//   +++++++ Contents of …    base text                   =======
-//   side 2 text              +++++++ Contents of side 2  side 2 text
-//   >>>>>>> Conflict 1 of 1  side 2 text                >>>>>>> feature
-//                            >>>>>>> Conflict 1 of 1 ends
+//   jj "diff" (default)           jj "snapshot"            git / jj "git" / diff3
+//   <<<<<<< conflict 1 of 1       <<<<<<< conflict 1 of 1  <<<<<<< HEAD
+//   %%%%%%% diff from: base       +++++++ side #1          side 1 text
+//   \\\\\\\        to: side #1    side 1 text              ||||||| base
+//   -base line                    ------- base             base text
+//   +side 1 line                  base text                =======
+//   +++++++ side #2               +++++++ side #2          side 2 text
+//   side 2 text                   side 2 text              >>>>>>> feature
+//   >>>>>>> conflict 1 of 1 ends  >>>>>>> conflict 1 of 1 ends
+//
+// jj labels a side `side #1`, or with its revision when it knows it,
+// `xlvqunup 0b9070ee "my side"`. Older versions wrote `Conflict 1 of 1`,
+// `Changes from base to side #1` on one line, and `Contents of side #1`.
 
 export type Panel = {
   kind: "side" | "base"
@@ -50,11 +54,12 @@ function capitalize(s: string) {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-// "Changes from base to side #1" / "Contents of side #2" -> "Side #1"
+// "Changes from base to side #1" / "Contents of side #2" / "side #1" ->
+// "Side #1". A revision's label stays as jj wrote it.
 function sideLabel(header: string | undefined, fallback: string) {
   if (!header) return fallback
-  const m = /(?:changes from base to|contents of)\s+(.*)$/i.exec(header)
-  return capitalize(m ? m[1] : header)
+  const label = /(?:from base to|contents of)\s+(.*)$/i.exec(header)?.[1] ?? header
+  return label.startsWith("side #") ? capitalize(label) : label
 }
 
 /** Parse lines[start..=end], where end came from findConflictEnd. */
@@ -75,8 +80,18 @@ export function parseConflict(lines: string[], start: number, end: number): Conf
     lines: string[]
   }
   const sections: Section[] = [{ kind: "first", lines: [] }]
+  const note = marker("\\", n)
   for (let i = start + 1; i < end; i++) {
     const line = lines[i]
+    // A line of backslashes continues the header before it: after a diff's
+    // `diff from: <base>`, the side it's a diff to
+    const more = note.exec(line)
+    if (more) {
+      const last = sections.at(-1)!
+      const to = /^\s*to: (.*)$/.exec(more[1] ?? "")
+      if (to && last.kind === "diff") last.header = to[1]
+      continue
+    }
     const hit = headers.find(([re]) => re.test(line))
     if (hit) {
       sections.push({ kind: hit[1], header: hit[0].exec(line)![1], lines: [] })
@@ -144,8 +159,10 @@ export function parseConflict(lines: string[], start: number, end: number): Conf
       }
     }
   }
-  // jj's own styles title the region ("Conflict 1 of 1"); in git style the
+  // jj's own styles title the region ("conflict 1 of 1"); in git style the
   // open marker text names side 1 ("HEAD") instead.
-  const title = /^Conflict \d+ of \d+$/.test(open[2] ?? "") ? open[2]! : "Merge conflict"
+  const title = /^conflict \d+ of \d+$/i.test(open[2] ?? "")
+    ? capitalize(open[2]!)
+    : "Merge conflict"
   return { title, panels }
 }
