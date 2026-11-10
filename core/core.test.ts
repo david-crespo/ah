@@ -202,6 +202,21 @@ test("bindings and held subjects outlast the server, while their files do", () =
   expect(after.held).toEqual([kept, github])
 })
 
+test("a change still waiting to be saved is saved as the server exits", () => {
+  const file = join(dir, "registry.json")
+  const on = vi.spyOn(process, "on")
+  const loaded = Core.load(file)
+  const onExit = on.mock.calls.find(([event]) => event === "exit")?.[1] as () => void
+  on.mockRestore()
+  // Called here, not as this test's process exits
+  process.off("exit", onExit)
+  const subject = fileSubject(join(dir, "kept.md"))
+  writeFileSync(subject.path, "")
+  loaded.bindSubject(subject, "block:1")
+  onExit()
+  expect(readFileSync(file, "utf8")).toContain(subject.path)
+})
+
 test("a shell's agents are the live ones in its tab, in its layout order", async () => {
   core.onRex(rex({ t1: ["block:1", "block:2", "block:3", "block:9"], t2: ["block:4"] }))
   await report(start("codex", "th1", undefined, "block:1"))

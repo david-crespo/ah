@@ -191,6 +191,10 @@ export class Core implements AgentDirectory {
     }
     for (const key of bindings.keys()) if (gone(key)) bindings.delete(key)
     for (const key of held) if (gone(key)) held.delete(key)
+    // A stop exits on SIGTERM, which would drop a change from the last 200ms
+    process.on("exit", () => {
+      if (core.#saveTimer) core.#save()
+    })
     return core
   }
 
