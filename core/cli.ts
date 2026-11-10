@@ -4,7 +4,7 @@
 
 import { Command } from "@commander-js/extra-typings"
 import { resolve } from "node:path"
-import type { RexState, Tab, WorkspaceRoot } from "./model.ts"
+import type { RexState, Tab, WorkspaceRoot } from "../model.ts"
 import { assetPath } from "../platform/assets.ts"
 import { callServer, die, ensureStarted, portOption, serverUrl } from "../platform/cli.ts"
 import { installProblems, type Problem } from "../platform/install_check.ts"

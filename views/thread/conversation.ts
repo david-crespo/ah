@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import MarkdownExit from "markdown-exit"
-import type { Request, ThreadEntry } from "../../core/model.ts"
+import type { Request, ThreadEntry } from "../../model.ts"
 import type {
   ThreadSnapshot,
   RequestInput,

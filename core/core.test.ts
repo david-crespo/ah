@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
-import { type Address, fileSubject, type RexState } from "./model.ts"
+import { type Address, fileSubject, type RexState } from "../model.ts"
 import { emptyRegistry, type RegistryEvent } from "./registry.ts"
 import { Core, RELAYED } from "./core.ts"
 import { Upgrades } from "./upgrades.ts"

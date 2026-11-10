@@ -19,7 +19,7 @@ import {
   type WorkspaceRecord,
   type WorkspaceRoot,
   type WorkspaceTrackers,
-} from "./model.ts"
+} from "../model.ts"
 import type { Registry } from "./registry.ts"
 import { rootFinder, tabRoot } from "./workspace.ts"
 

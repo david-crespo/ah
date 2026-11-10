@@ -28,14 +28,7 @@ import { isOneOf } from "../../platform/guards.ts"
 import { fileId } from "../id.ts"
 import { GRACE_MS, Presence } from "../../platform/presence.ts"
 import { describeAddress, addressAlive } from "../../platform/session.ts"
-import type {
-  Address,
-  AgentId,
-  AgentRef,
-  FileKind,
-  Route,
-  Subject,
-} from "../../core/model.ts"
+import type { Address, AgentId, AgentRef, FileKind, Route, Subject } from "../../model.ts"
 
 /** Which agent each subject's requests go to, and where agents can be
  * reached, which changes as they go through sessions. The server's is the

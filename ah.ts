@@ -2,7 +2,7 @@
 // ah, the agent host: a local server for watching agent sessions and the
 // views of files they show the user. The CLI has one group per noun in the
 // model (`ah -h`). The code is in four layers, each using only the ones
-// under it, and all of them the model's types (core/model.ts):
+// under it, and all of them the model's types (model.ts):
 //
 // - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
 //   and the doc and page subject types that serve a file's views, and the
@@ -47,7 +47,7 @@ import { installProblems } from "./platform/install_check.ts"
 import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
-import type { AgentId, FileKind, RexState } from "./core/model.ts"
+import type { AgentId, FileKind, RexState } from "./model.ts"
 import { showPage } from "./subjects/files/cli.ts"
 import {
   onRexHealth,

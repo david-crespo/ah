@@ -19,7 +19,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { createConnection } from "node:net"
 import { basename, join } from "node:path"
-import { type Address, type AgentRef, HARNESSES } from "../core/model.ts"
+import { type Address, type AgentRef, HARNESSES } from "../model.ts"
 import { isOneOf, isRecord, str } from "./guards.ts"
 import { claudeConfigDirs, claudeSessionsDir, stateHome } from "./paths.ts"
 import { ancestors, command, processTable, run } from "./proc.ts"

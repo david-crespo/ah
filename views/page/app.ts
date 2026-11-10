@@ -3,7 +3,7 @@
 // generic ones, and what tells one of its pages that its data changed. Such
 // a page draws its data itself, so it's told that rather than reloaded.
 
-import type { AgentId } from "../../core/model.ts"
+import type { AgentId } from "../../model.ts"
 
 /** What a page's live reload watches for an app: `dirs`, where any change
  * is to the page's data, and the files in the page's own directory that

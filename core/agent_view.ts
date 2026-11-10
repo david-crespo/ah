@@ -7,7 +7,7 @@
 import { readdir, readFile } from "node:fs/promises"
 import { basename, join } from "node:path"
 import { claudeConfigDirs, claudeSessionsDir } from "../platform/paths.ts"
-import type { AgentId, AgentRecord, BlockId, RexState, TabId } from "./model.ts"
+import type { AgentId, AgentRecord, BlockId, RexState, TabId } from "../model.ts"
 import { blockOf, type Registry } from "./registry.ts"
 
 export interface ClaudeProcess {

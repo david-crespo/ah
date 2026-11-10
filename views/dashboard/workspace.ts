@@ -2,7 +2,7 @@
 // is in, which one is focused, and the order to list them in.
 
 import { basename, dirname } from "node:path"
-import type { RexState } from "../../core/model.ts"
+import type { RexState } from "../../model.ts"
 import { type RootOf, tabRoot } from "../../core/workspace.ts"
 
 /** A Rex tab in a jj workspace, as the dashboard shows it */

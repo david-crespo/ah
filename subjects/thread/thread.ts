@@ -15,7 +15,7 @@ import { join } from "node:path"
 import { DEFAULT_PORT } from "../../platform/cli.ts"
 import { ahStateDir } from "../../platform/paths.ts"
 import { describeAddress, postTo, addressAlive } from "../../platform/session.ts"
-import type { Address, Request, Subject } from "../../core/model.ts"
+import type { Address, Request, Subject } from "../../model.ts"
 import {
   type ActivityInput,
   type RequestInput,

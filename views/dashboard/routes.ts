@@ -18,7 +18,7 @@ import {
   type RexState,
   type TrackerEntry,
   type WorkspaceTrackers,
-} from "../../core/model.ts"
+} from "../../model.ts"
 import { Presence } from "../../platform/presence.ts"
 import { selectTab } from "../../platform/rex.ts"
 import { LogWatcher, SnapshotWatcher } from "./jj.ts"

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import type { RexState } from "../model.ts"
+import type { RexState } from "../../model.ts"
 import { apply, emptyRegistry, type Registry } from "../registry.ts"
 import { TitleSetter } from "./setter.ts"
 

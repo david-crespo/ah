@@ -37,7 +37,7 @@ import {
   type TrackerStatus,
   type WorkspaceRecord,
   type WorkspaceRoot,
-} from "./model.ts"
+} from "../model.ts"
 
 /** What ah keeps on disk about agents, trackers and subjects */
 export interface Registry {

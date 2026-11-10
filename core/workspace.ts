@@ -3,7 +3,7 @@
 
 import { readFileSync, realpathSync, statSync } from "node:fs"
 import { dirname, join, resolve } from "node:path"
-import type { Tab, WorkspaceRoot } from "./model.ts"
+import type { Tab, WorkspaceRoot } from "../model.ts"
 
 export type RootOf = (dir: string) => WorkspaceRoot | null
 

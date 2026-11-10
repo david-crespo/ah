@@ -6,7 +6,7 @@
 
 import { stat } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import type { AgentId } from "../../core/model.ts"
+import type { AgentId } from "../../model.ts"
 import { rootFinder } from "../../core/workspace.ts"
 import type { PageApp } from "../page/app.ts"
 import { noStore } from "../page/routes.ts"

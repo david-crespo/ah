@@ -6,7 +6,7 @@
 // on the same diff shows its page again.
 
 import { type ChildProcess, spawn } from "node:child_process"
-import type { AgentId } from "../../core/model.ts"
+import type { AgentId } from "../../model.ts"
 import { isRecord } from "../../platform/guards.ts"
 import { showUrl, windowsShowing } from "../../platform/window.ts"
 

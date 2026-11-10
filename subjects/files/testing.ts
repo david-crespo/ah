@@ -2,7 +2,7 @@
 // registry behind it
 
 import { addressAlive } from "../../platform/session.ts"
-import type { Address, AgentId, Route, Subject } from "../../core/model.ts"
+import type { Address, AgentId, Route, Subject } from "../../model.ts"
 import type { AgentDirectory } from "./files.ts"
 
 export class MemoryDirectory implements AgentDirectory {

@@ -4,7 +4,7 @@
 // them prebuilt in dist/client/<view>/ (scripts/build-client.ts).
 
 import { readFile } from "node:fs/promises"
-import type { FileKind } from "../core/model.ts"
+import type { FileKind } from "../model.ts"
 import { assetPath } from "./assets.ts"
 
 /** Each view's bundles: served name to entry point in views/<view>/. A view

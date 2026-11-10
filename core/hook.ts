@@ -29,7 +29,7 @@ import { isOneOf, str } from "../platform/guards.ts"
 import { ensureServer } from "../platform/server.ts"
 import { currentAgent, currentAddress } from "../platform/session.ts"
 import { underCodexDaemon } from "./tuis.ts"
-import { type Address, HARNESSES, type Harness } from "./model.ts"
+import { type Address, HARNESSES, type Harness } from "../model.ts"
 import { HOOK_EVENTS, type RegistryEvent } from "./registry.ts"
 import { sanitizeTitle } from "./summary.ts"
 

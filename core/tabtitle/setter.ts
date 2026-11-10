@@ -13,7 +13,7 @@
 // sends window_label_changed, so a changed label shows up in the next
 // RexState.
 
-import type { RexState, Tab } from "../model.ts"
+import type { RexState, Tab } from "../../model.ts"
 import { setTabLabel } from "../../platform/rex.ts"
 import type { Registry } from "../registry.ts"
 import { tabTitle } from "./title.ts"

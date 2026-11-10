@@ -1,7 +1,7 @@
 // The requests every thread takes: messages from the conversation panel, and
 // comments and de-LLM requests on a selection
 
-import type { Request } from "../../core/model.ts"
+import type { Request } from "../../model.ts"
 import type { RequestKinds } from "./events.ts"
 
 const quote = (text: string) => JSON.stringify(text)

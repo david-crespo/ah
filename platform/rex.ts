@@ -18,7 +18,7 @@ import { existsSync, readdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { createInterface } from "node:readline"
-import type { RexState, Tab } from "../core/model.ts"
+import type { RexState, Tab } from "../model.ts"
 import { isRecord, isString, isStringOrNull } from "./guards.ts"
 import { type Output, run } from "./proc.ts"
 

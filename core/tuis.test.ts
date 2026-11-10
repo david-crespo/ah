@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import type { RexState } from "./model.ts"
+import type { RexState } from "../model.ts"
 import { type Tui, focusedBlock, isTui, pickBlock, tuisInBlocks } from "./tuis.ts"
 
 const bin =

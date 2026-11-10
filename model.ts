@@ -1,4 +1,5 @@
-// Core types. Ids are plain strings, named for what they identify.
+// The model's types, which every layer uses. Ids are plain strings, named
+// for what they identify.
 
 // Rex
 

@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
-import type { RexState, TrackerEntry } from "./model.ts"
+import type { RexState, TrackerEntry } from "../model.ts"
 import { emptyRegistry, type Registry } from "./registry.ts"
-import { fileSubject } from "./model.ts"
+import { fileSubject } from "../model.ts"
 import { Trackers } from "./trackers.ts"
 
 let dir: string

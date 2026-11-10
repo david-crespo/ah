@@ -15,7 +15,7 @@
 // What each agent was last told is in memory. After a server restart an
 // agent's first hook sets it without saying anything.
 
-import type { AgentId } from "./model.ts"
+import type { AgentId } from "../model.ts"
 
 /** A file open in the server, as the agent's notices need it */
 export interface OpenFileState {

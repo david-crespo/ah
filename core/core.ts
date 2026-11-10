@@ -47,7 +47,7 @@ import {
   type Route,
   type Subject,
   type WorkspaceRoot,
-} from "./model.ts"
+} from "../model.ts"
 import { Notices, type Showing, startContext } from "./notices.ts"
 import { Trackers } from "./trackers.ts"
 import { doctorNotice, type Outdated, Upgrades } from "./upgrades.ts"

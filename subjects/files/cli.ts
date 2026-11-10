@@ -10,12 +10,7 @@ import { callServer, die, ensureStarted, serverUrl } from "../../platform/cli.ts
 import { showUrl, windowName } from "../../platform/window.ts"
 import { currentAgent, currentAddress } from "../../platform/session.ts"
 import { status } from "../../platform/server.ts"
-import {
-  type AgentId,
-  type FileKind,
-  type NearbyAgent,
-  fileKind,
-} from "../../core/model.ts"
+import { type AgentId, type FileKind, type NearbyAgent, fileKind } from "../../model.ts"
 import type { FileInfo, Location } from "./files.ts"
 import type { ShowRequest } from "./routes.ts"
 

@@ -5,7 +5,7 @@ import {
   type Request,
   type RequestState,
   type ThreadEntry,
-} from "../../core/model.ts"
+} from "../../model.ts"
 import { isOneOf, isRecord } from "../../platform/guards.ts"
 
 export { PHASES }

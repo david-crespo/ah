@@ -5,7 +5,7 @@
 
 import { callServer, serverUrl } from "../platform/cli.ts"
 import { status } from "../platform/server.ts"
-import type { AgentRef, TrackerEntry, TrackerStatus, WorkspaceTrackers } from "./model.ts"
+import type { AgentRef, TrackerEntry, TrackerStatus, WorkspaceTrackers } from "../model.ts"
 
 const postJson = <T>(port: number, rest: string, body: unknown) =>
   callServer<T>(serverUrl(port, `core/${rest}`), { body })

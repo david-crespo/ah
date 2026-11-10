@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "vitest"
-import type { RexState, Tab } from "../../core/model.ts"
+import type { RexState, Tab } from "../../model.ts"
 import { rootFinder, type RootOf, tabRoot } from "../../core/workspace.ts"
 import { resolve } from "./workspace.ts"
 

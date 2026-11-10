@@ -14,7 +14,7 @@ import { text } from "node:stream/consumers"
 import { basename, dirname, join, relative } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { threadCommands } from "../subjects/thread/cli.ts"
-import { FILE_KINDS, fileKind } from "../core/model.ts"
+import { FILE_KINDS, fileKind } from "../model.ts"
 import { die, portOption, serverUrl } from "../platform/cli.ts"
 import { showUrl } from "../platform/window.ts"
 import {

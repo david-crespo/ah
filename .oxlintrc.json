@@ -10,13 +10,8 @@
           {
             "patterns": [
               {
-                "group": [
-                  "**/core/**",
-                  "!**/core/model.ts",
-                  "**/subjects/**",
-                  "**/views/**"
-                ],
-                "message": "platform/ is the bottom layer: of the others, it can use only the model's types"
+                "group": ["**/core/**", "**/subjects/**", "**/views/**"],
+                "message": "platform/ is the bottom layer"
               }
             ]
           }
@@ -32,8 +27,8 @@
           {
             "patterns": [
               {
-                "group": ["**/core/**", "!**/core/model.ts", "**/views/**"],
-                "message": "subjects/ is under core/ and views/: it can use the model's types, nothing else from them"
+                "group": ["**/core/**", "**/views/**"],
+                "message": "subjects/ is under core/ and views/"
               }
             ]
           }

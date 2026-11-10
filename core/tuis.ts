@@ -12,7 +12,7 @@
 // suspended in the background isn't found.
 
 import { ancestors, type Proc, processTable } from "../platform/proc.ts"
-import type { RexState } from "./model.ts"
+import type { RexState } from "../model.ts"
 import { foregroundBlocks } from "../platform/rex.ts"
 
 export type TuiHarness = "codex" | "opencode"
