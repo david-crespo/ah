@@ -140,8 +140,16 @@ export function mergeDisk(
   by: "lines" | "words" = "words",
 ): { text: string; conflicts: number } {
   const split = by === "lines" ? splitLines : tokens
-  const o = split(base)
-  const all = [...hunks(o, split(unsaved), true), ...hunks(o, split(disk), false)].sort(
+  // The last newline merges on its own. As a token, a side's dropping it
+  // would join its last line to one the other side added after it.
+  const ends = (t: string) => !t || t.endsWith("\n")
+  const whole = (t: string) => (ends(t) ? t : t + "\n")
+  const final = ends(unsaved) === ends(base) ? ends(disk) : ends(unsaved)
+  const o = split(whole(base))
+  const all = [
+    ...hunks(o, split(whole(unsaved)), true),
+    ...hunks(o, split(whole(disk)), false),
+  ].sort(
     // At one start, an insertion goes before a replacement
     (x, y) => x.start - y.start || x.end - x.start - (y.end - y.start),
   )
@@ -231,7 +239,8 @@ export function mergeDisk(
     }
     at = r.end
   }
-  return { text: text + o.slice(at).join(""), conflicts }
+  text += o.slice(at).join("")
+  return { text: final ? text : text.replace(/\n$/, ""), conflicts }
 }
 
 export const atLineStart = (o: string[], i: number) => i <= 0 || o[i - 1] === "\n"

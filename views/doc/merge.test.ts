@@ -195,6 +195,13 @@ describe("mergeDisk edge cases", () => {
     )
   })
 
+  test("keeps a line added at the end apart from a last line that lost its newline", () => {
+    expect(merged("a b c\n", "a b c\nnew line\n", "a b c")).toBe("a b c\nnew line")
+    expect(merged("a b c\n", "a b c", "a b c\nnew line\n")).toBe("a b c\nnew line")
+    expect(merged("a b c", "a b c\n", "a B c")).toBe("a B c\n")
+    expect(merged("a b c\n", "", "a b c\nnew line\n")).toBe("new line\n")
+  })
+
   test("merges words outside ASCII", () => {
     expect(
       merged(
@@ -341,6 +348,12 @@ describe("mergeDisk by lines", () => {
   test("keeps the file's line endings and a missing last newline", () => {
     expect(byLines("a\r\nb\r\nc", "A\r\nb\r\nc", "a\r\nb\r\nc!").text).toBe("A\r\nb\r\nc!")
     expect(byLines("", "mine\n", "").text).toBe("mine\n")
+  })
+
+  test("keeps a line added at the end apart from a last line that lost its newline", () => {
+    expect(byLines("fn a() {}\n", "fn a() {}\nfn b() {}\n", "fn a() {}").text).toBe(
+      "fn a() {}\nfn b() {}",
+    )
   })
 
   test("leaves conflicts the preview can pick a side of", () => {
