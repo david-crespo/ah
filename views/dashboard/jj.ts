@@ -109,7 +109,8 @@ const SNAPSHOT_DELAY_MS = 10_000
  * SNAPSHOT_DELAY_MS, so `@` in the log reflects edits that no jj command has
  * seen yet. jj records an operation only when something changed, which then
  * fires the LogWatcher. Any jj command would take the same snapshot; this
- * only takes it sooner.
+ * only takes it sooner. Takes one on start too, for the edits made while
+ * nothing was watching.
  */
 export class SnapshotWatcher {
   #watcher: FSWatcher | null = null
@@ -118,6 +119,7 @@ export class SnapshotWatcher {
 
   constructor(root: string) {
     this.root = root
+    void this.#snapshot()
     const onChange = (filename: string | null) => {
       if (filename && isIgnored(filename)) return
       clearTimeout(this.#timer)

@@ -5,7 +5,9 @@
 // its script in client.ts), along with each tab's file, its workspace's
 // current tracker (core/trackers.ts), which the page shows with doc's <ah-markdown>
 // element, or in a frame for an html file. The focused workspace gets
-// snapshotted once edits settle, so @ stays current between jj commands.
+// snapshotted once edits settle, so @ stays current between jj commands. The
+// logs and snapshots run only while a page is open, and for a few seconds
+// after the last one goes, for a reload.
 
 import { readFile } from "node:fs/promises"
 import { assetPath } from "../../platform/assets.ts"
@@ -19,7 +21,7 @@ import {
   type TrackerEntry,
   type WorkspaceTrackers,
 } from "../../model.ts"
-import { Presence } from "../../platform/presence.ts"
+import { GRACE_MS, Presence } from "../../platform/presence.ts"
 import { selectTab } from "../../platform/rex.ts"
 import { LogWatcher, SnapshotWatcher } from "./jj.ts"
 import { rootFinder } from "../../core/workspace.ts"
@@ -86,6 +88,10 @@ export class Dashboard {
   #logs = new Map<string, LogWatcher>()
   #snapshotter: SnapshotWatcher | null = null
   #clients = new Set<Client>()
+  /** Whether the watchers run: while a page is following the stream, and
+   * for the grace after the last one leaves */
+  #watching = false
+  #unwatch: ReturnType<typeof setTimeout> | undefined
   /** Whether a dashboard window is open, for telling agents when none is
    * (core/notices.ts) */
   readonly presence = new Presence()
@@ -194,15 +200,30 @@ export class Dashboard {
         send(c, event, data)
       } catch {
         this.#clients.delete(c)
-        this.presence.update(this.#clients.size)
+        this.#clientsChanged()
       }
+    }
+  }
+
+  #clientsChanged() {
+    this.presence.update(this.#clients.size)
+    clearTimeout(this.#unwatch)
+    if (this.#clients.size && !this.#watching) {
+      this.#watching = true
+      this.#syncWatchers()
+    } else if (!this.#clients.size && this.#watching) {
+      this.#unwatch = setTimeout(() => {
+        this.#watching = false
+        this.#syncWatchers()
+      }, GRACE_MS)
+      this.#unwatch.unref()
     }
   }
 
   // A log watcher for every open workspace, not only the focused one, so a
   // tab switch shows an up-to-date log straight from the page's cache.
   #syncWatchers() {
-    const open = new Set(this.#state.tabs.map((t) => t.root))
+    const open = new Set(this.#watching ? this.#state.tabs.map((t) => t.root) : [])
     for (const [root, watcher] of this.#logs) {
       if (open.has(root)) continue
       watcher.close()
@@ -217,7 +238,7 @@ export class Dashboard {
     }
     // Only the focused workspace gets snapshotted: it's the one on screen, and
     // watching every file in every open workspace would be wasteful
-    const focused = focusedRoot(this.#state)
+    const focused = this.#watching ? focusedRoot(this.#state) : null
     if (this.#snapshotter?.root !== focused) {
       this.#snapshotter?.close()
       this.#snapshotter = focused ? new SnapshotWatcher(focused) : null
@@ -275,7 +296,9 @@ export class Dashboard {
       start: (c) => {
         controller = c
         this.#clients.add(c)
-        this.presence.update(this.#clients.size)
+        // Starts the watchers for the first page, which gets each log in
+        // the broadcast after its first render
+        this.#clientsChanged()
         // Reconnect soon after a restart, so the page is back before a command
         // looks for one to show something in (EventSource waits seconds by
         // default)
@@ -291,7 +314,7 @@ export class Dashboard {
       },
       cancel: () => {
         this.#clients.delete(controller)
-        this.presence.update(this.#clients.size)
+        this.#clientsChanged()
       },
     })
     return new Response(body, {

@@ -111,7 +111,10 @@ test("a snapshot due after its workspace is removed logs instead of rejecting", 
     }
     rmSync(dir, { recursive: true })
     vi.runOnlyPendingTimers()
-    const failed = () => error.mock.calls.some(([m]) => String(m).includes("snapshot"))
+    // One for the snapshot it takes on start, in a directory that isn't a
+    // repo, and one for the snapshot that was due
+    const failed = () =>
+      error.mock.calls.filter(([m]) => String(m).includes("snapshot")).length === 2
     while (!failed()) await sleep(10)
   } finally {
     watcher.close()
