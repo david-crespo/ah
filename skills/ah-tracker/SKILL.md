@@ -189,11 +189,12 @@ becomes current.
 
 When the user is away from the desk but on the same network (Remote Control
 from the phone), they can read the tracker in the phone's browser. ah only
-listens on 127.0.0.1, so run the read-only proxy next to this file, outside
-the sandbox (it binds a LAN port), in the background:
+listens on 127.0.0.1, so run the read-only proxy, `lan-proxy.mjs` in this
+skill's directory, outside the sandbox (it binds a LAN port), in the
+background:
 
 ```
-node ~/.claude/skills/ah-tracker/lan-proxy.mjs <lan-ip> <page-id>...
+node <this skill's directory>/lan-proxy.mjs <lan-ip> <page-id>...
 ```
 
 The LAN IP is the `inet` address on the local network in `ifconfig` output

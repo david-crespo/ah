@@ -19,7 +19,7 @@ const listenPort = 7430
 const allowed = (path) =>
   pageIds.some((id) => path.startsWith(`/view/page/${id}/`)) ||
   /^\/view\/page\/[\w.-]+\.(js|css)$/.test(path) ||
-  /^\/[\w.-]+\.css$/.test(path)
+  /^\/[\w.-]+\.(js|css)$/.test(path)
 
 http
   .createServer((req, res) => {
