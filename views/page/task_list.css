@@ -253,7 +253,8 @@ ah-item > details[open] .ah-item-chevron {
   display: none;
 }
 
-.ah-item-go[inert] {
+/* An item that can't go still shows its last Go's spinner, question or error */
+.ah-item-go[inert][data-state="ready"] {
   visibility: hidden;
 }
 
