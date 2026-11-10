@@ -184,7 +184,7 @@ export function createMarkdown() {
   // GitHub expands two kinds of bare URL on their own line into embeds: a blob
   // permalink with a line range becomes a code snippet, and a user-attachments
   // asset becomes an image or video. Swap such paragraphs for a placeholder
-  // that the preview fills in after render (hydrateEmbeds).
+  // that the preview fills in after render (embeds.ts).
   md.core.ruler.push("gh_embed", (state) => {
     const toks = state.tokens
     for (let i = 0; i + 2 < toks.length; i++) {
