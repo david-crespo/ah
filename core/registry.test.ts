@@ -87,6 +87,18 @@ test("Stop and SessionEnd go idle but leave the agent shown", () => {
   expect(tabTitle(["t1"], r)).toBe("ah | Port titles")
 })
 
+test("a SessionEnd makes no record for a session that has none", () => {
+  const r = emptyRegistry()
+  // From Codex's daemon after the pane closed and its record went
+  const ended = apply(r, hook("SessionEnd", "a", null, { harness: "codex" }))
+  expect(ended).toEqual({ agent: null, blocks: [], summarize: null })
+  expect(r.agents.size).toBe(0)
+  // A nested run's, in a pane whose agent is another session
+  apply(r, hook("SessionStart", "b", "t1"))
+  apply(r, hook("SessionEnd", "c", "t1"))
+  expect(r.agents.get("t1")).toMatchObject({ session: "b", ended: false })
+})
+
 test("an agent that ended drops out of the title while another in the tab runs", () => {
   const r = emptyRegistry()
   apply(r, hook("UserPromptSubmit", "a", "t1"))

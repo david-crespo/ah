@@ -173,6 +173,13 @@ export function apply(
   }
 
   const id = agentId(r, e)!
+  const previous = r.agents.get(id)
+  // A new session in the pane (/clear, a restart, another harness) starts
+  // over
+  const same = previous?.session === e.session && previous.harness === e.harness
+  // The end of a session ah has no record of, as from Codex's daemon after
+  // its pane closed, leaves nothing to keep
+  if (e.event === "SessionEnd" && !same) return { agent: null, blocks: [], summarize: null }
   const blocks: BlockId[] = []
   // The same session in another pane (resumed there) leaves the first one
   for (const [otherId, other] of r.agents) {
@@ -182,10 +189,6 @@ export function apply(
     if (other.shown && otherBlock) blocks.push(otherBlock)
     other.shown = false
   }
-  const previous = r.agents.get(id)
-  // A new session in the pane (/clear, a restart, another harness) starts
-  // over
-  const same = previous?.session === e.session && previous.harness === e.harness
   // An event with no block (from Codex's daemon, unplaced) keeps the home
   // the session's agent has
   const home: Home | null = e.block

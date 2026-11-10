@@ -23,8 +23,8 @@ afterEach(async () => {
 })
 
 /** A stand-in for a session's inbox socket: what each connection wrote */
-async function inbox() {
-  const socket = join(dir, "inbox.sock")
+async function inbox(name = "inbox.sock") {
+  const socket = join(dir, name)
   const posts: string[] = []
   const server = createServer((conn) => {
     let text = ""
@@ -117,6 +117,24 @@ test("without a session, a request is kept for later and activity still lands", 
   // The log outlives the server
   const reopened = await markdownThread(file, doc)
   expect(reopened.state().entries.length).toEqual(3)
+})
+
+test("a request isn't posted to a session that's gone", async () => {
+  // Claude's socket, named for its pid, can outlive the process, whose
+  // session file is gone
+  const stale = await inbox("99999999.sock")
+  try {
+    const { path, doc } = await markdownFile("text\n")
+    const address = () => ({ harness: "claude" as const, socket: stale.socket })
+    const thread = await markdownThread({ subject: fileSubject(path), address }, doc)
+    const { agentConnected } = await thread.request(
+      parseRequest({ kind: "chat", text: "hi" }, threadKinds),
+    )
+    expect(agentConnected).toBe(false)
+    expect(stale.posts).toEqual([])
+  } finally {
+    stale.close()
+  }
 })
 
 test("requests no agent took go to the next one, unless handled by then", async () => {

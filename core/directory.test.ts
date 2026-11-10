@@ -158,6 +158,31 @@ test("with its agent's tab gone, a file's requests go to an agent in its workspa
   expect(directory.route(fileSubject(join(dir, "loose.md")))).toEqual(null)
 })
 
+test("an agent whose session ended isn't live", () => {
+  show({ t1: ["block:1", "block:2", "block:9"] })
+  report(start("codex", "th1", "block:1"))
+  report(start("codex", "th2", "block:2"))
+  // A Codex TUI that quit, in a pane still open
+  report({ ...start("codex", "th2", "block:2"), event: "SessionEnd" })
+  expect(directory.agentsNear("block:9")).toEqual(["block:1"])
+  const subject = fileSubject(join(dir, "notes.md"))
+  directory.bindSubject(subject, "block:2")
+  expect(directory.route(subject)).toEqual({ address: codex("th1"), via: "tab" })
+  expect(directory.reach("block:2")).toEqual(codex("th1"))
+  report({ ...start("codex", "th1", "block:1"), event: "SessionEnd" })
+  expect(directory.route(subject)).toEqual(null)
+  expect(directory.reach("block:2")).toEqual(null)
+})
+
+test("a file's workspace has no live agent once theirs ended", () => {
+  const repo = join(dir, "repo")
+  mkdirSync(join(repo, ".jj"), { recursive: true })
+  show({ t2: ["block:2"] })
+  report({ ...start("codex", "th2", "block:2"), cwd: repo })
+  report({ ...start("codex", "th2", "block:2"), cwd: repo, event: "SessionEnd" })
+  expect(directory.route(fileSubject(join(repo, "tracker.html")))).toEqual(null)
+})
+
 const posted = () =>
   inbox.posts.map(({ to, text }) => [to, text.replace(`${RELAYED}\n\n`, "")])
 

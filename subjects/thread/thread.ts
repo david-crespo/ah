@@ -186,10 +186,11 @@ export class Thread {
   }
 
   /** Post the requests, with the context no post has carried ahead of them,
-   * and log that they went */
+   * and log that they went. Not to a session that's gone, which might still
+   * take the post. */
   async #deliver(requests: Request[]): Promise<boolean> {
     const address = this.#bound.address()
-    if (!address) return false
+    if (!address || !addressAlive(address)) return false
     const lines = [
       header(this.#options, this.#log.subject, this.#options.port),
       ...this.#unsent,

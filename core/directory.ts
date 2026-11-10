@@ -145,11 +145,13 @@ export class Directory implements AgentDirectory {
    * always the one it's in now, even after Codex's /new. Claude is reached
    * by its process's inbox socket, which lasts through /clear; a new process
    * in the pane reports its own from its hooks. Until it has, or after the
-   * server restarts, the socket comes from Claude's record of the session. */
+   * server restarts, the socket comes from Claude's record of the session.
+   * null once its session ended. */
   address(agent: string): Address | null {
     const known = this.#addresses.get(agent) ?? null
     const record = this.#registry.agents.get(agent)
     if (!record) return known
+    if (record.ended) return null
     switch (record.harness) {
       case "claude": {
         const own = known?.harness === "claude" ? known : null
