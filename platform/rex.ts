@@ -65,9 +65,20 @@ export function rexTrouble(h: RexHealth): string | null {
   return null
 }
 
+// These log a change of state, not each retry, since a Rex that isn't
+// running or installed is fine for good
+
 function setUnrunnable(reason: string | null) {
   if (health.unrunnable === reason) return
   health.unrunnable = reason
+  if (reason) console.error(`ah: ${reason}`)
+  onHealth()
+}
+
+function setConnected(connected: boolean) {
+  if (health.events.connected === connected) return
+  health.events.connected = connected
+  console.error(connected ? "ah: following Rex" : "ah: lost Rex's events, retrying")
   onHealth()
 }
 
@@ -516,7 +527,8 @@ export async function readRex(): Promise<RexState> {
 }
 
 /** Calls `onChange` with every new RexState, forever. Reconnects if the
- * event stream ends, e.g. when the Rex server restarts. */
+ * event stream ends, e.g. when the Rex server restarts, waiting twice as
+ * long each time it fails to load, up to 30s. */
 export async function watchRex(onChange: (rex: RexState) => void): Promise<never> {
   let last = ""
   const emit = (rex: RexState) => {
@@ -525,22 +537,16 @@ export async function watchRex(onChange: (rex: RexState) => void): Promise<never
     last = json
     onChange(rex)
   }
-  for (let attempt = 0; ; attempt++) {
+  /** The last load failure logged, so retries that fail the same way don't */
+  let failure = ""
+  for (let attempt = 0, delay = 2000; ; attempt++) {
     let loaded = false
     if (attempt > 0) health.events.reconnects++
     const binary = health.binary
     const child = spawn(binary, ["--autostart=false", "events", "--all", "--json"], {
       stdio: ["ignore", "pipe", "inherit"],
     })
-    const setConnected = (connected: boolean) => {
-      if (health.events.connected === connected) return
-      health.events.connected = connected
-      onHealth()
-    }
-    child.on("spawn", () => {
-      setConnected(true)
-      setUnrunnable(null)
-    })
+    child.on("spawn", () => setUnrunnable(null))
     const exited = new Promise<number | null>((resolve) => {
       child.on("error", (e) => {
         refind(binary, e)
@@ -556,13 +562,18 @@ export async function watchRex(onChange: (rex: RexState) => void): Promise<never
     void follower.load().then(
       () => {
         loaded = true
+        failure = ""
+        delay = 2000
+        setConnected(true)
         for (const e of queued.splice(0)) follower.onEvent(e)
         emit(follower.state())
       },
       (e) => {
+        const message = e instanceof Error ? e.message : String(e)
+        if (message !== failure) console.error(`ah: couldn't load Rex sessions: ${message}`)
+        failure = message
         // Events would queue forever with nothing to replay them onto, so
         // start over with a fresh stream
-        console.error("ah: couldn't load Rex sessions:", e)
         child.kill()
       },
     )
@@ -577,10 +588,10 @@ export async function watchRex(onChange: (rex: RexState) => void): Promise<never
       if (loaded) follower.onEvent(event)
       else queued.push(event)
     }
-    const code = await exited
+    await exited
     setConnected(false)
-    console.error(`ah: rex events exited with ${code}, restarting`)
     emit({ front: null, sessions: [] })
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    delay = Math.min(delay * 2, 30_000)
   }
 }
