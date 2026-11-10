@@ -100,6 +100,11 @@ interface ViewRoutes {
 
 async function serve(port: number) {
   const startedAt = Date.now()
+  // A throw in an event listener or a promise nobody awaits would end the
+  // server, and every page's socket and editor pane with it. So far each has
+  // been one request's problem, so it's logged and the server carries on.
+  process.on("uncaughtException", (e) => console.error("ah: uncaught exception:", e))
+  process.on("unhandledRejection", (e) => console.error("ah: unhandled rejection:", e))
   scrubSessionEnv(process.env)
   // Before anything reads ah's state
   for (const line of upgradeState()) console.error(line)
