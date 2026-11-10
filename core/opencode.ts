@@ -114,7 +114,9 @@ export async function watchOpencode(core: Core, retryMs = 5000) {
     const found = opencodeService()
     if (found && processRunning(found.pid)) {
       const auth = `Basic ${Buffer.from(`opencode:${found.password}`).toString("base64")}`
-      await follow({ url: found.url, auth }, core, known).catch(() => {})
+      await follow({ url: found.url, auth }, core, known).catch((e) =>
+        console.error(`ah: lost opencode's event stream: ${e}`),
+      )
     }
     await new Promise((resolve) => setTimeout(resolve, retryMs))
   }

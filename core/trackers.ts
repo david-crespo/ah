@@ -126,13 +126,18 @@ export class Trackers {
     return null
   }
 
-  /** Make `path` the workspace's current tracker, and active if it wasn't */
+  /** Make `path` the workspace's current tracker, and active if it wasn't,
+   * here and in any other workspace that lists it */
   add(root: WorkspaceRoot, path: string, now = Date.now()) {
+    for (const { trackers } of this.#records.values()) {
+      const t = trackers.find((t) => t.path === path)
+      if (t) Object.assign(t, { status: "active", used: now })
+    }
     let record = this.#records.get(root)
     if (!record) this.#records.set(root, (record = { current: null, trackers: [] }))
-    const t = record.trackers.find((t) => t.path === path)
-    if (t) Object.assign(t, { status: "active", used: now })
-    else record.trackers.push({ path, status: "active", used: now })
+    if (!record.trackers.some((t) => t.path === path)) {
+      record.trackers.push({ path, status: "active", used: now })
+    }
     record.current = path
     this.#source.changed({ add: path, root })
   }

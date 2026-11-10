@@ -9,7 +9,8 @@
 //
 // --other-display fills a display without the pointer, preferring the
 // built-in one. --badge and --color draw the Dock icon. Links off the
-// loopback hosts open in the default browser.
+// loopback hosts open in the default browser, and links of other schemes
+// (mailto:) in their apps. ⌘[ and ⌘] go back and forward.
 //
 // Hovering a link shows its address in the bottom left corner, as a
 // browser's status bar does: a script in every frame reports the link under
@@ -124,6 +125,8 @@ func mainMenu() -> NSMenu {
   ])
   add("View", [
     menuItem("Reload", #selector(WKWebView.reload(_:)), "r"),
+    menuItem("Back", #selector(WKWebView.goBack(_:)), "["),
+    menuItem("Forward", #selector(WKWebView.goForward(_:)), "]"),
     .separator(),
     menuItem("Actual Size", #selector(AppDelegate.actualSize(_:)), "0"),
     menuItem("Zoom In", #selector(AppDelegate.zoomIn(_:)), "="),
@@ -340,14 +343,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     (webView.value(forKey: "_inspector") as? NSObject)?.perform(Selector(("show")))
   }
 
-  // The page's own frames go anywhere; the window itself stays on ah's pages
+  // The page's own frames go anywhere on the web; the window itself stays on
+  // ah's pages. A link of another scheme, like mailto: or vscode:, is the
+  // app's for that scheme: loaded here, it would fail and read as ah's
+  // server being down.
   func webView(
     _ webView: WKWebView,
     decidePolicyFor action: WKNavigationAction,
     decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
   ) {
-    guard action.targetFrame?.isMainFrame == true, let url = action.request.url,
-      url.scheme == "http" || url.scheme == "https", !isLocal(url)
+    guard let url = action.request.url else { return decisionHandler(.allow) }
+    let scheme = url.scheme ?? ""
+    if !["http", "https", "about", "blob", "data"].contains(scheme) {
+      // Only on a click, so a script can't launch apps
+      if action.navigationType == .linkActivated { NSWorkspace.shared.open(url) }
+      return decisionHandler(.cancel)
+    }
+    guard action.targetFrame?.isMainFrame == true, scheme == "http" || scheme == "https",
+      !isLocal(url)
     else { return decisionHandler(.allow) }
     NSWorkspace.shared.open(url)
     decisionHandler(.cancel)

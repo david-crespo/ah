@@ -3,7 +3,7 @@
 // thread's URL, and listing what pages show and closing a file's windows.
 
 import { realpathSync, statSync } from "node:fs"
-import { join, relative, resolve as resolvePath } from "node:path"
+import { basename, dirname, join, relative, resolve as resolvePath } from "node:path"
 import { Command } from "@commander-js/extra-typings"
 import { callServer, die, ensureStarted, portOption, serverUrl } from "./shared.ts"
 import { pickAgentNear } from "./agents.ts"
@@ -26,7 +26,16 @@ export function absolute(file: string): string {
 
 /** `realPathOrDie`, for a file to serve: under the cwd or its workspace */
 export function openablePathOrDie(file: string): string {
-  const path = realPathOrDie(file)
+  return servableOrDie(realPathOrDie(file))
+}
+
+/** For a file to write and then serve: check it before writing, so a refused
+ * one isn't left behind */
+export function newPathOrDie(file: string): string {
+  return servableOrDie(join(absolute(dirname(file)), basename(file)))
+}
+
+function servableOrDie(path: string): string {
   if (!openable(path, process.cwd())) {
     die(`ah: ${path} is outside this directory and its jj workspace, so ah won't serve it`)
   }

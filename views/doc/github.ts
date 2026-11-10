@@ -7,11 +7,17 @@ import { cacheHome } from "../../platform/paths.ts"
 import { run } from "../../platform/proc.ts"
 import { mediaType } from "../mime.ts"
 
+/** Kept while it works: no token, or one GitHub refuses, is asked for again
+ * next time, after a `gh auth login` */
 let ghTokenPromise: Promise<string | null> | undefined
 function ghToken(): Promise<string | null> {
   ghTokenPromise ??= run("gh", ["auth", "token"])
     .then((o) => (o.success ? o.stdout.trim() || null : null))
     .catch(() => null)
+    .then((token) => {
+      if (!token) ghTokenPromise = undefined
+      return token
+    })
   return ghTokenPromise
 }
 
@@ -38,6 +44,7 @@ export async function fetchBlob(owner: string, repo: string, ref: string, path: 
   const escaped = path.split("/").map(encodeURIComponent).join("/")
   const url = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${escaped}`
   const res = await fetch(url, { headers: await ghHeaders() })
+  if (res.status === 401) ghTokenPromise = undefined
   if (!res.ok) throw new Error(`${res.status} fetching ${url}`)
   const text = await res.text()
   if (immutable) {

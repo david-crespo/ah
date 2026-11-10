@@ -73,6 +73,9 @@ export class AhMarkdown extends HTMLElement {
       const button = (e.target as Element).closest<HTMLButtonElement>(".merge-pick")
       if (button) void this.#pick(button)
     })
+    // Error events don't bubble, and an embed's image is a copy of the cached
+    // one, which a handler on the image itself wouldn't come with
+    this.content.addEventListener("error", videoForFailedImage, true)
   }
 
   // Gives `doc-message` listeners a typed event, as lib.dom does for its own
@@ -779,21 +782,29 @@ async function buildAssetEmbed(href: string, base: URL): Promise<HTMLElement> {
   )
   if (!res.ok) throw new Error(await res.text())
   const { src, type } = (await res.json()) as { src: string; type: string }
-  const video = () => {
-    const v = document.createElement("video")
-    v.src = src
-    v.controls = true
-    v.muted = true
-    return v
-  }
-  if (type.startsWith("video/")) return video()
+  if (type.startsWith("video/")) return assetVideo(src)
   const img = document.createElement("img")
   img.src = src
   img.alt = href
-  // The type is inferred from the URL and may be missing; a failed image
-  // load most likely means it was a video.
-  if (!type) img.onerror = () => img.replaceWith(video())
+  // The type is inferred from the URL and may be missing
+  if (!type) img.dataset.untyped = ""
   return img
+}
+
+function assetVideo(src: string): HTMLVideoElement {
+  const video = document.createElement("video")
+  video.src = src
+  video.controls = true
+  video.muted = true
+  return video
+}
+
+/** An asset of unknown type that fails to load as an image is most likely
+ * a video */
+function videoForFailedImage({ target }: Event) {
+  if (target instanceof HTMLImageElement && target.matches(".gh-embed img[data-untyped]")) {
+    target.replaceWith(assetVideo(target.src))
+  }
 }
 
 /** The last render's loaded embeds by URL, to move into the next one. Failed

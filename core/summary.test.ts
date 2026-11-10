@@ -103,6 +103,13 @@ test("includes a hook prompt not yet in the transcript", async () => {
   })
 })
 
+test("a long hook prompt already in the transcript isn't added again", async () => {
+  const prompt = "Refactor the tab titles. ".repeat(100)
+  const path = transcript([codexUser(prompt)])
+  const payload = await buildSummaryPayload(path, null, prompt)
+  expect(payload?.recentMessages).toHaveLength(1)
+})
+
 test("a short task is enough to summarize", async () => {
   const path = transcript([codexUser("write a sonnet")])
   expect(await buildSummaryPayload(path, null, "yes")).toEqual({

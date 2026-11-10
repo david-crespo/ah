@@ -46,6 +46,9 @@ export function sanitizeTitle(title: string): string {
   return title.replace(control, "").replace(/\s+/g, " ").trim()
 }
 
+/** A summary as the tab title shows it, from the summary CLI or the harness */
+export const cleanSummary = (text: string) => sanitizeTitle(text).slice(0, 100)
+
 const truncate = (s: string) =>
   s.length <= MAX_MESSAGE_CHARS ? s : s.slice(0, MAX_MESSAGE_CHARS) + "…"
 
@@ -175,11 +178,11 @@ export async function buildSummaryPayload(
   prompt?: string,
 ): Promise<SummaryPayload | undefined> {
   const { userMessages: messages, lastReply } = await readTranscript(transcriptPath)
-  const promptText = prompt ? extractUserText(prompt) : undefined
+  // Compared as the transcript's messages are read, cut to length
+  const text = prompt && extractUserText(prompt)
+  const promptText = text && truncate(text)
   const all =
-    promptText && messages.at(-1) !== promptText
-      ? [...messages, truncate(promptText)]
-      : messages
+    promptText && messages.at(-1) !== promptText ? [...messages, promptText] : messages
   const relevant = all.filter((m) => m.length > MIN_RELEVANT_CHARS)
   if (relevant.length === 0) return undefined
   return {
@@ -226,7 +229,8 @@ const MAX_STDERR_CHARS = 500
 export function generateSummary(payload: SummaryPayload): Promise<SummaryResult> {
   return new Promise((resolve) => {
     const [cli, ...args] = summaryCommand(SYSTEM_PROMPT)
-    const child = spawn(cli, args, { stdio: ["pipe", "pipe", "pipe"] })
+    // One that stalls would otherwise last as long as the server
+    const child = spawn(cli, args, { stdio: ["pipe", "pipe", "pipe"], timeout: 30_000 })
     let out = ""
     let err = ""
     child.stdout.setEncoding("utf8").on("data", (chunk: string) => (out += chunk))
@@ -248,7 +252,7 @@ export function generateSummary(payload: SummaryPayload): Promise<SummaryResult>
           code === null ? `${cli} killed by ${signal}` : `${cli} exited ${code}`
         return resolve({ skipped: why ? `${status}: ${why}` : status })
       }
-      const summary = sanitizeTitle(out).slice(0, 100)
+      const summary = cleanSummary(out)
       resolve(summary ? { summary } : { skipped: `${cli} returned nothing` })
     })
     child.stdin.end(JSON.stringify(payload))

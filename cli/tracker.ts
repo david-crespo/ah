@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
 import { Command } from "@commander-js/extra-typings"
 import { callServer, die, portOption, serverUrl } from "./shared.ts"
-import { absolute, openablePathOrDie, showInServer } from "./files.ts"
+import { absolute, newPathOrDie, openablePathOrDie, showInServer } from "./files.ts"
 import { ensureDashboardPage } from "./dashboard.ts"
 import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
@@ -22,6 +22,7 @@ function ensureTaskList(file: string, title?: string, goal?: string) {
   if (existsSync(file)) return
   if (!/\.html$/i.test(file)) die(`no such file: ${file}`)
   if (!title || !goal) die("ah tool tracker add: a new task list needs --title and --goal")
+  newPathOrDie(file)
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, taskListPage(title, goal))
   console.log(`wrote ${absolute(file)}`)
@@ -44,10 +45,10 @@ tracker
   .option("--goal <goal>", "A new task list's goal, a sentence or two")
   .addOption(portOption())
   .action(async (file, { title, goal, port }) => {
-    ensureTaskList(file, title, goal)
-    const path = openablePathOrDie(file)
     const agent =
       currentAgent() ?? die("ah tool tracker add: not running in an agent session")
+    ensureTaskList(file, title, goal)
+    const path = openablePathOrDie(file)
     // Bound the way `ah tool doc` and `page` bind; the dashboard's view of the file
     // leaves the binding alone
     await showInServer(fileKind(path), port, path)

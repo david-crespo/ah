@@ -7,7 +7,7 @@ import { fileSubject } from "../../model.ts"
 import { LiveDoc } from "../../views/doc/doc.ts"
 import { parseActivity, parseRequest } from "./events.ts"
 import { threadKinds } from "./kinds.ts"
-import { header, Thread } from "./thread.ts"
+import { header, render, Thread } from "./thread.ts"
 
 let dir: string
 let docs: LiveDoc[] = []
@@ -248,5 +248,17 @@ test("the header gives the reply command, with the port only when it isn't the d
 test("the header quotes a path that isn't one shell word", () => {
   expect(header({ kind: "doc", skill: "ah-doc" }, "/my notes/it's.md", 7420)).toContain(
     "ah message respond '/my notes/it'\\''s.md' <phase>",
+  )
+})
+
+test("a request of a kind the type no longer has renders as its kind and text", () => {
+  const at = new Date(0).toISOString()
+  const request = { type: "request", at, args: {} } as const
+  expect(render({ ...request, id: "r1", kind: "gone", text: "hi" }, threadKinds)).toBe(
+    "Request r1: gone: hi",
+  )
+  const args = { passage: "a line", text: "why" }
+  expect(render({ ...request, id: "r2", kind: "gone", args }, threadKinds)).toBe(
+    "Request r2: gone: a line: why",
   )
 })

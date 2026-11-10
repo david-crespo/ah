@@ -14,7 +14,13 @@ import { basename, dirname, join } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { fileKind } from "../model.ts"
 import { die, portOption } from "./shared.ts"
-import { absolute, openablePathOrDie, showInServer, showPage } from "./files.ts"
+import {
+  absolute,
+  newPathOrDie,
+  openablePathOrDie,
+  showInServer,
+  showPage,
+} from "./files.ts"
 import { dashboard } from "./dashboard.ts"
 import { tracker } from "./tracker.ts"
 import { showUrl } from "../platform/window.ts"
@@ -40,6 +46,7 @@ function ensureStack(file: string, title?: string) {
   if (existsSync(file)) return
   if (!/\.html$/i.test(file)) die(`no such file: ${file}`)
   if (!title) die("ah tool stack: a new stack needs --title")
+  newPathOrDie(file)
   mkdirSync(dirname(file), { recursive: true })
   writeFileSync(file, stackPage(title))
   console.log(`wrote ${absolute(file)}`)

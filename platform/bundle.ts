@@ -31,6 +31,10 @@ export type ViewName = keyof typeof bundles
 
 const fromSource = import.meta.filename.endsWith(".ts")
 
+/** The server's own, which vite's build sets to production when it's unset,
+ * and which the processes the server starts inherit */
+const nodeEnv = process.env.NODE_ENV
+
 export async function buildClientBundle(view: ViewName, name: string): Promise<string> {
   if (!fromSource) return await readFile(assetPath(`dist/client/${view}/${name}`), "utf8")
   const files: Record<string, string> = bundles[view]
@@ -54,6 +58,9 @@ export async function buildClientBundle(view: ViewName, name: string): Promise<s
       // minify option skips lib mode's es format.
       rolldownOptions: { output: { codeSplitting: false, minify: name === "mermaid.js" } },
     },
+  }).finally(() => {
+    if (nodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = nodeEnv
   })
   const outputs = Array.isArray(result) ? result : [result]
   for (const { output } of outputs as { output: { type: string; code?: string }[] }[]) {

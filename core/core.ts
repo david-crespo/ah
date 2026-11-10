@@ -53,7 +53,7 @@ import {
   type SummaryJob,
 } from "./registry.ts"
 import { isCurrent, listAgents, readClaudeProcesses } from "./agent_view.ts"
-import { buildSummaryPayload, generateSummary } from "./summary.ts"
+import { buildSummaryPayload, cleanSummary, generateSummary } from "./summary.ts"
 
 /** A posted event, checked, or null if it isn't one */
 export function parseEvent(o: unknown): RegistryEvent | null {
@@ -328,6 +328,7 @@ export class Core {
 
   /** A summary from the harness itself, e.g. opencode's session title */
   retitle(session: string, title: string) {
+    const summary = cleanSummary(title)
     const id = agentId(this.registry, {
       harness: "opencode",
       session,
@@ -335,9 +336,10 @@ export class Core {
       process: null,
     })
     const record = id ? this.registry.agents.get(id) : undefined
-    if (!record || record.session !== session || record.summary === title) return
-    this.#write("summary", { agent: id, sequence: record.promptSequence, summary: title })
-    record.summary = title
+    if (!summary || !record || record.session !== session || record.summary === summary)
+      return
+    this.#write("summary", { agent: id, sequence: record.promptSequence, summary })
+    record.summary = summary
     record.summarySequence = record.promptSequence
     const block = blockOf(record)
     this.#changed(block ? [block] : [])

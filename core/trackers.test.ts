@@ -151,6 +151,16 @@ test("a finished tracker leaves the list, is listed as done, until it's set agai
   expect(trackers.done(a)).toEqual([])
 })
 
+test("adding a tracker parked in another workspace makes it active there too", () => {
+  const a = workspace("a")
+  const b = workspace("b")
+  const path = note(b, "x-tracker")
+  trackers.add(b, path)
+  trackers.setStatus(path, "parked")
+  trackers.add(a, path)
+  expect(trackers.statusOf(path)).toBe("active")
+})
+
 test("finishing the current tracker makes the one used before it current", () => {
   const a = workspace("a")
   const older = note(a, "older-tracker")

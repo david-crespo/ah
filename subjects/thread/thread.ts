@@ -50,10 +50,14 @@ function shellWord(path: string): string {
   return /^[\w./~+-]+$/.test(path) ? path : `'${path.replaceAll("'", `'\\''`)}'`
 }
 
-/** A request as the agent reads it */
+/** A request as the agent reads it. One held from before its kind was
+ * renamed or dropped is its kind, then its text or args. */
 export function render(request: Request, kinds: RequestKinds): string {
-  const answering = request.replyTo ? `, answering ${request.replyTo}` : ""
-  return `Request ${request.id}${answering}: ${kinds[request.kind].render(request)}`
+  const { id, kind, text, args, replyTo } = request
+  const answering = replyTo ? `, answering ${replyTo}` : ""
+  const body =
+    kinds[kind]?.render(request) ?? `${kind}: ${text || Object.values(args).join(": ")}`
+  return `Request ${id}${answering}: ${body}`
 }
 
 /** The subject, and where its requests go now: its agent's address, which
