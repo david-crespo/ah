@@ -8,20 +8,8 @@ import { status } from "../platform/server.ts"
 import { focusHere } from "../platform/focus.ts"
 import { currentAgent } from "../platform/session.ts"
 import { focusWindow, openWindow } from "../platform/window.ts"
-import type { AgentRef } from "../model.ts"
 
 const dashboardUrl = (port: number) => serverUrl(port, "view/dashboard/")
-
-/** Open a dashboard page in a window, taking focus only as `focusHere`
- * allows */
-async function openDashboard(port: number, otherDisplay = true) {
-  await ensureStarted(port)
-  await openWindow(
-    dashboardUrl(port),
-    { name: "Dashboard", badge: "ah", color: "#4f46e5", otherDisplay },
-    await focusHere(),
-  )
-}
 
 /** One line for agents deciding where to show things */
 async function dashboardStatus(port: number): Promise<string> {
@@ -44,16 +32,14 @@ export async function ensureDashboardPage(
     if (raise && (await focusHere()).take) await focusWindow(dashboardUrl(port))
     return await dashboardStatus(port)
   }
-  await openDashboard(port, otherDisplay)
+  // Taking focus only as `focusHere` allows
+  await ensureStarted(port)
+  await openWindow(
+    dashboardUrl(port),
+    { name: "Dashboard", badge: "ah", color: "#4f46e5", otherDisplay },
+    await focusHere(),
+  )
   return "dashboard: no page was open, opened one"
-}
-
-/** The agent's workspace's current tracker, or null if it has none or the
- * server isn't running */
-async function currentTracker(port: number, agent: AgentRef): Promise<string | null> {
-  if (!(await status(port))) return null
-  const url = serverUrl(port, "core/current-tracker")
-  return (await callServer<{ path: string | null }>(url, { body: { agent } })).path
 }
 
 export const dashboard = new Command("dashboard")
@@ -92,6 +78,8 @@ dashboard
   .action(async ({ port }) => {
     console.log(await dashboardStatus(port))
     const agent = currentAgent()
-    const path = agent && (await currentTracker(port, agent))
+    if (!agent || !(await status(port))) return
+    const url = serverUrl(port, "core/current-tracker")
+    const { path } = await callServer<{ path: string | null }>(url, { body: { agent } })
     if (path) console.log(`in the dashboard: ${path}`)
   })

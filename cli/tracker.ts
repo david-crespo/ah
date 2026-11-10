@@ -12,38 +12,10 @@ import { ensureDashboardPage } from "./dashboard.ts"
 import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
 import { taskListPage } from "../views/page/task_list_file.ts"
-import {
-  type AgentRef,
-  fileKind,
-  type TrackerEntry,
-  type TrackerStatus,
-  type WorkspaceTrackers,
-} from "../model.ts"
+import { fileKind, type TrackerEntry, type WorkspaceTrackers } from "../model.ts"
 
 const postJson = <T>(port: number, rest: string, body: unknown) =>
   callServer<T>(serverUrl(port, `core/${rest}`), { body })
-
-/** Make `path` the agent's workspace's current tracker */
-async function setCurrentTracker(port: number, agent: AgentRef, path: string) {
-  await postJson(port, "current-tracker", { agent, path })
-}
-
-/** The trackers of the workspace `dir` is in, finished ones included */
-async function workspaceTrackers(port: number, dir: string) {
-  const url = new URL(serverUrl(port, "core/trackers"))
-  url.searchParams.set("dir", dir)
-  return await callServer<WorkspaceTrackers & { root: string; done: TrackerEntry[] }>(url)
-}
-
-/** Park or finish the tracker at `path`. Returns its path as the server has it. */
-async function setTrackerStatus(
-  port: number,
-  path: string,
-  to: Exclude<TrackerStatus, "active">,
-): Promise<string> {
-  return (await postJson<{ path: string }>(port, "tracker-status", { status: to, path }))
-    .path
-}
 
 /** Write a task list to `file` from the template, unless there is one */
 function ensureTaskList(file: string, title?: string, goal?: string) {
@@ -79,7 +51,7 @@ tracker
     // Bound the way `ah tool doc` and `page` bind; the dashboard's view of the file
     // leaves the binding alone
     await showInServer(fileKind(path), port, path)
-    await setCurrentTracker(port, agent, path)
+    await postJson(port, "current-tracker", { agent, path })
     console.log(`the tracker: ${path}`)
     // The dashboard already shows the new tracker, so an open one stays
     // behind whatever the user is looking at
@@ -96,7 +68,10 @@ tracker
   .addOption(portOption())
   .action(async ({ done, port }) => {
     if (!(await status(port))) die("ah tool tracker ls: server not running")
-    const t = await workspaceTrackers(port, process.cwd())
+    // The trackers of the workspace this is in, finished ones included
+    const url = new URL(serverUrl(port, "core/trackers"))
+    url.searchParams.set("dir", process.cwd())
+    const t = await callServer<WorkspaceTrackers & { done: TrackerEntry[] }>(url)
     if (done) {
       for (const { path } of t.done) console.log(path)
       return
@@ -129,6 +104,11 @@ for (const [name, to, summary, description] of [
     .addOption(portOption())
     .action(async (file, { port }) => {
       if (!(await status(port))) die(`ah tool tracker ${name}: server not running`)
-      console.log(`${to}: ${await setTrackerStatus(port, absolute(file), to)}`)
+      // Its path as the server has it
+      const { path } = await postJson<{ path: string }>(port, "tracker-status", {
+        status: to,
+        path: absolute(file),
+      })
+      console.log(`${to}: ${path}`)
     })
 }

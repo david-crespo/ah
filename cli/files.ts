@@ -118,31 +118,12 @@ export async function showPage(
   )
 }
 
-/** The files pages of the backend for `kind` show, oldest first; the server
- * must be running */
-const shownFiles = (kind: FileKind, port: number) =>
-  callServer<FileInfo[]>(filesUrl(kind, port))
-
 /** A file as `ah window ls` prints it: id, path, where its pages are, agent,
  * and where its comments go */
 function fileLine(f: FileInfo): string {
   const address = f.address ? `${f.address}${f.addressAlive ? "" : " (gone)"}` : "-"
   const views = f.views.length ? f.views.join(",") : "-"
   return [f.id, f.path, views, f.agent ?? "-", address].join("\t")
-}
-
-/** Close the windows and tabs that show the file */
-async function closeInServer(
-  kind: FileKind,
-  port: number,
-  path: string,
-): Promise<"closed" | "not shown" | "no server"> {
-  if (!(await status(port))) return "no server"
-  const query = new URLSearchParams({ path })
-  const res = await fetch(`${filesUrl(kind, port)}?${query}`, { method: "DELETE" })
-  if (res.status === 404) return "not shown"
-  if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
-  return "closed"
 }
 
 export const windows = new Command("window")
@@ -163,8 +144,11 @@ windows
   .addOption(portOption())
   .action(async ({ port }) => {
     if (!(await status(port))) return console.error("ah: server not running, nothing shown")
+    // Each backend's, oldest first
     const files = (
-      await Promise.all(FILE_KINDS.map((kind) => shownFiles(kind, port)))
+      await Promise.all(
+        FILE_KINDS.map((kind) => callServer<FileInfo[]>(filesUrl(kind, port))),
+      )
     ).flat()
     for (const f of files) console.log(fileLine(f))
   })
@@ -180,9 +164,12 @@ windows
   .action(async (file, { port }) => {
     // The file may be gone by now
     const path = absolute(file)
-    const result = await closeInServer(fileKind(path), port, path)
-    if (result === "no server")
-      return console.error("ah: server not running, nothing shown")
-    if (result !== "closed") return console.error(`ah: no window shows ${path}`)
+    if (!(await status(port))) return console.error("ah: server not running, nothing shown")
+    const query = new URLSearchParams({ path })
+    const res = await fetch(`${filesUrl(fileKind(path), port)}?${query}`, {
+      method: "DELETE",
+    })
+    if (res.status === 404) return console.error(`ah: no window shows ${path}`)
+    if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
     console.log(`closed ${path}`)
   })

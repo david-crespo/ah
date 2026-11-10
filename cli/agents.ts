@@ -20,11 +20,6 @@ export async function agentsNear(port: number, block: string): Promise<NearbyAge
   )
 }
 
-/** Make `agent` the one the shell in `block` sends to from now on */
-async function pickAgent(port: number, block: string, agent: AgentId) {
-  await callServer(serverUrl(port, "core/pick"), { body: { block, agent } })
-}
-
 /** From a shell in no agent session: the agent its comments go to (its
  * pick, or its Rex tab's only agent), or else the one the user picks, which
  * becomes the pane's pick; null with no agent in its tab. Picking takes a
@@ -65,7 +60,8 @@ export async function pickAgentNear(port: number): Promise<AgentId | null> {
       // stdout is for the page's URL
       { output: process.stderr, signal: quit.signal },
     )
-    await pickAgent(port, block, picked)
+    // The one the shell in `block` sends to from now on
+    await callServer(serverUrl(port, "core/pick"), { body: { block, agent: picked } })
     return picked
   } catch (e) {
     // q, Ctrl+C, or Ctrl+D
