@@ -16,18 +16,18 @@
 // folder can't move them (publicScript).
 // Everything else under <id>/ is the files next to it, so the page's relative
 // links work, except <id>/_ah/, which is ah's: the socket (reloads and the
-// conversation), the request route, and a stack page's data and its diff
-// and body buttons. chat.js, the client, is shared by
-// every page. All pages share the one origin, so one page could post a
-// request into another's thread; the agent's own activity is only on the API
-// port.
+// conversation), the request route, and the routes of page apps (app.ts),
+// like a stack page's data and its diff and body buttons. chat.js, the
+// client, is shared by every page. All pages share the one origin, so one
+// page could post a request into another's thread; the agent's own activity
+// is only on the API port.
 
 import { createReadStream } from "node:fs"
 import { readFile, realpath, stat } from "node:fs/promises"
 import { basename, dirname, extname, join } from "node:path"
 import { Readable } from "node:stream"
 import type { WebSocket } from "ws"
-import type { AgentId, TrackerStatus } from "../../core/model.ts"
+import type { TrackerStatus } from "../../core/model.ts"
 import type { Trackers } from "../../core/trackers.ts"
 import type { Upgrades } from "../../core/upgrades.ts"
 import { ClientBundles } from "../../platform/bundle.ts"
@@ -42,17 +42,14 @@ import {
 } from "../../subjects/files/files.ts"
 import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
-import { rootFinder } from "../../core/workspace.ts"
+import type { PageApp } from "./app.ts"
 import { pageFiles, type LiveReload } from "./files.ts"
-import { diffArgs, openSkepsis } from "../stack/skepsis.ts"
-import { ensureBody, readStack, STACK_FILE } from "../stack/data.ts"
-import { readGithub } from "../stack/github.ts"
 import { PUBLIC_SCRIPTS, retiredScript, retiredStub } from "./upgrade.ts"
 import { escapeHtml } from "../escape.ts"
 import { contentTypes } from "../mime.ts"
 
 // Pages reload on every change, so nothing they load should be cached
-const noStore = { "cache-control": "no-store" }
+export const noStore = { "cache-control": "no-store" }
 
 // For the dashboard's frames: dark over the page's own color-scheme, which
 // may leave it to the browser's, since the dashboard is dark whatever that
@@ -83,9 +80,6 @@ export function inject(
   return end < 0 ? html + "\n" + tags : html.slice(0, end) + tags + "\n" + html.slice(end)
 }
 
-/** Open a markdown file in its doc page, bound to `agent` */
-export type OpenDoc = (path: string, agent: AgentId | null) => Promise<void>
-
 export class PageBackend {
   files: Files<LiveReload>
   #bundles = new ClientBundles("page")
@@ -93,27 +87,29 @@ export class PageBackend {
   readonly pagesOrigin: string
 
   #trackers: Pick<Trackers, "setStatus" | "statusOf"> | null
-  #openDoc: OpenDoc | null
+  #apps: PageApp[]
   #upgrades: Pick<Upgrades, "check"> | null
 
   /** `port` is the server's, for telling the agent which one to answer,
    * `pagesPort` the one pages are served on, `directory` where the agents
    * its files are bound to are now, and `trackers` what a task list's Park,
-   * Done, and Resume buttons go to, `openDoc` what opens a stack page's
-   * PR bodies, and `upgrades` what checks each page served for old formats */
+   * Done, and Resume buttons go to, `apps` the page apps, and `upgrades`
+   * what checks each page served for old formats */
   constructor(
     port: number,
     pagesPort: number,
     directory: AgentDirectory,
     trackers: Pick<Trackers, "setStatus" | "statusOf"> | null = null,
-    openDoc: OpenDoc | null = null,
+    apps: PageApp[] = [],
     upgrades: Pick<Upgrades, "check"> | null = null,
   ) {
     this.#trackers = trackers
-    this.#openDoc = openDoc
+    this.#apps = apps
     this.#upgrades = upgrades
     this.pagesOrigin = `http://127.0.0.1:${pagesPort}`
-    this.files = new Files(port, pageFiles, directory, { pageOrigin: this.pagesOrigin })
+    this.files = new Files(port, pageFiles(apps), directory, {
+      pageOrigin: this.pagesOrigin,
+    })
   }
 
   /** `path` for the dashboard to show in a frame, leaving any binding
@@ -177,6 +173,12 @@ export class PageBackend {
 
   /** `sub` is the path after the file's page, /view/page/<id>/ */
   async #page(req: Request, path: string, id: string, sub: string): Promise<Response> {
+    if (sub.startsWith("_ah/")) {
+      for (const app of this.#apps) {
+        const res = await app.routes(sub, req, path, this.files.binding(path))
+        if (res) return res
+      }
+    }
     // A task list's Park, Done, and Resume buttons: the server sets its
     // status, without the agent
     if (sub === "_ah/tracker-status" && req.method === "POST") {
@@ -189,43 +191,6 @@ export class PageBackend {
       // The file didn't change, so its watch won't reload its pages
       this.files.pages(path).broadcast(JSON.stringify({ type: "reload" }))
       return new Response(null, { status: 204 })
-    }
-    // A stack's page: its PRs from jj and from GitHub, and its diff
-    // buttons, which open skepsis (views/stack/)
-    if (sub === "_ah/stack") {
-      return await readStack(path).then(
-        (stack) => Response.json(stack, { headers: noStore }),
-        (e: Error) => new Response(e.message, { status: 500 }),
-      )
-    }
-    if (sub === "_ah/stack-github") {
-      return await readGithub(path).then(
-        (prs) => Response.json(prs, { headers: noStore }),
-        (e: Error) => new Response(e.message, { status: 500 }),
-      )
-    }
-    if (sub === "_ah/skepsis" && req.method === "POST") {
-      // Only a stack's page starts processes
-      if (!(await stat(join(dirname(path), STACK_FILE)).catch(() => null)))
-        return notFound()
-      const diff = diffArgs(await req.json().catch(() => null))
-      if (!diff) return new Response("bad diff", { status: 400 })
-      // At the root, since jj reads skepsis's paths relative to where it runs
-      const cwd = rootFinder()(dirname(path)) ?? dirname(path)
-      return await openSkepsis(cwd, diff, this.files.binding(path)).then(
-        () => new Response(null, { status: 204 }),
-        (e: Error) => new Response(e.message, { status: 500 }),
-      )
-    }
-    if (sub === "_ah/pr-body" && req.method === "POST") {
-      if (!this.#openDoc) return notFound()
-      const { bookmark }: { bookmark?: unknown } = await req.json().catch(() => ({}))
-      const body = typeof bookmark === "string" ? await ensureBody(path, bookmark) : null
-      if (!body) return new Response("not a PR in this stack", { status: 404 })
-      return await this.#openDoc(body, this.files.binding(path)).then(
-        () => new Response(null, { status: 204 }),
-        (e: Error) => new Response(e.message, { status: 500 }),
-      )
     }
     if (sub === "_ah/request")
       return (

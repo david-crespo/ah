@@ -1,24 +1,24 @@
 // What html keeps live for a file while pages show it (subjects/files/): a
-// watch on its directory, and on a stack's repo, that tells its pages to
-// reload, or a stack's page to read its data again.
+// watch on its directory, and on what page apps watch (app.ts), that tells
+// its pages to reload, or an app's page to read its data again.
 
 import { type FSWatcher, watch } from "node:fs"
 import { dirname } from "node:path"
 import type { FileType, Live, Pages } from "../../subjects/files/files.ts"
+import type { AppWatch, PageApp } from "./app.ts"
 import { pageKinds } from "./requests.ts"
-import { STACK_FILE, stackOpsDir } from "../stack/data.ts"
 
 /** Tells the file's pages to reload when anything in its directory changes:
- * the file itself, or a script, stylesheet or data file next to it. A
- * stack's page draws its data itself (views/stack/), so it's only told that the
- * data changed: its stack.json, a PR's body, or the repo's commits, when a
- * jj operation lands. */
+ * the file itself, or a script, stylesheet or data file next to it. A page
+ * of one of `apps` draws its data itself, so it's only told that the data
+ * changed: a change in what the app watches for it, or to one of its data
+ * files. */
 export class LiveReload implements Live {
   #watchers: FSWatcher[] = []
   #timer: ReturnType<typeof setTimeout> | undefined
   #closed = false
 
-  constructor(path: string, pages: Pages) {
+  constructor(path: string, pages: Pages, apps: PageApp[] = []) {
     let reload = false
     const changed = (type: "reload" | "data") => {
       reload ||= type === "reload"
@@ -28,23 +28,26 @@ export class LiveReload implements Live {
         reload = false
       }, 100)
     }
-    let stack = false
+    const watches: AppWatch[] = []
     // The directory rather than the file: most editors save by
     // rename-replace, which makes a watch on the file itself go stale.
     // Dotfiles are editors' and tools' own (swap files, .DS_Store).
     this.#watch(path, dirname(path), (filename) => {
       if (filename?.startsWith(".")) return
-      const data = stack && (filename === STACK_FILE || filename?.endsWith(".md"))
+      const data = filename !== null && watches.some((w) => w.data(filename))
       changed(data ? "data" : "reload")
     })
-    // watch throws for a secondary workspace whose repo is gone
-    stackOpsDir(path)
-      .then((dir) => {
-        if (!dir || this.#closed) return
-        stack = true
-        this.#watch(path, dir, () => changed("data"))
-      })
-      .catch((e) => console.error(`ah: can't watch ${path}'s repo:`, e))
+    for (const app of apps) {
+      app
+        .watch?.(path)
+        .then((w) => {
+          if (!w || this.#closed) return
+          watches.push(w)
+          for (const dir of w.dirs) this.#watch(path, dir, () => changed("data"))
+        })
+        // As for a stack in a secondary workspace whose repo is gone
+        .catch((e) => console.error(`ah: can't watch ${path}'s data:`, e))
+    }
   }
 
   #watch(path: string, dir: string, onChange: (filename: string | null) => void) {
@@ -60,10 +63,10 @@ export class LiveReload implements Live {
   }
 }
 
-export const pageFiles: FileType<LiveReload> = {
+export const pageFiles = (apps: PageApp[]): FileType<LiveReload> => ({
   kind: "page",
   skill: "ah-page",
   // Any page can be a task list: it says so by loading task_list.js
   kinds: pageKinds,
-  attach: async (path, pages) => new LiveReload(path, pages),
-}
+  attach: async (path, pages) => new LiveReload(path, pages, apps),
+})

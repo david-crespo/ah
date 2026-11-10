@@ -3,6 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, test } from "vitest"
 import { MemoryDirectory } from "../../subjects/files/testing.ts"
+import type { PageApp } from "./app.ts"
 import { PageBackend, inject } from "./routes.ts"
 
 test("ah's tags go before the last </body>", () => {
@@ -122,13 +123,17 @@ describe("the API and pages ports", () => {
     })
   })
 
-  test("only a stack's page can open skepsis", async () => {
+  test("a page app's routes are under _ah/, and what it doesn't answer is ah's", async () => {
+    const app: PageApp = {
+      routes: async (sub, _req, path) =>
+        sub === "_ah/hello" || sub === "hello" ? new Response(path) : null,
+    }
+    backend = new PageBackend(7420, 7421, new MemoryDirectory(), null, [app])
     const { id } = await open("index.html")
-    const res = await pages(`${id}/_ah/skepsis`, {
-      method: "POST",
-      body: JSON.stringify({ rev: "@" }),
-    })
-    expect(res.status).toBe(404)
+    const hello = await pages(`${id}/_ah/hello`)
+    expect(await hello.text()).toBe(join(dir, "index.html"))
+    expect((await pages(`${id}/_ah/other`)).status).toBe(404)
+    expect((await pages(`${id}/hello`)).status).toBe(404)
   })
 
   test("a page's URL is the one ah gave out", async () => {

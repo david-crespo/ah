@@ -5,8 +5,8 @@
 // under it, and all of them the model's types (core/model.ts):
 //
 // - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
-//   and the doc and page subject types that serve a file's views. What
-//   more than one view uses is at the top of views/ (the terminal theme,
+//   and the doc and page subject types that serve a file's views, and the
+//   stack, an app on pages (views/page/app.ts). What more than one view uses is at the top of views/ (the terminal theme,
 //   GitHub's markdown styles) and in views/thread/ (the conversation panel
 //   and selection popover).
 // - core/: the agents, their registry, the tab titles they give Rex tabs,
@@ -31,6 +31,7 @@ import { Dashboard } from "./views/dashboard/routes.ts"
 import { DocBackend } from "./views/doc/routes.ts"
 import { PageBackend } from "./views/page/routes.ts"
 import { pageScripts } from "./views/page/upgrade.ts"
+import { stackApp } from "./views/stack/routes.ts"
 import { message, tool, windows } from "./views/cli.ts"
 import { debugAgents, doctor, workspace } from "./core/cli.ts"
 import { hook } from "./core/hook.ts"
@@ -221,7 +222,7 @@ async function serve(port: number) {
     pagesPort,
     core,
     core.trackers,
-    openDoc,
+    [stackApp(openDoc)],
     upgrades,
   )
   const dashboardBackend = new Dashboard({
