@@ -58,6 +58,12 @@ test("parseStackFile wants a title and PRs with n, title and bookmark", () => {
   expect(() => parseStackFile('{"title": "S", "prs": [{"n": 1, "title": "T"}]}')).toThrow(
     "n, title and bookmark",
   )
+  const pr = '{"n": 1, "title": "T", "bookmark": "b"'
+  expect(() => parseStackFile('{"title": "S", "notes": [1], "prs": []}')).toThrow("notes")
+  for (const field of ['"summary": 2', '"merge": null'])
+    expect(() => parseStackFile(`{"title": "S", "prs": [${pr}, ${field}}]}`)).toThrow(
+      "summary and merge",
+    )
 })
 
 test("readStack takes each PR's commits and base from the graph", async () => {

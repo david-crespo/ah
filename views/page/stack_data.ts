@@ -77,10 +77,18 @@ export function parseStackFile(text: string): StackFile {
     typeof pr.n === "number" &&
     typeof pr.title === "string" &&
     typeof pr.bookmark === "string"
+  const optional = (v: unknown) => v === undefined || typeof v === "string"
   if (!isRecord(file) || typeof file.title !== "string" || !Array.isArray(file.prs))
     throw new Error(`${STACK_FILE} needs a title and a list of prs`)
+  if (
+    file.notes !== undefined &&
+    !(Array.isArray(file.notes) && file.notes.every((n) => typeof n === "string"))
+  )
+    throw new Error(`notes in ${STACK_FILE} must be a list of strings`)
   if (!file.prs.every(isPr))
     throw new Error(`each PR in ${STACK_FILE} needs n, title and bookmark`)
+  if (!file.prs.every((pr) => optional(pr.summary) && optional(pr.merge)))
+    throw new Error(`a PR's summary and merge in ${STACK_FILE} must be strings`)
   return file as unknown as StackFile
 }
 
