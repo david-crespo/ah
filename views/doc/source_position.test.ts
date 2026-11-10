@@ -47,3 +47,19 @@ test("code blocks map line for line", () => {
   const src = lines("```ts\nconst a = 1\nconst b = 2\n```")
   expect(sourcePosition(src, 0, 4, "const a = 1\nconst ")).toEqual({ line: 2, column: 6 })
 })
+
+test("lands after a link, an image or a tag, not inside it", () => {
+  const link = lines("See [the docs](https://example.com/docs) and **bold**")
+  expect(sourcePosition(link, 0, 1, "See the docs ")).toEqual({ line: 0, column: 41 })
+  const image = lines("An ![alt text](img.png) image here")
+  expect(sourcePosition(image, 0, 1, "An  ")).toEqual({ line: 0, column: 24 })
+  const tag = lines("Press <kbd>Ctrl</kbd> then go")
+  expect(sourcePosition(tag, 0, 1, "Press Ctrl ")).toEqual({ line: 0, column: 22 })
+})
+
+test("a tag or a link's syntax in code is text like any other", () => {
+  const src = lines('```html\n<div class="x">text</div>\n```')
+  expect(sourcePosition(src, 0, 3, '<div class="x">te')).toEqual({ line: 1, column: 17 })
+  const span = lines("Write `a[i](x)` for that")
+  expect(sourcePosition(span, 0, 1, "Write a[i](x) ")).toEqual({ line: 0, column: 16 })
+})

@@ -2,7 +2,8 @@
 // can put helix's cursor there (client.ts). A block's data-line gives its
 // lines; within them, the rendered text before the spot is found in the
 // source with everything but letters and digits left out of both, so markup
-// and hard wraps don't get in the way. Imports nothing, for tests.
+// and hard wraps don't get in the way, and without the letters the rendering
+// has none of, like a link's URL. Imports nothing, for tests.
 
 export interface SourcePosition {
   /** 0-based */
@@ -33,41 +34,56 @@ const occurrences = (haystack: string, needle: string) => {
   return count
 }
 
+/** What has no text in the rendering: an image, a link's destination and an
+ * inline tag. A code span, matched first, keeps what's in it. */
+const HIDDEN =
+  /(`+)[^`]*\1|!\[[^\]]*\]\([^)]*\)|\]\([^)]*\)|<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>/gi
+
+/** `line` with those blanked out */
+const shown = (line: string) =>
+  line.replace(HIDDEN, (m, ticks) => (ticks ? m : " ".repeat([...m].length)))
+
 /** The spot in source lines [start, end) that `before`, the block's rendered
  * text up to the spot, leads up to: the next letter or digit after it. The
  * end of `before` is looked for in the source, as long a piece of it as is
  * there as often as in `before`, so a phrase that repeats lands on the right
  * one. A piece shorter than three characters matches too much by chance, so
  * when not even that is there, as in an embed, whose text isn't in the
- * source, it's the block's first line. */
+ * source, it's the block's first line. Each piece is looked for in the
+ * source as it's shown, then as it is, which is how a code block shows it. */
 export function sourcePosition(
   lines: string[],
   start: number,
   end: number,
   before: string,
 ): SourcePosition {
-  let source = ""
-  // The position of each of source's code units
-  const at: SourcePosition[] = []
-  for (let line = start; line < Math.min(end, lines.length); line++) {
-    let column = 0
-    for (const c of lines[line]) {
-      if (isWordChar(c)) {
-        source += c
-        for (let i = 0; i < c.length; i++) at.push({ line, column })
-      }
-      column++
-    }
-  }
   const rendered = wordChars(before)
   if (!rendered) return { line: start, column: 0 }
+  const sources = [shown, (line: string) => line].map((view) => {
+    let source = ""
+    // The position of each of source's code units
+    const at: SourcePosition[] = []
+    for (let line = start; line < Math.min(end, lines.length); line++) {
+      let column = 0
+      for (const c of view(lines[line])) {
+        if (isWordChar(c)) {
+          source += c
+          for (let i = 0; i < c.length; i++) at.push({ line, column })
+        }
+        column++
+      }
+    }
+    return { source, at }
+  })
   for (const size of [24, 12, 6, 3]) {
     const needle = rendered.slice(-size)
-    const endsAt = nthEnd(source, needle, occurrences(rendered, needle))
-    if (endsAt < 0) continue
-    if (endsAt < at.length) return at[endsAt]
-    const last = at[endsAt - 1]
-    return { line: last.line, column: last.column + 1 }
+    for (const { source, at } of sources) {
+      const endsAt = nthEnd(source, needle, occurrences(rendered, needle))
+      if (endsAt < 0) continue
+      if (endsAt < at.length) return at[endsAt]
+      const last = at[endsAt - 1]
+      return { line: last.line, column: last.column + 1 }
+    }
   }
   return { line: start, column: 0 }
 }

@@ -97,7 +97,10 @@ if (editorHost && editorToggle) {
       const upTo = document.createRange()
       upTo.setStart(block, 0)
       upTo.setEnd(caret.node, caret.offset)
-      before = upTo.toString()
+      // Without what a diff shows as removed, which the source doesn't have
+      const shown = upTo.cloneContents()
+      for (const old of shown.querySelectorAll(".diff-old, .diff-removed")) old.remove()
+      before = shown.textContent ?? ""
       spot.setStart(caret.node, caret.offset)
       // The character after the caret, since a collapsed range may have no
       // box to measure
