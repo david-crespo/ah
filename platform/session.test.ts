@@ -138,6 +138,7 @@ test("an opencode session is gone when the service isn't running", () => {
 
 test("a scrubbed env is no session's, whichever harness started it", () => {
   const env: NodeJS.ProcessEnv = {
+    AH_SESSION: "abc",
     CLAUDE_CODE_MESSAGING_SOCKET: "/s/1.sock",
     CLAUDE_CODE_MESSAGING_TOKEN: "t",
     CLAUDE_PID: "123",

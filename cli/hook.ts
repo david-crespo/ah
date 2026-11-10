@@ -20,8 +20,11 @@
 // agent run from it. A session's label is its block's shell label, which
 // the registry has from `shell`, or failing that its directory's.
 // Except for Codex hooks run by its shared daemon, whose env belongs to
-// another shell: the server finds those sessions' blocks (tuis.ts).
+// another shell: the server finds those sessions' blocks (tuis.ts). A
+// harness an agent runs from its shell (`claude -p`, `codex exec`) has
+// the agent's REX_BLOCK too, so its hooks report nothing (`nested`).
 
+import { appendFileSync } from "node:fs"
 import { Command, Option } from "@commander-js/extra-typings"
 import { portOption } from "./shared.ts"
 import { isOneOf, str } from "../platform/guards.ts"
@@ -34,6 +37,32 @@ import { sanitizeTitle } from "../core/summary.ts"
 
 /** The block a process was started in, from its env */
 const envBlock = (env: NodeJS.ProcessEnv) => env.REX_BLOCK || null
+
+/** Whether the hook's harness was run from another agent session's shell
+ * (`claude -p`, `codex exec`), which ah ignores: its env then has the
+ * session id that harness exports to its commands. Codex's and opencode's
+ * aren't set in their own hooks' env. Claude sets its own
+ * CLAUDE_CODE_SESSION_ID in its hooks' env, overwriting the outer Claude's,
+ * so for Claude in Claude ah's SessionStart hook exports AH_SESSION to
+ * Claude's Bash commands, which Claude's own hooks never get. */
+function nested(env: NodeJS.ProcessEnv, harness: Harness, session: string): boolean {
+  const claude = harness === "claude" ? undefined : env.CLAUDE_CODE_SESSION_ID
+  const outer = [env.AH_SESSION, env.CODEX_THREAD_ID, env.OPENCODE_SESSION_ID, claude]
+  return outer.some((id) => id && id !== session)
+}
+
+/** On SessionStart, Claude's hooks can export variables to the session's
+ * Bash commands by appending to CLAUDE_ENV_FILE
+ * (code.claude.com/docs/en/hooks, "Persist environment variables") */
+export function exportSession(session: string, file = process.env.CLAUDE_ENV_FILE) {
+  // A line of shell, so only an id that needs no quoting
+  if (!file || !/^[\w-]+$/.test(session)) return
+  try {
+    appendFileSync(file, `export AH_SESSION=${session}\n`)
+  } catch (e) {
+    console.error(`ah: couldn't export AH_SESSION: ${e}`)
+  }
+}
 
 /** An event, and where the agent can be reached now, which the server keeps
  * apart from the event */
@@ -91,7 +120,7 @@ export function hookEvent(
   }
   const event = raw.hook_event_name
   const session = str(raw.session_id)
-  if (!isOneOf(HOOK_EVENTS, event) || !session) return null
+  if (!isOneOf(HOOK_EVENTS, event) || !session || nested(env, harness, session)) return null
   const cwd = str(raw.cwd)
   return {
     kind: "hook",
@@ -123,6 +152,7 @@ const agent = new Command("agent")
     const daemon = harness === "codex" && underCodexDaemon()
     const event = hookEvent(await readStdin(), harness, daemon ? {} : process.env)
     if (event?.kind !== "hook") return
+    if (harness === "claude" && event.event === "SessionStart") exportSession(event.session)
     // Outside Rex the agent is its process. Finding Codex's takes a ps, so
     // only then.
     if (!event.block && !daemon) event.process = currentAgent()?.process ?? null

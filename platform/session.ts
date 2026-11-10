@@ -51,6 +51,7 @@ export function parseAddress(value: unknown): Address | null {
 /** What the harnesses (and Rex) export that says which session and
  * block a process is in */
 const SESSION_ENV = [
+  "AH_SESSION",
   "CLAUDE_CODE_MESSAGING_SOCKET",
   "CLAUDE_CODE_MESSAGING_TOKEN",
   "CLAUDE_CODE_SESSION_ID",
