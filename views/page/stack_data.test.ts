@@ -230,7 +230,8 @@ test("readStack rejects when jj fails, and leaves no rejection unhandled", async
 test("bodyPath names the body for its bookmark, next to the page", () => {
   expect(bodyPath("/s/index.html", "vdocs-draft")).toBe("/s/vdocs-draft.md")
   expect(bodyPath("/s/index.html", "v1.2_x")).toBe("/s/v1.2_x.md")
-  for (const bad of ["../x", "a/b", ".hidden", ""])
+  expect(bodyPath("/s/index.html", "david/foo")).toBe("/s/david--foo.md")
+  for (const bad of ["../x", ".hidden", ""])
     expect(bodyPath("/s/index.html", bad)).toBeNull()
 })
 

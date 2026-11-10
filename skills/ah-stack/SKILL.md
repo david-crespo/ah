@@ -76,8 +76,8 @@ red, its tooltip says why.
 
 ## PR bodies
 
-A PR's GitHub description is drafted in `<bookmark>.md` next to `stack.json`,
-with the PR title as a `#` heading on line 1. Once the file has that heading,
+A PR's GitHub description is drafted in `<bookmark>.md` next to `stack.json`
+(each `/` in the bookmark as `--`), with the PR title as a `#` heading on line 1. Once the file has that heading,
 the page shows it as the PR's title in place of the one in `stack.json`. Each
 PR has a Body button that opens its file in a doc page bound to the same agent
 as the stack page, starting the file with just the title if there isn't one.

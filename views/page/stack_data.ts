@@ -231,10 +231,11 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
 }
 
 /** A PR's body, the markdown its GitHub description is drafted in: next to
- * the page, named for its bookmark. Null for a bookmark that can't be a
- * file name there. */
+ * the page, named for its bookmark, each / as --. Null for a bookmark that
+ * can't be a file name there. */
 export function bodyPath(pagePath: string, bookmark: string): string | null {
-  return /^[\w-][\w.-]*$/.test(bookmark) ? join(dirname(pagePath), `${bookmark}.md`) : null
+  const name = bookmark.replaceAll("/", "--")
+  return /^[\w-][\w.-]*$/.test(name) ? join(dirname(pagePath), `${name}.md`) : null
 }
 
 /** The title a PR's body gives it, as a heading on its first line */
