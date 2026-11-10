@@ -172,6 +172,7 @@ function prCard(pr: Pr, side: boolean, gh: GithubPr | undefined, base: string): 
 const githubKey = `ah-stack-github:${location.pathname}`
 let github = read<GithubPrs>(sessionStorage, githubKey) ?? {}
 let githubError = ""
+let drawn = ""
 
 function draw(stack: Stack, error = "") {
   document.title = stack.title
@@ -184,7 +185,7 @@ function draw(stack: Stack, error = "") {
     stack.prs.some((q) => q.bookmark === pr.base) && github[pr.base]?.state !== "MERGED"
       ? pr.base
       : stack.trunk
-  main.innerHTML = `
+  const html = `
     <h1>${esc(stack.title)}</h1>
     ${error ? `<p class="error">${esc(error)}</p>` : ""}
     ${githubError ? `<p class="error">GitHub: ${esc(githubError)}</p>` : ""}
@@ -198,6 +199,9 @@ function draw(stack: Stack, error = "") {
             )}<div class="trunk mono">${esc(stack.prs.findLast((pr) => !pr.missing)?.base ?? "")}</div></div>`
         : `<p class="empty">No PRs in stack.json yet</p>`
     }`
+  if (html === drawn) return
+  main.innerHTML = drawn = html
+  paintButtons()
   drawGraph()
 }
 
@@ -243,20 +247,34 @@ document.addEventListener("toggle", drawGraph, true)
 addEventListener("resize", drawGraph)
 void document.fonts?.ready.then(drawGraph)
 
+const BUTTONS = "button[data-diff], button[data-body]"
+/** Each button's request while it's out ("busy"), or the error it failed
+ * with, by its data-diff or data-body, so a redraw keeps them */
+const requests = new Map<string, string>()
+
+function paintButtons() {
+  for (const button of main.querySelectorAll<HTMLButtonElement>(BUTTONS)) {
+    const { diff, body } = button.dataset
+    const state = requests.get((diff ?? body)!)
+    button.classList.toggle("busy", state === "busy")
+    button.classList.toggle("failed", !!state && state !== "busy")
+    button.title =
+      state && state !== "busy" ? state : diff ? "Open in skepsis" : "Open the PR body"
+  }
+}
+
 // A diff stat: the server starts skepsis on the diff, or shows the one
 // already running. A PR's Body button: the server opens its body's doc page.
 main.addEventListener("click", async (e) => {
-  const button = (e.target as Element).closest<HTMLButtonElement>(
-    "button[data-diff], button[data-body]",
-  )
+  const button = (e.target as Element).closest<HTMLButtonElement>(BUTTONS)
   if (!button) return
   // In a commit's line, the click shouldn't also open it
   e.preventDefault()
-  if (!threadUrl || button.classList.contains("busy")) return
   const { diff, body } = button.dataset
-  const title = diff ? "Open in skepsis" : "Open the PR body"
-  button.classList.add("busy")
-  button.classList.remove("failed")
+  const key = (diff ?? body)!
+  if (!threadUrl || requests.get(key) === "busy") return
+  requests.set(key, "busy")
+  paintButtons()
   let error = ""
   try {
     const res = await fetch(new URL(diff ? "skepsis" : "pr-body", threadUrl), {
@@ -268,9 +286,9 @@ main.addEventListener("click", async (e) => {
   } catch (e) {
     error = String(e)
   }
-  button.classList.remove("busy")
-  button.classList.toggle("failed", !!error)
-  button.title = error || title
+  if (error) requests.set(key, error)
+  else requests.delete(key)
+  paintButtons()
 })
 
 const cacheKey = `ah-stack:${location.pathname}`
@@ -300,17 +318,33 @@ async function loadGithub() {
   redraw()
 }
 
-/** The stack, then GitHub's side, which takes longer */
+let loading = false
+let dirty = false
+
+/** The stack, then GitHub's side, which takes longer. One load at a time;
+ * asks during one make one more. */
 async function load() {
-  try {
-    current = await get<Stack>("stack")
-    currentError = ""
-    write(sessionStorage, cacheKey, current)
-  } catch (e) {
-    currentError = (e as Error).message
+  if (loading) {
+    dirty = true
+    return
   }
-  redraw()
-  await loadGithub()
+  loading = true
+  try {
+    do {
+      dirty = false
+      try {
+        current = await get<Stack>("stack")
+        currentError = ""
+        write(sessionStorage, cacheKey, current)
+      } catch (e) {
+        currentError = (e as Error).message
+      }
+      redraw()
+      await loadGithub()
+    } while (dirty)
+  } finally {
+    loading = false
+  }
 }
 
 if (threadUrl) {
