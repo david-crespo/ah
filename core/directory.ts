@@ -96,13 +96,13 @@ export class Directory implements AgentDirectory {
     return this.#registry.bindings.get(path) ?? null
   }
 
-  route(subject: Subject, target: AgentId | null = null): Route | null {
-    const agent = target ?? this.binding(subject)
+  route(subject: Subject): Route | null {
+    const agent = this.binding(subject)
     const own = agent && this.address(agent)
     if (own && addressAlive(own)) return { address: own, via: "agent" }
     const standIn = agent && this.standIn(agent)
     if (standIn) return { address: standIn, via: "tab" }
-    const workspace = target ? null : this.#liveInWorkspace(subject.path)
+    const workspace = this.#liveInWorkspace(subject.path)
     if (workspace) return { address: workspace, via: "workspace" }
     return own ? { address: own, via: "agent" } : null
   }
@@ -114,12 +114,11 @@ export class Directory implements AgentDirectory {
     const rootOf = rootFinder()
     const root = rootOf(dirname(path))
     if (!root) return null
-    let best: AgentId | null = null
-    for (const [id, record] of this.#registry.agents) {
-      if (!record.shown || !record.cwd || rootOf(record.cwd) !== root) continue
-      if (!addressAlive(this.address(id))) continue
-      if (!best || record.updatedAt > this.#registry.agents.get(best)!.updatedAt) best = id
-    }
+    const best = this.#latest(
+      [...this.#registry.agents]
+        .filter(([id, a]) => a.cwd && rootOf(a.cwd) === root && this.#live(id))
+        .map(([id]) => id),
+    )
     return best ? this.address(best) : null
   }
 
@@ -176,11 +175,8 @@ export class Directory implements AgentDirectory {
   standIn(agent: string): Address | null {
     // In Rex an agent's id is its pane's, which may have closed
     const record = this.#registry.agents.get(agent)
-    const live = this.#liveInTab((record && blockOf(record)) ?? agent, agent)
-    const updated = (id: AgentId) => this.#registry.agents.get(id)!.updatedAt
-    const standIn = live.reduce<AgentId | null>(
-      (best, id) => (best && updated(best) >= updated(id) ? best : id),
-      null,
+    const standIn = this.#latest(
+      this.#liveInTab((record && blockOf(record)) ?? agent, agent),
     )
     return standIn ? this.address(standIn) : null
   }
@@ -263,13 +259,20 @@ export class Directory implements AgentDirectory {
       ?.sessions.flatMap((s) => s.tabs)
       .find((t) => t.id === tabId)
     if (!tab) return []
-    return tab.blocks
-      .map((b) => b.id)
-      .filter(
-        (id) =>
-          id !== except &&
-          this.#registry.agents.get(id)?.shown &&
-          addressAlive(this.address(id)),
-      )
+    return tab.blocks.map((b) => b.id).filter((id) => id !== except && this.#live(id))
+  }
+
+  /** Whether the agent still shows in its pane, and can be reached */
+  #live(id: AgentId): boolean {
+    return !!this.#registry.agents.get(id)?.shown && addressAlive(this.address(id))
+  }
+
+  /** Of agents with records, the one that last did something */
+  #latest(ids: AgentId[]): AgentId | null {
+    const updated = (id: AgentId) => this.#registry.agents.get(id)!.updatedAt
+    return ids.reduce<AgentId | null>(
+      (best, id) => (best && updated(best) >= updated(id) ? best : id),
+      null,
+    )
   }
 }

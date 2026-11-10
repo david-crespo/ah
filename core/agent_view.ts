@@ -32,6 +32,9 @@ export interface AgentView extends Pick<
   process: Pick<ClaudeProcess, "pid" | "status" | "socket"> | null
 }
 
+/** In a block that still exists, or running */
+export const isCurrent = (a: AgentView) => a.tab !== null || a.process !== null
+
 /** The Claude processes running under any config dir */
 export async function readClaudeProcesses(): Promise<ClaudeProcess[]> {
   const files = await Promise.all(

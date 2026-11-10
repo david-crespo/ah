@@ -134,11 +134,6 @@ test("a file's requests go to the agent it's bound to, or that agent's stand-in"
   directory.bindSubject(fileSubject(path), "block:1")
   // block:1's socket isn't live, so the tab's other agent takes it
   expect(directory.route(fileSubject(path))).toEqual({ address: codex("th2"), via: "tab" })
-  // A sender can name its own agent
-  expect(directory.route(fileSubject(path), "block:2")).toEqual({
-    address: codex("th2"),
-    via: "agent",
-  })
 })
 
 test("with its agent's tab gone, a file's requests go to an agent in its workspace", () => {
@@ -159,9 +154,8 @@ test("with its agent's tab gone, a file's requests go to an agent in its workspa
     address: th2,
     via: "workspace",
   })
-  // But not one outside any workspace, or one a sender named the agent for
+  // But not one outside any workspace
   expect(directory.route(fileSubject(join(dir, "loose.md")))).toEqual(null)
-  expect(directory.route(fileSubject(path), "block:1")).toEqual(null)
 })
 
 const posted = () =>

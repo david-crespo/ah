@@ -8,8 +8,7 @@ import { readRex } from "../platform/rex.ts"
 import { emptyRegistry, loadRegistry } from "../core/registry.ts"
 import { tabLabel } from "../core/tabtitle/setter.ts"
 import { rootFinder } from "../core/workspace.ts"
-import { isCurrent } from "../core/core.ts"
-import { listAgents, readClaudeProcesses } from "../core/agent_view.ts"
+import { isCurrent, listAgents, readClaudeProcesses } from "../core/agent_view.ts"
 import { resolve } from "../views/dashboard/workspace.ts"
 
 const tabs = new Command("tabs")

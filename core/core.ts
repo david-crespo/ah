@@ -52,11 +52,8 @@ import {
   saveRegistry,
   type SummaryJob,
 } from "./registry.ts"
-import { type AgentView, listAgents, readClaudeProcesses } from "./agent_view.ts"
+import { isCurrent, listAgents, readClaudeProcesses } from "./agent_view.ts"
 import { buildSummaryPayload, generateSummary } from "./summary.ts"
-
-/** In a block that still exists, or running */
-export const isCurrent = (a: AgentView) => a.tab !== null || a.process !== null
 
 /** A posted event, checked, or null if it isn't one */
 export function parseEvent(o: unknown): RegistryEvent | null {
@@ -215,10 +212,14 @@ export class Core {
     const record = id ? this.registry.agents.get(id) : undefined
     const block = ref.block ?? (record && blockOf(record)) ?? null
     if (!block) return id
-    // Right after the server starts, Rex's first RexState may still be on
-    // its way. In Rex, so it won't be long.
-    await Promise.race([this.#firstRex, new Promise((r) => setTimeout(r, 500))])
+    await this.#rexReady()
     return tabOf(this.#rex, block)?.id ?? null
+  }
+
+  /** Right after the server starts, Rex's first RexState may still be on
+   * its way. For a request from a Rex pane, so it won't be long. */
+  #rexReady(): Promise<unknown> {
+    return Promise.race([this.#firstRex, new Promise((r) => setTimeout(r, 500))])
   }
 
   /** The files that use an old ah format in the workspace at `root`, or in
@@ -421,8 +422,7 @@ export class Core {
       // ?block=: the live agents in its tab, in its layout order
       const block = new URL(req.url).searchParams.get("block")
       if (!block) return new Response("bad block", { status: 400 })
-      // As in homeOf: right after a start, Rex's first RexState may be on its way
-      await Promise.race([this.#firstRex, new Promise((r) => setTimeout(r, 500))])
+      await this.#rexReady()
       const near = this.directory.agentsNear(block)
       const target = this.directory.targetNear(block, near)
       return Response.json(
@@ -460,8 +460,7 @@ export class Core {
         }
         return Response.json({ status: "sent" })
       }
-      // As in homeOf: right after a start, Rex's first RexState may be on its way
-      await Promise.race([this.#firstRex, new Promise((r) => setTimeout(r, 500))])
+      await this.#rexReady()
       if (agent) {
         if (!this.directory.agentsNear(block).includes(agent))
           return new Response(`${agent} isn't a live agent in this tab`, { status: 409 })

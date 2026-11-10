@@ -22,8 +22,8 @@ export class MemoryDirectory implements AgentDirectory {
   binding({ path }: Subject) {
     return this.bindings.get(path) ?? null
   }
-  route(subject: Subject, target: AgentId | null = null): Route | null {
-    const agent = target ?? this.binding(subject)
+  route(subject: Subject): Route | null {
+    const agent = this.binding(subject)
     const own = agent && this.addresses.get(agent)
     if (own && addressAlive(own)) return { address: own, via: "agent" }
     if (agent && this.standIn) return { address: this.standIn, via: "tab" }

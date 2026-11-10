@@ -43,10 +43,10 @@ export interface AgentDirectory {
   bindSubject(subject: Subject, agent: AgentId): void
   /** The agent the subject is bound to */
   binding(subject: Subject): AgentId | null
-  /** Where the subject's requests go now: `target` if given, else the agent
-   * it's bound to; if that one can't be reached, another live agent in its
-   * tab, else, for a file, one in its workspace */
-  route(subject: Subject, target?: AgentId | null): Route | null
+  /** Where the subject's requests go now: the agent it's bound to; if that
+   * one can't be reached, another live agent in its tab, else, for a file,
+   * one in its workspace */
+  route(subject: Subject): Route | null
   /** Note whether the subject's thread holds requests no agent has taken */
   hold(subject: Subject, held: boolean): void
 }
