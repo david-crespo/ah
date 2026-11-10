@@ -171,6 +171,29 @@ describe("mergeDisk", () => {
     expect(
       merged("- one task\n- two\n", "- one big task\n- two\n", "- one small task\n- two\n"),
     ).toBe("- one {~~big~>small~~} task\n- two\n")
+    // One marker inside another, and a footnote's
+    for (const marker of ["> - ", "[^note]: "]) {
+      const line = (text: string) => `${marker}${text}\n`
+      expect(
+        merged(line("one two three"), line("uno dos tres cuatro"), line("eins zwei drei")),
+      ).toBe(line("{~~uno dos tres cuatro~>eins zwei drei~~}"))
+    }
+  })
+
+  test("marks a table's cell, or its row when the conflict is in two cells", () => {
+    const row = (...cells: string[]) => `| ${cells.join(" | ")} |\n`
+    expect(
+      merged(
+        row("a", "one two three", "c"),
+        row("a", "uno dos tres cuatro", "c"),
+        row("a", "eins zwei drei", "c"),
+      ),
+    ).toBe(row("a", "{~~uno dos tres cuatro~>eins zwei drei~~}", "c"))
+    const mine = row("a", "one c")
+    const agent = row("a", "one dos", "c")
+    expect(merged(row("a", "one two", "c"), mine, agent)).toBe(
+      `<<<<<<< mine\n${mine}=======\n${agent}>>>>>>> agent\n`,
+    )
   })
 
   test("keeps lines both added at one spot, unsaved first", () => {

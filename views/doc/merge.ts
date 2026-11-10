@@ -205,10 +205,13 @@ export function mergeDisk(
     return null
   }
 
-  /** Whether a version of a region's lines has the inline marker's syntax,
-   * which would end a marker there early or start it late */
-  const marked = (r: Region) => {
+  /** Whether an inline marker around a region, whose versions are `texts`,
+   * wouldn't read back: it would cross the cells of a table's row, or a
+   * version of its lines has the marker's syntax, which would end it early
+   * or start it late */
+  const unmarkable = (r: Region, texts: string[]) => {
     const [start, end] = lines(r.start, r.end)
+    if (o[start]?.[0] === "|" && texts.some((t) => t.includes("|"))) return true
     const hunks = all.filter((h) => start <= h.start && h.end <= end)
     return Object.values(versions({ start, end, hunks })).some((t) => SYNTAX.test(t))
   }
@@ -219,7 +222,7 @@ export function mergeDisk(
   for (const r of regions) {
     if (by === "lines" || merged(r) !== null) continue
     const texts = Object.values(versions(r))
-    if (texts.some((t) => t.includes("\n")) || marked(r)) widen.set(r, "line")
+    if (texts.some((t) => t.includes("\n")) || unmarkable(r, texts)) widen.set(r, "line")
     else if (r.start < r.end && texts.some((t) => words(t) > 2)) widen.set(r, "sentence")
   }
   const boundary = (i: number) => atBoundary(o, i)
@@ -269,22 +272,26 @@ export function mergeDisk(
 
 export const atLineStart = (o: string[], i: number) => i <= 0 || o[i - 1] === "\n"
 
-/** Whether a sentence ends right before token i of `o`, or a line or the
- * marker that starts a heading, list item or quote, `marker` matching a
- * line's start up to there when it's one */
+/** Whether a sentence ends right before token i of `o`, or a line, a cell of
+ * a table's row, or the markers that start a line, `marker` matching a line's
+ * start up to there when it's them */
 export function atBoundary(o: string[], i: number, marker = MARKER): boolean {
   if (i <= 0 || i >= o.length || o[i] === "\n" || atLineStart(o, i)) return true
   let start = i
   while (!atLineStart(o, start)) start--
   if (marker.test(o.slice(start, i).join(""))) return true
+  if (o[start][0] === "|" && (o[i][0] === "|" || o[i - 1][0] === "|")) return true
   const before = o.slice(Math.max(0, i - 4), i).join("")
   return (
     /[.!?]["')\]*_]*$/.test(before.trimEnd()) && (/\s$/.test(before) || /^\s/.test(o[i]))
   )
 }
 
-/** The marker that starts a heading, list item or quote, and nothing else */
-export const MARKER = /^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?$/
+/** The markers that start a markdown line, one inside another: a heading's,
+ * a quote's, a list item's with its checkbox, or a footnote's label */
+export const LINE_MARKER =
+  /^\s*(?:(?:#{1,6}|>|[-*+]|\d+[.)]|\[\^[^\]\s]+\]:)\s+(?:\[[ xX]\]\s+)?)+/
+const MARKER = new RegExp(`${LINE_MARKER.source}$`)
 
 /** `{~~ours~>theirs~~}`, with the spaces both start or end with outside */
 function inlineMarkers(ours: string, theirs: string) {

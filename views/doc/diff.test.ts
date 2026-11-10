@@ -286,6 +286,13 @@ describe("diffMarkdown", () => {
     )
   })
 
+  test("marks a footnote's changed sentence after its label", () => {
+    const note = (text: string) => `Text.[^a]\n\n[^a]: ${text}\n`
+    expect(inline(note("See the *first* note."), note("See the **first** note."))).toBe(
+      note("[-See the *first* note.-]{+See the **first** note.+}"),
+    )
+  })
+
   test("marks a word added in a quoted, wrapped paragraph inline", () => {
     expect(
       inline(

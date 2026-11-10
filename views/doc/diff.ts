@@ -18,7 +18,7 @@
 // in (Syntax), and in the leaf blocks the caller passes, so this diffs
 // AsciiDoc (asciidoc.ts) too. Imports only merge.ts, for tests.
 
-import { atBoundary, atLineStart, hunks, words } from "./merge.ts"
+import { atBoundary, atLineStart, hunks, LINE_MARKER, words } from "./merge.ts"
 
 /** Words, runs of space and other characters one at a time, and newlines
  * alone. Unlike the merge's tokens, space is its own token, so `end.` and the
@@ -40,7 +40,7 @@ export type Syntax = {
 }
 
 export const MARKDOWN: Syntax = {
-  lineMarker: /^\s*(?:(?:#{1,6}|>|[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?)+/,
+  lineMarker: LINE_MARKER,
   markup: /[*_`[\]()<>|\\]/,
   // Code spans, links and images, autolinks and bare URLs
   spans:
