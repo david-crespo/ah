@@ -160,13 +160,14 @@ export async function pickSide(path: string, req: Request): Promise<Response> {
   return new Response(null, { status: 204 })
 }
 
-async function ghBlob(q: URLSearchParams): Promise<Response> {
+export async function ghBlob(q: URLSearchParams): Promise<Response> {
   const args = ["owner", "repo", "ref", "path"].map((k) => q.get(k) ?? "")
-  // Each becomes a cache path segment, so no traversal or separators
-  const segment = /^(?!\.\.?$)[\w.-]+$/
+  // Each becomes a cache path segment, so no traversal or separators. A
+  // file's name can have anything else: `+page.svelte`, `(marketing)`.
+  const name = /^(?!\.\.?$)[\w.-]+$/
   const valid =
-    args.slice(0, 3).every((a) => segment.test(a)) &&
-    args[3].split("/").every((a) => segment.test(a))
+    args.slice(0, 3).every((a) => name.test(a)) &&
+    args[3].split("/").every((a) => a && a !== "." && a !== ".." && !/[\\\0]/.test(a))
   if (!valid) return new Response("bad request", { status: 400 })
   try {
     const [owner, repo, ref, path] = args

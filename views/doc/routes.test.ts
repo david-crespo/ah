@@ -1,8 +1,13 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, beforeEach, expect, test } from "vitest"
-import { localMedia, pickSide } from "./routes.ts"
+import { afterEach, beforeEach, expect, test, vi } from "vitest"
+import { ghBlob, localMedia, pickSide } from "./routes.ts"
+
+vi.mock("./github.ts", () => ({
+  fetchBlob: async (...args: string[]) => args.join(" "),
+  resolveAsset: async () => null,
+}))
 
 let dir: string
 beforeEach(async () => {
@@ -59,4 +64,32 @@ test("pick: one side of a conflict, if the file is what the page showed", async 
 
   expect((await post({ text, at: 4, side: "agent" })).status).toEqual(204)
   expect(await readFile(file, "utf8")).toEqual("One 2 three.\n")
+})
+
+test("gh/blob: any file name in the path, and nothing that leaves the cache", async () => {
+  const blob = (path: string, owner = "o") =>
+    ghBlob(new URLSearchParams({ owner, repo: "r", ref: "main", path }))
+  for (const path of [
+    "src/routes/+page.svelte",
+    "app/(marketing)/page.tsx",
+    "packages/@scope/pkg/index.ts",
+    "docs/a b.md",
+  ]) {
+    const res = await blob(path)
+    expect(res.status, path).toEqual(200)
+    expect(await res.text()).toEqual(`o r main ${path}`)
+  }
+  for (const path of [
+    "../x",
+    "a/../../x",
+    "a//b",
+    "a/./b",
+    "/etc/hosts",
+    "a\\b",
+    "a\0b",
+    "",
+  ])
+    expect((await blob(path)).status, path).toEqual(400)
+  expect((await blob("a.ts", "o/p")).status).toEqual(400)
+  expect((await blob("a.ts", "@o")).status).toEqual(400)
 })

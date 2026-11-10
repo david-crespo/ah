@@ -34,7 +34,9 @@ export async function fetchBlob(owner: string, repo: string, ref: string, path: 
       // not cached
     }
   }
-  const url = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${path}`
+  // A name can have a space, # or ?
+  const escaped = path.split("/").map(encodeURIComponent).join("/")
+  const url = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${escaped}`
   const res = await fetch(url, { headers: await ghHeaders() })
   if (!res.ok) throw new Error(`${res.status} fetching ${url}`)
   const text = await res.text()
