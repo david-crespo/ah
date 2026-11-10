@@ -17,8 +17,8 @@
 //   and the tracker role (routes under /core/).
 // - subjects/: the files open in views, the agent each is bound to
 //   (subjects/files/), and each one's thread of requests to it
-//   (subjects/thread/). Agents reach it through AgentDirectory, which core
-//   implements.
+//   (subjects/thread/). Agents reach it through AgentDirectory, which the
+//   core's directory implements.
 // - platform/: starting and stopping the server, its ports, processes and
 //   paths, and the adapters for Rex (rex.ts) and the harnesses' sessions
 //   (session.ts).
@@ -208,7 +208,7 @@ async function serve(port: number) {
   // Files in people's repos that use an old ah format, and ah's setup
   const upgrades = new Upgrades([pageScripts])
   core.useUpgrades(upgrades, () => installProblems().filter((p) => !p.optional).length)
-  const docBackend = new DocBackend(port, core)
+  const docBackend = new DocBackend(port, core.directory)
   // A stack page's PR body opens in the doc page, as `ah tool doc` would open it
   const openDoc = async (path: string, agent: AgentId | null) => {
     const { url, views } = await docBackend.files.bind(path, null, agent)
@@ -217,7 +217,7 @@ async function serve(port: number) {
   const pageBackend = new PageBackend(
     port,
     pagesPort,
-    core,
+    core.directory,
     core.trackers,
     [stackApp(openDoc)],
     upgrades,
@@ -261,15 +261,17 @@ async function serve(port: number) {
   // any, so it reaches those that aren't open, and those from before a restart.
   const refreshThreads = () => {
     const held = (kind: FileKind) =>
-      core.held.flatMap((subject) => (subject.kind === kind ? [subject.path] : []))
+      core.directory.held.flatMap((subject) =>
+        subject.kind === kind ? [subject.path] : [],
+      )
     docBackend.files.refresh(held("doc"))
     pageBackend.files.refresh(held("page"))
   }
   refreshThreads()
   core.subscribe(refreshThreads)
   // And the messages panes sent while no agent was in their tab
-  void core.flush()
-  core.subscribe(() => void core.flush())
+  void core.directory.flush()
+  core.subscribe(() => void core.directory.flush())
   // opencode has no hooks: its service streams its sessions' events
   void watchOpencode(core)
 

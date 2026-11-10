@@ -1,7 +1,7 @@
 // The agents in a Rex tab, for a command run in one of its panes: listing
 // them, picking the one a file is bound to, and sending one a message from
 // a tool like the user's editor or a diff review (`ah message send`). ah
-// only routes the message, and holds it while no agent is there (core.ts).
+// only routes the message, and holds it while no agent is there (directory.ts).
 
 import { styleText } from "node:util"
 import select from "@inquirer/select"

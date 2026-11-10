@@ -32,7 +32,8 @@ import type { Address, AgentId, AgentRef, FileKind, Route, Subject } from "../..
 
 /** Which agent each subject's requests go to, and where agents can be
  * reached, which changes as they go through sessions. The server's is the
- * core, which keeps the agent registry (core/core.ts). */
+ * core's directory, which keeps them in the agent registry
+ * (core/directory.ts). */
 export interface AgentDirectory {
   /** The id of the agent `ref` names, if the directory knows it */
   agentId(ref: AgentRef): AgentId | null

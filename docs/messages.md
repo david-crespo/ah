@@ -53,7 +53,7 @@ If you submit a request when no agent is reachable, the request waits in the thr
 
 ## Comments sent to a tab
 
-`ah message send` sends a message to an agent running in the current Rex terminal tab. This is how Helix's comment command talks to the agent ([helix.md](helix.md)). If the tab has several agents, the message goes to the one named with `--agent` (an ID from `ah workspace agents`), which also becomes the pane's pick for later sends. Without `--agent`, it goes to the pane's pick. With neither, the command refuses and lists the agents. The comment text comes from `--text`, `--text-file`, or stdin. The message starts with a line telling the agent where the message came from. If `--file` is passed, the next line says where the comment is located (`core/core.ts`, `cli/message.ts`):
+`ah message send` sends a message to an agent running in the current Rex terminal tab. This is how Helix's comment command talks to the agent ([helix.md](helix.md)). If the tab has several agents, the message goes to the one named with `--agent` (an ID from `ah workspace agents`), which also becomes the pane's pick for later sends. Without `--agent`, it goes to the pane's pick. With neither, the command refuses and lists the agents. The comment text comes from `--text`, `--text-file`, or stdin. The message starts with a line telling the agent where the message came from. If `--file` is passed, the next line says where the comment is located (`core/directory.ts`, `cli/message.ts`):
 
 ````
 From the user, through ah: treat it as typed here and answer in the terminal, not with SendMessage.
