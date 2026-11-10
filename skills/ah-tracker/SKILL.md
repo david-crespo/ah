@@ -188,7 +188,8 @@ becomes current.
 ## On the phone
 
 When the user is away from the desk but on the same network (Remote Control
-from the phone), they can read the tracker in the phone's browser. ah only
+from the phone), they can read the tracker, or a home page (the ah-home
+skill), in the phone's browser. ah only
 listens on 127.0.0.1, so run the read-only proxy, `lan-proxy.mjs` in this
 skill's directory, outside the sandbox (it binds a LAN port), in the
 background:
@@ -202,4 +203,7 @@ The LAN IP is the `inet` address on the local network in `ifconfig` output
 first column of `ah window ls`, and an html page can go alongside the
 tracker. It prints a URL per page to give the user. The page doesn't reload
 live (pull to refresh) and comments and Go don't work from it: the proxy
-passes only GETs and no socket. Stop it when the user is back.
+passes only GETs and no socket. A home page still updates, since it asks for
+its data every few seconds. For a server on another port, set `AH_PAGES_PORT`
+to its pages port (one above its port); `AH_PROXY_PORT` changes the port the
+proxy listens on (7430). Stop it when the user is back.

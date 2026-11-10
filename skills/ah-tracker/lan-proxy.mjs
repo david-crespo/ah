@@ -1,11 +1,13 @@
 // Read-only LAN proxy for ah html pages, so a phone on the same network can
-// see a tracker: GET only, only the named pages' files plus the shared
+// see a tracker or a home page: GET only, only the named pages' files plus the shared
 // tracker and chat assets, and no socket, so no live reload, comments or Go.
 // ah itself listens on 127.0.0.1 and checks Host and Origin, so the proxy
 // rewrites those.
 //
 // Usage: node lan-proxy.mjs <lan-ip> <page-id>...
 // Page ids are the first column of `ah window ls` (e.g. index~L1VzZXJz…~Xb3k…).
+// AH_PAGES_PORT is ah's pages port (default 7421) and AH_PROXY_PORT the one
+// the proxy listens on (default 7430).
 import http from "node:http"
 
 const [lanIp, ...pageIds] = process.argv.slice(2)
@@ -13,8 +15,8 @@ if (!lanIp || pageIds.length === 0) {
   console.error("usage: node lan-proxy.mjs <lan-ip> <page-id>...")
   process.exit(2)
 }
-const upstream = { host: "127.0.0.1", port: 7421 }
-const listenPort = 7430
+const upstream = { host: "127.0.0.1", port: Number(process.env.AH_PAGES_PORT || 7421) }
+const listenPort = Number(process.env.AH_PROXY_PORT || 7430)
 
 const allowed = (path) =>
   pageIds.some((id) => path.startsWith(`/view/page/${id}/`)) ||
