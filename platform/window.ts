@@ -25,7 +25,6 @@
 import { cpSync, existsSync, rmSync, statSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { assetPath } from "./assets.ts"
-import { die } from "./cli.ts"
 import { type Focus, activatePid, focusHere, keepFocus } from "./focus.ts"
 import { ahStateDir } from "./paths.ts"
 import { processTable, run } from "./proc.ts"
@@ -52,7 +51,7 @@ async function builtApp(): Promise<string> {
   if (built && SOURCES.every((s) => mtime(assetPath(s)) <= built)) return app
   console.error("ah: building the window app (webview/build.sh)")
   const { success, stderr } = await run(assetPath("webview/build.sh"), [])
-  if (!success) die(`ah: couldn't build the window app:\n${stderr.trim()}`)
+  if (!success) throw new Error(`couldn't build the window app:\n${stderr.trim()}`)
   return app
 }
 
@@ -70,6 +69,12 @@ async function namedApp(base: string, name: string): Promise<string> {
   // The copy's Info.plist no longer matches the signature
   await run("codesign", ["--force", "--sign", "-", app])
   return app
+}
+
+/** `open`, which fails when the app won't launch or nothing opens the URL */
+async function open(args: string[]) {
+  const { success, stderr } = await run("open", args)
+  if (!success) throw new Error(`open failed: ${stderr.trim()}`)
 }
 
 const SHOWING = /\/ah-webview --url (\S+)/
@@ -109,7 +114,7 @@ export async function openWindow(
   // activation is the app in front's to give), so launching is what brings it
   // forward. -g keeps LaunchServices from doing that, and -n from reusing a
   // running one.
-  await run("open", [
+  await open([
     ...(focus.take ? [] : ["-g"]),
     "-n",
     app,
@@ -138,9 +143,9 @@ export async function showUrl(
   if (place === "window") {
     await openWindow(url, options, focus, live)
   } else if (focus.take) {
-    await run("open", [url])
+    await open([url])
   } else {
-    await run("open", ["-g", url])
+    await open(["-g", url])
     await keepFocus(focus.front)
   }
 }

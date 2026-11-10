@@ -411,4 +411,5 @@ const noHelpCommand = (c: Command) => {
 }
 noHelpCommand(program)
 
-await program.parseAsync()
+// A command that fails says why, as die does, without node's stack trace
+await program.parseAsync().catch((e: Error) => die(`ah: ${e.message}`))
