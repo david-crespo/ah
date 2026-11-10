@@ -61,9 +61,7 @@ export async function openSkepsis(cwd: string, diff: string[], agent: AgentId | 
     running.set(key, (skepsis = started))
   }
   const url = await skepsis.listening
-  // Before and after, since showing it closes the window it had
-  skepsis.at = Date.now()
-  await showUrl("window", url, { name: "skepsis", badge: "S", color: "#475569" })
+  await showUrl("window", url, { name: "skepsis", badge: "S", color: "#475569" }, true)
   skepsis.url = url
   skepsis.at = Date.now()
 }

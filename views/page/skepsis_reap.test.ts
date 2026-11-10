@@ -1,16 +1,18 @@
 import { afterAll, expect, test, vi } from "vitest"
 
 // A skepsis that says where it's listening, with its pid as the path, and
-// stays. No real windows.
+// stays. No real windows; a URL shown without `live` gets a new one.
 const shown = new Set<string>()
 const started: { rev: string; pid: number; url: string }[] = []
+let opened = 0
 vi.hoisted(() => {
   // No spaces, since AH_SKEPSIS is split on them
   const script = String.raw`console.log("skepsis\x20on\x20http://"+process.argv.at(-2)+"/"+process.pid);setInterval(()=>{},1000)`
   process.env.AH_SKEPSIS = `node --eval ${script} --`
 })
 vi.mock("../../platform/window.ts", () => ({
-  showUrl: async (_place: string, url: string) => {
+  showUrl: async (_place: string, url: string, _options: unknown, live = false) => {
+    if (!live || !shown.has(url)) opened++
     shown.add(url)
     const { host: rev, pathname } = new URL(url)
     if (!started.some((s) => s.url === url))
@@ -52,4 +54,14 @@ test("a skepsis whose window was closed is stopped at the next reap", async () =
   shown.clear()
   reap(Date.now() + 60_000)
   await expect.poll(() => alive("kept") || alive("closed")).toBe(false)
+})
+
+test("a second click on an open diff keeps its window", async () => {
+  await openSkepsis(process.cwd(), ["-r", "again"], null)
+  const before = opened
+  await openSkepsis(process.cwd(), ["-r", "again"], null)
+  expect(opened).toBe(before)
+  shown.clear()
+  reap(Date.now() + 60_000)
+  await expect.poll(() => alive("again")).toBe(false)
 })
