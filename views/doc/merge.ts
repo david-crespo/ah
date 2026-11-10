@@ -135,10 +135,11 @@ const splitLines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? []
  * markers around the whole lines, `<<<<<<< mine`, `=======`,
  * `>>>>>>> agent`.
  *
- * By words, lines both added at one spot both go in, unsaved first, and a
- * conflict within a line is marked as CriticMarkup's substitution,
- * `{~~unsaved~>disk~~}`, around the words that conflict when every version
- * is at most two words, and else around the whole sentences. */
+ * By words, lines both added at one spot both go in, unsaved first, or once
+ * when one side's are among the other's. A conflict within a line is marked
+ * as CriticMarkup's substitution, `{~~unsaved~>disk~~}`, around the words
+ * that conflict when every version is at most two words, and else around the
+ * whole sentences. */
 export function mergeDisk(
   base: string,
   unsaved: string,
@@ -181,15 +182,19 @@ export function mergeDisk(
     const { orig, ours, theirs } = versions(r)
     if (ours === theirs || theirs === orig) return ours
     if (ours === orig) return theirs
-    // Lines both added at one spot
+    // Lines both added at one spot. When one side's are among the other's,
+    // as when it added more around a line it had already seen, that side's
+    // are both.
     if (
       by === "words" &&
       r.start === r.end &&
       lineStart(r.start) &&
       ours.endsWith("\n") &&
       theirs.endsWith("\n")
-    )
-      return ours + theirs
+    ) {
+      const among = (more: string, less: string) => `\n${more}`.includes(`\n${less}`)
+      return among(ours, theirs) ? ours : among(theirs, ours) ? theirs : ours + theirs
+    }
     return null
   }
 

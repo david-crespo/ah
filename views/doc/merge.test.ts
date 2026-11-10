@@ -187,6 +187,17 @@ describe("mergeDisk", () => {
   })
 })
 
+describe("mergeDisk on lines both added", () => {
+  test("takes them once when one side has the other's among its own", () => {
+    expect(merged("a\nb\n", "a\nx\nb\n", "a\nx\ny\nb\n")).toBe("a\nx\ny\nb\n")
+    expect(merged("a\nb\n", "a\nw\nx\ny\nb\n", "a\nx\nb\n")).toBe("a\nw\nx\ny\nb\n")
+  })
+
+  test("keeps both when a line only ends like the other's", () => {
+    expect(merged("a\nb\n", "a\nx\nb\n", "a\nax\nb\n")).toBe("a\nx\nax\nb\n")
+  })
+})
+
 describe("mergeDisk edge cases", () => {
   test("keeps the file's line endings and a missing last newline", () => {
     expect(merged("one two", "one two three", "zero one two")).toBe("zero one two three")
