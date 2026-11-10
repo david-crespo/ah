@@ -22,7 +22,7 @@
 //   bounds start at the primary screen's top left with y going down, while
 //   NSScreen frames start at its bottom left with y going up.
 
-import { cpSync, existsSync, rmSync, statSync } from "node:fs"
+import { cpSync, existsSync, readdirSync, rmSync, statSync } from "node:fs"
 import { basename, dirname, join } from "node:path"
 import { assetPath } from "./assets.ts"
 import { type Focus, activatePid, focusHere, keepFocus } from "./focus.ts"
@@ -68,6 +68,15 @@ async function namedApp(base: string, name: string): Promise<string> {
   }
   // The copy's Info.plist no longer matches the signature
   await run("codesign", ["--force", "--sign", "-", app])
+  // A copy for every name ever shown would pile up: drop those made over a
+  // month ago that no window is running from
+  const windows = dirname(app)
+  const running = processTable().map((p) => p.args)
+  for (const copy of readdirSync(windows).map((c) => join(windows, c))) {
+    const old = Date.now() - mtime(join(copy, BINARY)) > 30 * 24 * 60 * 60 * 1000
+    if (old && !running.some((args) => args.startsWith(`${copy}/`)))
+      rmSync(copy, { recursive: true, force: true })
+  }
   return app
 }
 

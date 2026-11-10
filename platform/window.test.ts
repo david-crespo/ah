@@ -1,17 +1,37 @@
-import { expect, test, vi } from "vitest"
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join } from "node:path"
+import { afterEach, expect, test, vi } from "vitest"
+import type { Proc } from "./proc.ts"
 
-// Every command fails, and nothing opens or builds for real
+// Nothing opens or builds for real: commands succeed or fail as `fake.ok`
+// says, and the package is at `fake.root`, with no app built unless a test
+// builds one
+const fake = vi.hoisted(() => ({ ok: false, root: "/nonexistent", procs: [] as Proc[] }))
 vi.mock("./proc.ts", () => ({
-  run: async () => ({ success: false, code: 1, stdout: "", stderr: "it failed" }),
-  processTable: () => [],
+  run: async () => ({ success: fake.ok, code: 1, stdout: "", stderr: "it failed" }),
+  processTable: () => fake.procs,
 }))
 vi.mock("./focus.ts", () => ({ focusHere: async () => ({ take: true, front: null }) }))
-// No app built yet, so a window builds it
-vi.mock("./assets.ts", () => ({ assetPath: (path: string) => `/nonexistent/${path}` }))
+vi.mock("./assets.ts", () => ({ assetPath: (path: string) => `${fake.root}/${path}` }))
 
 const { showUrl } = await import("./window.ts")
 
 const options = { name: "x", badge: "X", color: "#000000" }
+
+afterEach(() => {
+  fake.ok = false
+  fake.root = "/nonexistent"
+  fake.procs = []
+  delete process.env.XDG_STATE_HOME
+})
 
 test("a failed build of the window app rejects, for the caller to report", async () => {
   await expect(showUrl("window", "http://127.0.0.1:1/", options)).rejects.toThrow(
@@ -21,4 +41,37 @@ test("a failed build of the window app rejects, for the caller to report", async
 
 test("a tab that fails to open rejects", async () => {
   await expect(showUrl("tab", "http://127.0.0.1:1/", options)).rejects.toThrow("it failed")
+})
+
+test("a new copy of the app removes the old ones no window runs from", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ah-window-"))
+  process.env.XDG_STATE_HOME = join(dir, "state")
+  fake.root = join(dir, "package")
+  fake.ok = true
+  const binary = (app: string) => join(app, "Contents/MacOS/ah-webview")
+  const make = (app: string, daysOld = 0) => {
+    mkdirSync(dirname(binary(app)), { recursive: true })
+    writeFileSync(binary(app), "")
+    const time = Date.now() / 1000 - daysOld * 24 * 60 * 60
+    utimesSync(binary(app), time, time)
+  }
+  try {
+    make(join(fake.root, "webview/build/ah.app"))
+    const windows = join(dir, "state/ah/windows")
+    make(join(windows, "old.app"), 40)
+    make(join(windows, "open.app"), 40)
+    make(join(windows, "recent.app"), 5)
+    fake.procs = [
+      {
+        pid: 0,
+        ppid: 0,
+        pgid: 0,
+        args: `${binary(join(windows, "open.app"))} --url other`,
+      },
+    ]
+    await showUrl("window", "http://127.0.0.1:1/", { ...options, name: "new" })
+    expect(readdirSync(windows).sort()).toEqual(["new.app", "open.app", "recent.app"])
+  } finally {
+    rmSync(dir, { recursive: true })
+  }
 })
