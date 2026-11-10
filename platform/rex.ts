@@ -352,17 +352,21 @@ const pidOf = (p: unknown) =>
 
 const titleOf = (p: unknown) => (isRecord(p) && isString(p.title) ? p.title : null)
 
+type Call = typeof call
+
 /** Follows Rex: the views and blocks a RexState is made from, updated from
- * events */
-class Follower {
+ * events. `call` is how it asks Rex. */
+export class Follower {
   sessions = new Map<string, RexView>()
   blocks = new Map<string, BlockInfo>()
   front: string | null = null
   /** Sessions with a view read in flight, and whether another is wanted after */
   #reading = new Map<string, boolean>()
+  #call: Call
   onChange: () => void
 
-  constructor(onChange: () => void) {
+  constructor(call: Call, onChange: () => void) {
+    this.#call = call
     this.onChange = onChange
   }
 
@@ -374,7 +378,7 @@ class Follower {
     )
 
   async load() {
-    const list = await call("session.list")
+    const list = await this.#call("session.list")
     const ids =
       isRecord(list) && Array.isArray(list.sessions)
         ? list.sessions.flatMap((s) =>
@@ -392,7 +396,7 @@ class Follower {
     }
     this.#reading.set(session, false)
     try {
-      const view = parseView(await call("session.view", { session_id: session }))
+      const view = parseView(await this.#call("session.view", { session_id: session }))
       if (view) {
         const before = this.sessions.get(session)
         this.sessions.set(session, view)
@@ -416,7 +420,7 @@ class Follower {
     await Promise.all(
       blocks.map(async (block) => {
         const method = (name: string) =>
-          call("block.method", {
+          this.#call("block.method", {
             session_id: session,
             block_id: block,
             method: name,
@@ -499,7 +503,7 @@ export function foregroundBlocks(): Map<number, { block: string; cwd: string }> 
 }
 
 export async function readRex(): Promise<RexState> {
-  const follower = new Follower(() => {})
+  const follower = new Follower(call, () => {})
   await follower.load()
   return follower.state()
 }
@@ -540,7 +544,7 @@ export async function watchRex(onChange: (rex: RexState) => void): Promise<never
     // Load after subscribing, so no change falls between the two. Events
     // that arrive first are queued and replayed on top of the load.
     const queued: unknown[] = []
-    const follower: Follower = new Follower(() => loaded && emit(follower.state()))
+    const follower: Follower = new Follower(call, () => loaded && emit(follower.state()))
     watched = follower
     void follower.load().then(
       () => {

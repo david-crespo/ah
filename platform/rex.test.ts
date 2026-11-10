@@ -5,6 +5,7 @@ import { expect, test } from "vitest"
 import {
   type BlockInfo,
   findRex,
+  Follower,
   parseView,
   type RexHealth,
   rexTrouble,
@@ -132,6 +133,72 @@ test("a tab's blocks are in layout order, top to bottom and left to right", () =
 test("parseView rejects what isn't a view", () => {
   expect(parseView({ windows: "nope", active_window_id: null })).toBeNull()
   expect(parseView(null)).toBeNull()
+})
+
+/** A Rex server with these sessions' views, answering `rex api call` as
+ * the real one does: an unknown session is an error */
+function fakeRex(views: Map<string, unknown>) {
+  return async (method: string, args: Record<string, unknown> = {}): Promise<unknown> => {
+    switch (method) {
+      case "session.list":
+        return { sessions: [...views.keys()].map((session_id) => ({ session_id })) }
+      case "session.view": {
+        const v = views.get(args.session_id as string)
+        if (!v) throw new Error(`rex api call session.view: no session ${args.session_id}`)
+        return v
+      }
+      case "block.method":
+        return args.method === "process"
+          ? { foreground: { pid: 7, cwd: `/r/${args.block_id}` } }
+          : { title: `${args.block_id}` }
+    }
+    throw new Error(`no ${method}`)
+  }
+}
+
+const tabsOf = (f: Follower) =>
+  f.state().sessions.map((s) => s.tabs.map((t) => t.blocks.map((b) => b.id)))
+
+test("the follower reads each session's view and its blocks, then follows events", async () => {
+  const views = new Map<string, unknown>([["session:s", view]])
+  let changes = 0
+  const follower = new Follower(fakeRex(views), () => changes++)
+  await follower.load()
+  expect(tabsOf(follower)).toEqual([
+    [
+      ["block:a", "block:b"],
+      ["block:c", "block:d"],
+    ],
+  ])
+  expect(follower.blocks.get("block:c")).toEqual({
+    cwd: "/r/block:c",
+    title: "block:c",
+    pid: 7,
+  })
+  // A cd in a block
+  follower.onEvent({
+    type: "session_event",
+    payload: {
+      session_id: "session:s",
+      event: {
+        type: "block_event",
+        payload: {
+          block_id: "block:c",
+          name: "process_changed",
+          payload: { foreground: { pid: 8, cwd: "/r/elsewhere" } },
+        },
+      },
+    },
+  })
+  expect(follower.state().sessions[0].tabs[1].blocks[0]).toEqual({
+    id: "block:c",
+    cwd: "/r/elsewhere",
+  })
+  // The session goes
+  follower.onEvent({ type: "session_destroyed", payload: { session_id: "session:s" } })
+  expect(follower.state().sessions).toEqual([])
+  expect(follower.blocks.size).toBe(0)
+  expect(changes).toBe(3)
 })
 
 /** An empty rex binary at `path`, making its directories */
