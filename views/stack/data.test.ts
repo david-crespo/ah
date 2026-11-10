@@ -124,6 +124,7 @@ test("readStack takes each PR's commits and base from the graph", async () => {
       base: p.base,
       diff: p.diff,
       pushed: p.pushed,
+      unpushed: p.unpushed,
       commits: p.commits.map((c) => c.description.split("\n")[0]),
       files: p.files.map((f) => `${f.status} ${f.path} +${f.add}`),
     }))
@@ -134,6 +135,7 @@ test("readStack takes each PR's commits and base from the graph", async () => {
         base: "one",
         diff: { from: '"one"', to: '"three"' },
         pushed: null,
+        unpushed: 1,
         commits: ["Add d"],
         files: ["A d.txt +1"],
       },
@@ -142,6 +144,7 @@ test("readStack takes each PR's commits and base from the graph", async () => {
         base: "one",
         diff: { from: '"one"', to: '"two"' },
         pushed: null,
+        unpushed: 1,
         commits: ["Add c"],
         files: ["A c.txt +1"],
       },
@@ -150,6 +153,8 @@ test("readStack takes each PR's commits and base from the graph", async () => {
         base: expect.stringMatching(/^[k-z]{8}$/),
         diff: { from: base, to: '"one"' },
         pushed,
+        // The edit is still to push, and a isn't
+        unpushed: 1,
         commits: ["Add b, edited", "Add a"],
         files: ["A a.txt +1", "A b.txt +1"],
       },

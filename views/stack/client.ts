@@ -4,13 +4,14 @@
 // loads it and /stack.css. It draws the page's stack (data.ts, served
 // at _ah/stack) newest first, like jj log: each PR's title, its bookmark and
 // how it merges, its summary and files collapsed under it, and a line per
-// commit that opens to its description and files. Commits below a fork that
-// no PR's bookmark is on get a card of their own, shared by the PRs above. A
-// graph down the left joins the commits, like jj log's. Each diff stat is a
-// button that has the server open that diff in skepsis (skepsis.ts). Until a
-// PR is on GitHub, its Body button opens its body in a doc page, starting the
-// file if there isn't one. Once it is, GitHub
-// has the body, so the button gives way to a link to the PR, with GitHub's
+// commit that opens to its description and files. Once a PR is pushed, a line
+// under its newest commits marks the ones still to push. Commits below a fork
+// that no PR's bookmark is on get a card of their own, shared by the PRs
+// above. A graph down the left joins the commits, like jj log's. Each diff
+// stat is a button that has the server open that diff in skepsis
+// (skepsis.ts). Until a PR is on GitHub, its Body button opens its body in a
+// doc page, starting the file if there isn't one. Once it is, GitHub has the
+// body, so the button gives way to a link to the PR, with GitHub's
 // title and where the PR stands there (github.ts, served at
 // _ah/stack-github, which comes after the stack since gh is slow). The stack
 // is read again, without a reload, when the server says its data changed:
@@ -93,15 +94,20 @@ document.addEventListener(
 const PENCIL = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>`
 
 const STATES = { draft: "Draft", open: "Open", closed: "Closed", merged: "Merged" }
-// Like GitHub's next to a commit: Lucide's check and x, and a dot
+// A dot for CI, coloured by how the checks stand
 const CHECKS = {
-  pass: ["Checks passing", '<path d="M20 6 9 17l-5-5"/>'],
-  fail: ["Checks failing", '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'],
-  pending: ["Checks running", '<circle cx="12" cy="12" r="5"/>'],
-} as const
-const REVIEWS: Record<string, [string, string]> = {
-  APPROVED: ["approved", "good"],
-  CHANGES_REQUESTED: ["changes requested", "bad"],
+  pass: "CI checks passing",
+  fail: "CI checks failing",
+  pending: "CI checks running",
+}
+// Lucide's check and x, with the review's word as the tooltip
+const REVIEWS: Record<string, [string, string, string]> = {
+  APPROVED: ["approved", "good", '<path d="M20 6 9 17l-5-5"/>'],
+  CHANGES_REQUESTED: [
+    "changes requested",
+    "bad",
+    '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  ],
 }
 
 /** A note on the meta line, `cls` good, bad or warn */
@@ -117,34 +123,41 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   if (gh.state !== "OPEN") return link
   const notes: string[] = []
   if (gh.checks) {
-    const [title, icon] = CHECKS[gh.checks]
+    const title = CHECKS[gh.checks]
     notes.push(
-      `<a class="gh-checks ${gh.checks}" href="${esc(gh.url)}/checks" target="_blank" rel="noreferrer" title="${title}"><svg viewBox="0 0 24 24" aria-label="${title}">${icon}</svg></a>`,
+      `<a class="gh-checks ${gh.checks}" href="${esc(gh.url)}/checks" target="_blank" rel="noreferrer" title="${title}" aria-label="${title}"></a>`,
     )
   }
   const tip = pr.commits[0]?.commit
   const head = gh.headRefOid
   if (tip && !head.startsWith(tip)) {
     const where = `${tip} here, ${head.slice(0, 8)} on GitHub`
-    // Pushed as it was last fetched, so the change is here; otherwise GitHub
-    // has something newer, like a rebase after the PR below merged
-    if (pr.pushed && head.startsWith(pr.pushed))
-      notes.push(note("not pushed", "warn", where))
-    else notes.push(note("changed on GitHub · fetch", "warn", where))
+    // Pushed as it was last fetched, so the change is here, and the line in
+    // the commit list shows it unless the bookmark only moved back. Otherwise
+    // GitHub has something newer, like a rebase after the PR below merged.
+    if (!pr.pushed || !head.startsWith(pr.pushed))
+      notes.push(note("changed on GitHub · fetch", "warn", where))
+    else if (!pr.unpushed) notes.push(note("not pushed", "warn", where))
   }
   if (base && gh.baseRefName !== base)
     notes.push(note(`base is ${gh.baseRefName} on GitHub, ${base} here`, "warn"))
   const review = REVIEWS[gh.reviewDecision]
-  if (review) notes.push(note(...review))
+  if (review) {
+    const [text, cls, icon] = review
+    notes.push(
+      `<span class="gh-note gh-review ${cls}" title="Review on GitHub: ${text}"><svg viewBox="0 0 24 24" aria-label="${text}">${icon}</svg></span>`,
+    )
+  }
   return link + notes.join("")
 }
 
-const commitList = (commits: Commit[]) =>
-  `<ol class="commits">${commits
-    .map((c) => {
-      const [title, ...rest] = c.description.split("\n")
-      const body = rest.join("\n").trim()
-      return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
+/** The commits, with a line under the first `unpushed` of them, the newest,
+ * when there are any */
+function commitList(commits: Commit[], unpushed = 0): string {
+  const items = commits.map((c) => {
+    const [title, ...rest] = c.description.split("\n")
+    const body = rest.join("\n").trim()
+    return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
       <summary>
         <span class="mono cid" title="${c.change} @ ${c.commit}">${esc(c.short)}</span>
         <span class="title">${esc(title || "(no description)")}</span>
@@ -155,10 +168,19 @@ const commitList = (commits: Commit[]) =>
         ${fileList(c.files)}
       </div>
     </details></li>`
-    })
-    .join("")}</ol>`
+  })
+  if (unpushed)
+    items.splice(
+      unpushed,
+      0,
+      `<li class="to-push"><span>↑ ${unpushed} to push</span>${unpushed < commits.length ? "<span>pushed ↓</span>" : ""}</li>`,
+    )
+  return `<ol class="commits">${items.join("")}</ol>`
+}
 
 function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
+  // Before a first push, all of them are to push, which goes without saying
+  const unpushed = pr.pushed ? pr.unpushed : 0
   return `<section class="pr">
     <div class="pr-head">
       <h2><span class="n">${pr.n}.</span> ${esc(gh?.title ?? pr.title)}</h2>
@@ -170,7 +192,7 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
       ${fileList(pr.files)}
     </details>
-    ${commitList(pr.commits)}
+    ${commitList(pr.commits, unpushed)}
   </section>`
 }
 

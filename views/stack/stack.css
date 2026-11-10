@@ -166,12 +166,19 @@ main .gh-pr.closed {
   --state: var(--del);
 }
 main .gh-checks {
-  display: inline-flex;
-  margin-left: -4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: currentColor;
 }
-main .gh-checks svg {
-  width: 16px;
-  height: 16px;
+main .gh-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+main .gh-review svg {
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 3;
@@ -186,10 +193,6 @@ main .gh-checks.fail {
 }
 main .gh-checks.pending {
   color: var(--warn);
-}
-main .gh-checks.pending svg {
-  fill: currentColor;
-  stroke: none;
 }
 main .gh-note.good {
   color: var(--add);
@@ -275,6 +278,36 @@ main .commits > li:last-child {
 }
 main .commit {
   margin: 0;
+}
+/* Between a PR's commits still to push and the ones its remote has: a bar
+ * in place of the lines above and below it */
+main .commits > li.to-push {
+  display: flex;
+  justify-content: center;
+  /* Out to where the diff stat's hover reaches, and as far on the left */
+  margin: 2px -6px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+  /* A warm grey: the theme's cool one looks wrong on the bar */
+  color: color-mix(
+    in srgb,
+    color-mix(in srgb, var(--warn) 25%, var(--fg)) 70%,
+    transparent
+  );
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
+  border-radius: 1px;
+  border-bottom-color: transparent;
+}
+main .commits > li:has(+ .to-push) {
+  border-bottom-color: transparent;
+}
+main .to-push > :first-child {
+  color: color-mix(in srgb, var(--warn) 70%, var(--fg));
+}
+main .to-push > :nth-child(2)::before {
+  content: "·";
+  margin: 0 8px;
 }
 main .commit > summary {
   gap: 6px 8px;

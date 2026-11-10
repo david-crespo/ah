@@ -68,6 +68,10 @@ export interface Pr extends StackPr, Group {
   missing: boolean
   /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
   pushed: string | null
+  /** How many of its commits its remote bookmark doesn't have: all of them
+   * before it's pushed. A pushed commit's ancestors are pushed too, so
+   * they're the newest ones. */
+  unpushed: number
 }
 
 /** Commits below a fork that no PR's bookmark is on */
@@ -185,11 +189,15 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   ])
   const live = file.prs.filter((pr) => existing.includes(pr.bookmark))
   const tips = live.map((pr) => JSON.stringify(pr.bookmark))
-  // Each commit above trunk that a PR has, led by the PRs that have it and
-  // its bookmarks
-  const inPrs = live.map(
-    (pr, i) => `if(self.contained_in(${JSON.stringify(`::${tips[i]}`)}), "${pr.n} ")`,
-  )
+  // The PRs for which a commit is in ::revset(tip), as "1 2 "
+  const prsWith = (revset: (tip: string) => string) =>
+    live
+      .map(
+        (pr, i) => `if(self.contained_in(${JSON.stringify(revset(tips[i]))}), "${pr.n} ")`,
+      )
+      .join(" ++ ")
+  // Each commit above trunk that a PR has, led by the PRs that have it, the
+  // PRs whose remote bookmark has it, and its bookmarks
   const log = live.length
     ? await jj(
         "log",
@@ -198,7 +206,9 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
         `::(${tips.join(" | ")}) ~ ::trunk()`,
         "-T",
         [
-          ...inPrs,
+          prsWith((tip) => `::${tip}`),
+          `"\\t"`,
+          prsWith((tip) => `::remote_bookmarks(exact:${tip})`),
           `"\\t"`,
           `local_bookmarks.map(|b| b.name()).join(" ")`,
           `"\\t"`,
@@ -209,10 +219,13 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   type Found = { prs: number[]; bookmarks: string; commits: Commit[] }
   // Keyed by which PRs have them, with the bookmarks on the newest
   const groups = new Map<string, Found>()
+  /** By commit ID, the PRs whose remote bookmark has it */
+  const pushedIn = new Map<string, string[]>()
   for (const line of log.split("\n").filter(Boolean)) {
-    const [prs, bookmarks, json] = line.split("\t")
+    const [prs, remotes, bookmarks, json] = line.split("\t")
     const c: Commit = JSON.parse(json)
     for (const f of c.files) f.status = letter(f.status)
+    pushedIn.set(c.commit, remotes.split(" "))
     if (!groups.has(prs))
       groups.set(prs, { prs: prs.trim().split(" ").map(Number), bookmarks, commits: [] })
     groups.get(prs)!.commits.push(c)
@@ -250,7 +263,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     const none = { head: pr.bookmark, base: "", diff: null, files: [], commits: [] }
     // Listed before its bookmark exists
     if (!existing.includes(pr.bookmark)) {
-      const row: Pr = { ...pr, ...none, missing: true, pushed: null }
+      const row: Pr = { ...pr, ...none, missing: true, pushed: null, unpushed: 0 }
       return { row, has: [] }
     }
     const tip = JSON.stringify(pr.bookmark)
@@ -275,6 +288,9 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
       commits: own?.commits ?? [],
       missing: false,
       pushed: pushed.split("\n")[0] || null,
+      unpushed: (own?.commits ?? []).filter(
+        (c) => !pushedIn.get(c.commit)!.includes(String(pr.n)),
+      ).length,
     }
     return { row, has: own?.prs ?? [] }
   })
