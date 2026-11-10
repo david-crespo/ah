@@ -27,7 +27,9 @@ const editorToggle = document.getElementById("editor-toggle")
 // with chat on
 const chat = document.getElementById("popover") !== null
 let hidePopover = () => {}
-const conversation = chat ? new Conversation(() => hidePopover(), threadKinds) : null
+const conversation = chat
+  ? new Conversation(content, () => hidePopover(), threadKinds)
+  : null
 if (conversation) hidePopover = setUpSelectionComments(content, conversation)
 setUpFind(content)
 

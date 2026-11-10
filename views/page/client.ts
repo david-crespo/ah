@@ -41,10 +41,10 @@ function reload() {
 let conversation: Conversation | null = null
 if (chat) {
   let hidePopover = () => {}
-  conversation = new Conversation(() => hidePopover(), pageKinds, threadUrl)
   // A page's main content when it marks one, so the comment's surrounding
   // text comes from the page rather than its chrome
   const content = document.querySelector<HTMLElement>("main") ?? document.body
+  conversation = new Conversation(content, () => hidePopover(), pageKinds, threadUrl)
   hidePopover = setUpSelectionComments(content, conversation)
 }
 

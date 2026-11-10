@@ -101,14 +101,22 @@ export class Conversation {
    * to when it closes */
   private returnFocus: HTMLElement | null = null
 
+  private content: HTMLElement
   private onOpen: () => void
   private kinds: RequestKinds
   private threadUrl: string
 
-  /** `kinds` are the requests the page's file type takes, for showing them.
-   * `threadUrl` is where the thread's routes are (subjects/thread/routes.ts);
-   * by default, relative to the page. */
-  constructor(onOpen: () => void, kinds: RequestKinds, threadUrl = location.href) {
+  /** `content` is what the page's selection comments are on, where a quoted
+   * passage is found again. `kinds` are the requests the page's file type
+   * takes, for showing them. `threadUrl` is where the thread's routes are
+   * (subjects/thread/routes.ts); by default, relative to the page. */
+  constructor(
+    content: HTMLElement,
+    onOpen: () => void,
+    kinds: RequestKinds,
+    threadUrl = location.href,
+  ) {
+    this.content = content
     this.onOpen = onOpen
     this.kinds = kinds
     this.threadUrl = threadUrl
@@ -402,10 +410,15 @@ export class Conversation {
   }
 
   private findAnchor({ args }: Request) {
-    const content = document.getElementById("content")!
     const needle = args.selection
     const nodes: Text[] = []
-    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT)
+    // Not the conversation or the comment box, which a page whose content is
+    // its whole body has inside it
+    const walker = document.createTreeWalker(this.content, NodeFilter.SHOW_TEXT, (node) =>
+      node.parentElement?.closest("#conversation, #popover")
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT,
+    )
     while (walker.nextNode()) nodes.push(walker.currentNode as Text)
     const text = nodes.map((node) => node.data).join("")
     let offset = text.indexOf(needle)
