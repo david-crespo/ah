@@ -16,9 +16,18 @@ test("local media: images and video next to the file, outside dot directories", 
   const draft = join(dir, "draft.md")
   await mkdir(join(dir, "shots"))
   await mkdir(join(dir, ".ssh"))
-  for (const f of ["shots/a.png", ".ssh/id.png", ".hidden.png", "notes.txt"]) {
+  for (const f of [
+    "shots/a.png",
+    "my shot é.png",
+    ".ssh/id.png",
+    ".hidden.png",
+    "notes.txt",
+  ]) {
     await writeFile(join(dir, f), "")
   }
+  // As the renderer escapes a src, and as it's written
+  for (const p of ["my%20shot%20%C3%A9.png", "my shot é.png", "shots/a.png?x=100%"])
+    expect((await localMedia(draft, p)).status, p).toEqual(p.includes("?") ? 404 : 200)
   const shot = await localMedia(draft, "shots/a.png")
   expect(shot.status).toEqual(200)
   expect(shot.headers.get("content-type")).toEqual("image/png")

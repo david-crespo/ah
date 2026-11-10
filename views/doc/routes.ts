@@ -181,6 +181,12 @@ async function ghBlob(q: URLSearchParams): Promise<Response> {
 /** Images and videos the file references by local path, relative to it:
  * under $HOME or next to the file, and outside dot directories */
 export async function localMedia(filePath: string, p: string): Promise<Response> {
+  // The renderer escapes a src: a space or an accent in a screenshot's name
+  try {
+    p = decodeURIComponent(p)
+  } catch {
+    // A literal % in the name
+  }
   const resolved = p.startsWith("/") ? p : join(dirname(filePath), p)
   const notFound = new Response("not found", { status: 404 })
   let real: string
