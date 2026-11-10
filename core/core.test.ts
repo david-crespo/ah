@@ -302,6 +302,59 @@ test("hooks tell the agent its trackers, then what changed", async () => {
   expect(await context(hook("UserPromptSubmit"))).toBeNull()
 })
 
+test("a Rex reconnect changes nothing an agent is told about its tracker", async () => {
+  const root = join(dir, "w")
+  mkdirSync(join(root, ".jj"), { recursive: true })
+  const tracker = join(root, "t.html")
+  writeFileSync(tracker, "")
+  core.trackers.add(root, tracker)
+  const tabs = {
+    front: "w",
+    sessions: [
+      {
+        id: "w",
+        selectedTab: "t1",
+        tabs: [
+          {
+            id: "t1",
+            name: "t1",
+            focused: "block:1",
+            blocks: ["block:1", "block:2"].map((id) => ({ id, cwd: root })),
+          },
+        ],
+      },
+    ],
+  }
+  core.onRex(tabs)
+  // block:2's hooks didn't say where it is
+  const hook = (event: "SessionStart" | "UserPromptSubmit", block: string) =>
+    report({
+      ...start("codex", block, undefined, block),
+      event,
+      cwd: block === "block:1" ? root : null,
+    })
+  const context = async (res: Promise<Response>) =>
+    ((await (await res).json()) as { context: string | null }).context
+  await hook("SessionStart", "block:1")
+  await hook("SessionStart", "block:2")
+  // `rex events` exited: no tabs until it's back
+  core.onRex({ front: null, sessions: [] })
+  expect(await context(hook("UserPromptSubmit", "block:1"))).toBeNull()
+  expect(await context(hook("UserPromptSubmit", "block:2"))).toBeNull()
+  const ref = { harness: "codex", session: "block:1", block: "block:1", process: null }
+  const current = await core.handle(
+    new Request("http://ah/core/current-tracker", {
+      method: "POST",
+      body: JSON.stringify({ agent: ref }),
+    }),
+    "current-tracker",
+  )
+  expect(await current.json()).toEqual({ path: tracker })
+  core.onRex(tabs)
+  expect(await context(hook("UserPromptSubmit", "block:1"))).toBeNull()
+  expect(await context(hook("UserPromptSubmit", "block:2"))).toBeNull()
+})
+
 test("a starting agent hears about old files in its workspace, wherever they are", async () => {
   // A secondary workspace whose tracker is a file of the default one, as
   // through a linked .claude/notes, and a page bound to an agent there

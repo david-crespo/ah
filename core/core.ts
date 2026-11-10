@@ -224,15 +224,15 @@ export class Core {
   }
 
   /** Where the agent `ref` names is, for finding its workspace: the tab
-   * its pane is in, or outside Rex, the agent's id. null for a pane the
-   * RexState doesn't have. */
+   * its pane is in, or the agent's id outside Rex or for a pane the
+   * RexState doesn't have, as while `rex events` reconnects */
   async homeOf(ref: AgentRef): Promise<string | null> {
     const id = agentId(this.registry, ref)
     const record = id ? this.registry.agents.get(id) : undefined
     const block = ref.block ?? (record && blockOf(record)) ?? null
     if (!block) return id
     await this.#rexReady()
-    return tabOf(this.#rex, block)?.id ?? null
+    return tabOf(this.#rex, block)?.id ?? id
   }
 
   /** Right after the server starts, Rex's first RexState may still be on
@@ -282,7 +282,8 @@ export class Core {
       const lines = [startContext(current, active), doctor].filter(Boolean)
       return lines.length ? lines.join("\n\n") : null
     }
-    const lines = this.#notices.since(agent, current, this.#showing())
+    // A workspace not known now leaves its tracker as last told
+    const lines = this.#notices.since(agent, root ? current : undefined, this.#showing())
     return lines.length ? lines.join("\n") : null
   }
 

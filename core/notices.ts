@@ -69,10 +69,16 @@ export class Notices {
     if (t) t.current = path
   }
 
-  /** What changed since the agent was last told, a line each */
-  since(agent: AgentId, current: string | null, showing: Showing): string[] {
+  /** What changed since the agent was last told, a line each. `current`
+   * is undefined when the workspace isn't known now, which leaves the
+   * tracker as last told. */
+  since(agent: AgentId, current: string | null | undefined, showing: Showing): string[] {
     const last = this.#told.get(agent)
-    const now = told(agent, current, showing)
+    const now = told(
+      agent,
+      current === undefined ? (last?.current ?? null) : current,
+      showing,
+    )
     this.#told.set(agent, now)
     if (!last) return []
     const lines: string[] = []
