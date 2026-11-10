@@ -11,7 +11,7 @@
 import { spawn } from "node:child_process"
 import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from "node:fs"
 import { text } from "node:stream/consumers"
-import { basename, dirname, join, relative, resolve } from "node:path"
+import { basename, dirname, join, relative } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { threadCommands } from "../subjects/thread/cli.ts"
 import { FILE_KINDS, fileKind, type TrackerEntry } from "../core/model.ts"
@@ -414,7 +414,7 @@ for (const [name, to, summary, description] of [
     .addOption(portOption())
     .action(async (file, { port }) => {
       if (!(await status(port))) die(`ah tool tracker ${name}: server not running`)
-      console.log(`${to}: ${await setTrackerStatus(port, resolve(file), to)}`)
+      console.log(`${to}: ${await setTrackerStatus(port, absolute(file), to)}`)
     })
 }
 
