@@ -29,7 +29,16 @@ try {
   /* storage blocked: reload at the top */
 }
 
+// Not while a comment is being typed, which the reload would throw away:
+// try again until its box is sent, emptied or left
+let retry: ReturnType<typeof setTimeout> | undefined
 function reload() {
+  const typing = document.activeElement
+  if (typing instanceof HTMLTextAreaElement && typing.value) {
+    clearTimeout(retry)
+    retry = setTimeout(reload, 500)
+    return
+  }
   try {
     sessionStorage.setItem(scrollKey, JSON.stringify([window.scrollX, window.scrollY]))
   } catch {
