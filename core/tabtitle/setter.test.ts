@@ -9,6 +9,7 @@ const rex = (name: string, blocks = ["t1"]): RexState => ({
     {
       id: "w",
       selectedTab: "tab",
+      detached: [],
       tabs: [
         {
           id: "tab",

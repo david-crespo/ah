@@ -62,11 +62,13 @@ test("focusedBlock is the front session's selected tab's", () => {
       {
         id: "w1",
         selectedTab: "t1",
+        detached: [],
         tabs: [{ id: "t1", name: "", focused: "x", blocks: [] }],
       },
       {
         id: "w2",
         selectedTab: "t3",
+        detached: [],
         tabs: [
           { id: "t2", name: "", focused: "y", blocks: [] },
           { id: "t3", name: "", focused: "z", blocks: [] },

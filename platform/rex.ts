@@ -160,6 +160,9 @@ export interface RexWindow {
 export interface RexView {
   activeWindow: string | null
   windows: RexWindow[]
+  /** Blocks in no window, as `session.detach_block` leaves one. Not in
+   * `session.view`: the follower reads them from `session.list_blocks`. */
+  detached: string[]
 }
 
 export interface BlockInfo {
@@ -208,7 +211,17 @@ export function parseView(v: unknown): RexView | null {
       blocks,
     })
   }
-  return { activeWindow: v.active_window_id, windows }
+  return { activeWindow: v.active_window_id, windows, detached: [] }
+}
+
+/** The blocks `session.list_blocks` has in no window. Rex says to take a
+ * placement it doesn't know as detached. */
+export function detachedBlocks(list: unknown): string[] {
+  if (!isRecord(list) || !Array.isArray(list.blocks))
+    throw new Error("not a list of blocks")
+  return list.blocks.flatMap((b) =>
+    isRecord(b) && isString(b.block_id) && b.placement !== "placed" ? [b.block_id] : [],
+  )
 }
 
 /** What the app shows as a tab's title: its label, or when it has none (the
@@ -227,6 +240,7 @@ export function toRexState(
     front: front !== null && sessions.has(front) ? front : null,
     sessions: [...sessions].map(([id, view]) => ({
       id,
+      detached: view.detached.map((b) => ({ id: b, cwd: blocks.get(b)?.cwd ?? "" })),
       selectedTab: view.activeWindow,
       tabs: view.windows.map((w): Tab => ({
         id: w.id,
@@ -412,10 +426,16 @@ export class Follower {
     this.#reading.set(session, false)
     const known = this.sessions.has(session)
     try {
-      const view = parseView(await this.#call("session.view", { session_id: session }))
+      const args = { session_id: session }
+      const [read, list] = await Promise.all([
+        this.#call("session.view", args),
+        this.#call("session.list_blocks", args),
+      ])
       // Destroyed while the read was out
       if (known && !this.sessions.has(session)) return
+      const view = parseView(read)
       if (view) {
+        view.detached = detachedBlocks(list)
         const before = this.sessions.get(session)
         this.sessions.set(session, view)
         if (before && focusOf(before) !== focusOf(view)) this.front = session
@@ -434,7 +454,9 @@ export class Follower {
   }
 
   async readNewBlocks(session: string, view: RexView) {
-    const blocks = view.windows.flatMap((w) => w.blocks).filter((b) => !this.blocks.has(b))
+    const blocks = [...view.windows.flatMap((w) => w.blocks), ...view.detached].filter(
+      (b) => !this.blocks.has(b),
+    )
     await Promise.all(
       blocks.map(async (block) => {
         const method = (name: string) =>
@@ -457,7 +479,8 @@ export class Follower {
     const view = this.sessions.get(session)
     if (!view) return
     this.sessions.delete(session)
-    for (const w of view.windows) for (const b of w.blocks) this.blocks.delete(b)
+    for (const b of [...view.windows.flatMap((w) => w.blocks), ...view.detached])
+      this.blocks.delete(b)
     if (this.front === session) this.front = null
     this.onChange()
   }

@@ -30,6 +30,8 @@ export interface RexSession {
   id: RexSessionId
   selectedTab: TabId | null
   tabs: Tab[]
+  /** Blocks in no tab, still running */
+  detached: Block[]
 }
 
 /** ah's copy of Rex's layout and focus, kept current from `rex events`. In

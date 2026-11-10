@@ -60,6 +60,7 @@ test("a session's view becomes a window of tabs", () => {
       {
         id: "session:s",
         selectedTab: "window:01a13ae4-6e65-77f3-96da-8d8ae8f6a21e",
+        detached: [],
         tabs: [
           {
             id: "window:01a13ae4-6e65-77f3-96da-8d8ae8f6a21e",
@@ -135,17 +136,34 @@ test("parseView rejects what isn't a view", () => {
   expect(parseView(null)).toBeNull()
 })
 
-/** A Rex server with these sessions' views, answering `rex api call` as
- * the real one does: an unknown session is an error */
-function fakeRex(views: Map<string, unknown>) {
+/** A Rex server with these sessions' views, and `detached` blocks in each,
+ * answering `rex api call` as the real one does: an unknown session is an
+ * error */
+function fakeRex(views: Map<string, unknown>, detached: string[] = []) {
   return async (method: string, args: Record<string, unknown> = {}): Promise<unknown> => {
+    const v = views.get(args.session_id as string)
     switch (method) {
       case "session.list":
         return { sessions: [...views.keys()].map((session_id) => ({ session_id })) }
-      case "session.view": {
-        const v = views.get(args.session_id as string)
+      case "session.view":
         if (!v) throw new Error(`rex api call session.view: no session ${args.session_id}`)
         return v
+      case "session.list_blocks": {
+        if (!v) throw new Error(`rex api call session.list_blocks: no session`)
+        const placed = parseView(v)!.windows.flatMap((w) =>
+          w.blocks.map((block_id) => ({
+            block_id,
+            label: "",
+            placement: "placed",
+            window_id: w.id,
+          })),
+        )
+        const loose = detached.map((block_id) => ({
+          block_id,
+          label: "",
+          placement: "detached",
+        }))
+        return { blocks: [...placed, ...loose] }
       }
       case "block.method":
         return args.method === "process"
@@ -199,6 +217,26 @@ test("the follower reads each session's view and its blocks, then follows events
   expect(follower.state().sessions).toEqual([])
   expect(follower.blocks.size).toBe(0)
   expect(changes).toBe(3)
+})
+
+test("a block in no window is kept, apart from the tabs", async () => {
+  // As from session.detach_block
+  const follower = new Follower(
+    fakeRex(new Map([["session:s", view]]), ["block:e"]),
+    () => {},
+  )
+  await follower.load()
+  expect(tabsOf(follower)).toEqual([
+    [
+      ["block:a", "block:b"],
+      ["block:c", "block:d"],
+    ],
+  ])
+  expect(follower.state().sessions[0].detached).toEqual([
+    { id: "block:e", cwd: "/r/block:e" },
+  ])
+  follower.removeSession("session:s")
+  expect(follower.blocks.has("block:e")).toBe(false)
 })
 
 test("a load that can't read a session it listed fails, rather than leave it out", async () => {

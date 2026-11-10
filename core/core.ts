@@ -87,12 +87,16 @@ export function parseEvent(o: unknown): RegistryEvent | null {
   }
 }
 
-/** Every block in the tree. null when there are no windows, which means
- * Rex isn't running (or ah can't reach it), not that every
+/** Every block in Rex, in a tab or not. null when there are no sessions,
+ * which means Rex isn't running (or ah can't reach it), not that every
  * block closed. */
 const liveBlocks = (rex: RexState | null): Set<string> | null =>
   rex?.sessions.length
-    ? new Set(rex.sessions.flatMap((s) => s.tabs.flatMap((t) => t.blocks.map((x) => x.id))))
+    ? new Set(
+        rex.sessions
+          .flatMap((s) => [...s.tabs.flatMap((t) => t.blocks), ...s.detached])
+          .map((b) => b.id),
+      )
     : null
 
 /** The tab a block is in */

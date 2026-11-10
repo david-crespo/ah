@@ -126,13 +126,14 @@ test("a Claude session in a running Claude's pane is a nested run, until that on
   expect(core.registry.agents.get("block:2")?.session).toBe("s5")
 })
 
-const rex = (tabs: Record<string, string[]>) =>
+const rex = (tabs: Record<string, string[]>, detached: string[] = []) =>
   ({
     front: null,
     sessions: [
       {
         id: "w",
         selectedTab: null,
+        detached: detached.map((id) => ({ id, cwd: "/r/ah" })),
         tabs: Object.entries(tabs).map(([id, blocks]) => ({
           id,
           name: id,
@@ -142,6 +143,19 @@ const rex = (tabs: Record<string, string[]>) =>
       },
     ],
   }) as RexState
+
+test("an agent in a block in no tab keeps its record while the block runs", async () => {
+  core.onRex(rex({ t1: ["block:1"] }))
+  await report(start("codex", "th1", undefined, "block:1"))
+  // Detached from its tab
+  core.onRex(rex({}, ["block:1"]))
+  vi.advanceTimersByTime(11_000)
+  core.onRex(rex({}, ["block:1"]))
+  expect(core.registry.agents.has("block:1")).toBe(true)
+  // Closed
+  core.onRex(rex({ t2: ["block:2"] }))
+  expect(core.registry.agents.has("block:1")).toBe(false)
+})
 
 test("bindings and held subjects outlast the server, while their files do", () => {
   const kept = fileSubject(join(dir, "kept.md"))
@@ -314,6 +328,7 @@ test("a Rex reconnect changes nothing an agent is told about its tracker", async
       {
         id: "w",
         selectedTab: "t1",
+        detached: [],
         tabs: [
           {
             id: "t1",

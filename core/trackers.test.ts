@@ -58,6 +58,7 @@ test("tabs on one workspace share its current tracker", () => {
     {
       id: "s",
       selectedTab: null,
+      detached: [],
       tabs: [tab("t1", a), tab("t2", join(a, "src")), tab("t3", b)],
     },
   ]

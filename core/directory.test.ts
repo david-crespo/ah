@@ -46,6 +46,7 @@ const show = (tabs: Record<string, string[]>) => {
       {
         id: "w",
         selectedTab: null,
+        detached: [],
         tabs: Object.entries(tabs).map(([id, blocks]) => ({
           id,
           name: id,

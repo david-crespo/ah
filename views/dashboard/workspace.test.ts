@@ -46,11 +46,13 @@ function rex(front: string, selected: Record<string, string>): RexState {
       {
         id: "w2",
         selectedTab: selected.w2,
+        detached: [],
         tabs: [tab("c", ["/r/c"]), tab("a2", ["/r/a"])],
       },
       {
         id: "w1",
         selectedTab: selected.w1,
+        detached: [],
         tabs: [tab("a", ["/r/a"]), tab("x", ["/tmp"]), tab("b", ["/r/b"])],
       },
     ],
@@ -90,6 +92,7 @@ test("resolve disambiguates workspaces with the same basename", () => {
       {
         id: "w",
         selectedTab: "a",
+        detached: [],
         tabs: [tab("a", ["/r/x/app"]), tab("b", ["/r/y/app"])],
       },
     ],
