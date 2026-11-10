@@ -208,6 +208,25 @@ test("readStack drops an earlier PR's commits from one that forks inside it", as
   }
 })
 
+test("readStack rejects when jj fails, and leaves no rejection unhandled", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-")))
+  const config = process.env.JJ_CONFIG
+  try {
+    execFileSync("jj", ["git", "init"], { cwd: dir, stdio: "pipe" })
+    mkdirSync(join(dir, "notes"))
+    const prs = [{ n: 1, title: "One", bookmark: "one" }]
+    writeFileSync(join(dir, "notes", STACK_FILE), JSON.stringify({ title: "S", prs }))
+    // A config jj can't parse fails every command, trunk() among them
+    writeFileSync(join(dir, "broken.toml"), "[user\nname = \n")
+    process.env.JJ_CONFIG = join(dir, "broken.toml")
+    await expect(readStack(join(dir, "notes", "index.html"))).rejects.toThrow()
+  } finally {
+    if (config === undefined) delete process.env.JJ_CONFIG
+    else process.env.JJ_CONFIG = config
+    rmSync(dir, { recursive: true })
+  }
+})
+
 test("bodyPath names the body for its bookmark, next to the page", () => {
   expect(bodyPath("/s/index.html", "vdocs-draft")).toBe("/s/vdocs-draft.md")
   expect(bodyPath("/s/index.html", "v1.2_x")).toBe("/s/v1.2_x.md")

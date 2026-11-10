@@ -145,15 +145,19 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   // A string literal is a symbol in a revset; present() allows a PR whose
   // bookmark doesn't exist yet
   const symbol = (bookmark: string) => `present(${JSON.stringify(bookmark)})`
-  const trunk = jj(
-    "log",
-    "--no-graph",
-    "-r",
-    "trunk()",
-    "-T",
-    `remote_bookmarks.filter(|b| b.remote() != "git").map(|b| b.name()).join(" ")`,
-  )
-  const existing = (await jj("bookmark", "list", "-T", `name ++ "\n"`)).split("\n")
+  // Awaited together: one that fails while the other is awaited would be an
+  // unhandled rejection, which ends the server
+  const [trunk, existing] = await Promise.all([
+    jj(
+      "log",
+      "--no-graph",
+      "-r",
+      "trunk()",
+      "-T",
+      `remote_bookmarks.filter(|b| b.remote() != "git").map(|b| b.name()).join(" ")`,
+    ),
+    jj("bookmark", "list", "-T", `name ++ "\n"`).then((out) => out.split("\n")),
+  ])
   const prs = await Promise.all(
     file.prs.map(async (pr) => {
       // Listed before its bookmark exists: shown with no commits
@@ -221,7 +225,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   return {
     title: file.title,
     notes: file.notes ?? [],
-    trunk: (await trunk).trim().split(" ")[0],
+    trunk: trunk.trim().split(" ")[0],
     prs: prs.map(([pr]) => pr).sort((a, b) => b.n - a.n),
   }
 }
