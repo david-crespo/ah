@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { setTimeout as sleep } from "node:timers/promises"
-import { expect, test } from "vitest"
+import { expect, test, vi } from "vitest"
 import type { Pages } from "../../subjects/files/files.ts"
 import { LiveReload } from "./files.ts"
 import { STACK_FILE } from "./stack_data.ts"
@@ -41,6 +41,22 @@ test("a stack's page is told its data changed, and to reload for anything else",
     expect(await both).toBe("reload")
   } finally {
     live.close()
+    rmSync(root, { recursive: true })
+  }
+})
+
+test("a stack in a workspace whose repo is gone logs instead of rejecting", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "ah-live-")))
+  mkdirSync(join(root, ".jj"))
+  writeFileSync(join(root, ".jj", "repo"), "../gone/.jj/repo")
+  writeFileSync(join(root, STACK_FILE), "{}")
+  const error = vi.spyOn(console, "error").mockImplementation(() => {})
+  const live = new LiveReload(join(root, "index.html"), {} as Pages)
+  try {
+    await expect.poll(() => error.mock.calls.length).toBe(1)
+  } finally {
+    live.close()
+    error.mockRestore()
     rmSync(root, { recursive: true })
   }
 })

@@ -37,11 +37,14 @@ export class LiveReload implements Live {
       const data = stack && (filename === STACK_FILE || filename?.endsWith(".md"))
       changed(data ? "data" : "reload")
     })
-    void stackOpsDir(path).then((dir) => {
-      if (!dir || this.#closed) return
-      stack = true
-      this.#watch(path, dir, () => changed("data"))
-    })
+    // watch throws for a secondary workspace whose repo is gone
+    stackOpsDir(path)
+      .then((dir) => {
+        if (!dir || this.#closed) return
+        stack = true
+        this.#watch(path, dir, () => changed("data"))
+      })
+      .catch((e) => console.error(`ah: can't watch ${path}'s repo:`, e))
   }
 
   #watch(path: string, dir: string, onChange: (filename: string | null) => void) {
