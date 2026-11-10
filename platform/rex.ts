@@ -386,6 +386,9 @@ export class Follower {
           )
         : []
     await Promise.all(ids.map((id) => this.readView(id)))
+    // A state without it would read as its blocks having closed
+    const missed = ids.filter((id) => !this.sessions.has(id))
+    if (missed.length) throw new Error(`couldn't read Rex sessions ${missed.join(", ")}`)
   }
 
   /** Re-read a session's view, coalescing reads asked for while one runs */

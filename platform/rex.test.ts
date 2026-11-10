@@ -201,6 +201,16 @@ test("the follower reads each session's view and its blocks, then follows events
   expect(changes).toBe(3)
 })
 
+test("a load that can't read a session it listed fails, rather than leave it out", async () => {
+  // Listed, but its view can't be read
+  const views = new Map<string, unknown>([
+    ["session:s", view],
+    ["session:t", null],
+  ])
+  const follower = new Follower(fakeRex(views), () => {})
+  await expect(follower.load()).rejects.toThrow("session:t")
+})
+
 /** An empty rex binary at `path`, making its directories */
 function binary(path: string) {
   mkdirSync(join(path, ".."), { recursive: true })
