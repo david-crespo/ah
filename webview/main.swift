@@ -10,6 +10,10 @@
 // --other-display fills a display without the pointer, preferring the
 // built-in one. --badge and --color draw the Dock icon. Links off the
 // loopback hosts open in the default browser.
+//
+// Hovering a link shows its address in the bottom left corner, as a
+// browser's status bar does: a script in every frame reports the link under
+// the pointer, and the window draws it over the page.
 
 import AppKit
 import WebKit
@@ -134,14 +138,37 @@ func mainMenu() -> NSMenu {
   return main
 }
 
+/** Reports the address of the link under the pointer, "" when there is none,
+ * to the "hoveredLink" message handler */
+let hoveredLinkScript = """
+  (() => {
+    let shown = ""
+    const report = (href) => {
+      if (href === shown) return
+      shown = href
+      window.webkit.messageHandlers.hoveredLink.postMessage(href)
+    }
+    const linkAt = (target) => target instanceof Element ? target.closest("a[href]") : null
+    document.addEventListener("mouseover", (e) => report(linkAt(e.target)?.href ?? ""), true)
+    document.addEventListener("mouseleave", () => report(""))
+    window.addEventListener("blur", () => report(""))
+    window.addEventListener("pagehide", () => report(""))
+  })()
+  """
+
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate,
+  WKScriptMessageHandler
+{
   let options: Options
   var window: NSWindow!
   var webView: WKWebView!
   var titleObservation: NSKeyValueObservation?
   /** Over the page while it can't be loaded */
   var overlay: NSView?
+  /** The hovered link's address, in the bottom left corner */
+  var linkStatus: NSView!
+  var linkStatusText: NSTextField!
 
   init(options: Options) {
     self.options = options
@@ -153,7 +180,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       NSApp.applicationIconImage = dockIcon(badge, color: options.color)
     }
 
-    webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
+    let configuration = WKWebViewConfiguration()
+    configuration.userContentController.addUserScript(
+      WKUserScript(
+        source: hoveredLinkScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false))
+    configuration.userContentController.add(self, name: "hoveredLink")
+    webView = WKWebView(frame: .zero, configuration: configuration)
     webView.isInspectable = true
     // Pinch to zoom, as in Safari: it magnifies without reflowing the page
     webView.allowsMagnification = true
@@ -166,6 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       backing: .buffered,
       defer: false)
     window.contentView = webView
+    addLinkStatus()
     window.isReleasedWhenClosed = false
     // Dark whatever the system's appearance, title bar and page alike: the
     // web view inherits it, so prefers-color-scheme is dark too
@@ -191,6 +224,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+  /** The strip a hovered link's address is shown in, hidden until there is one */
+  func addLinkStatus() {
+    linkStatusText = NSTextField(labelWithString: "")
+    linkStatusText.font = .systemFont(ofSize: 11)
+    linkStatusText.textColor = NSColor(white: 0.85, alpha: 1)
+    linkStatusText.lineBreakMode = .byTruncatingMiddle
+    linkStatusText.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+    linkStatusText.translatesAutoresizingMaskIntoConstraints = false
+
+    linkStatus = NSView()
+    linkStatus.wantsLayer = true
+    linkStatus.layer?.backgroundColor = NSColor(white: 0.16, alpha: 1).cgColor
+    linkStatus.layer?.borderColor = NSColor(white: 0.3, alpha: 1).cgColor
+    linkStatus.layer?.borderWidth = 1
+    // A pill
+    let height: CGFloat = 20
+    linkStatus.layer?.cornerRadius = height / 2
+    linkStatus.translatesAutoresizingMaskIntoConstraints = false
+    linkStatus.isHidden = true
+    linkStatus.addSubview(linkStatusText)
+    webView.addSubview(linkStatus)
+    NSLayoutConstraint.activate([
+      linkStatusText.leadingAnchor.constraint(equalTo: linkStatus.leadingAnchor, constant: 10),
+      linkStatusText.trailingAnchor.constraint(equalTo: linkStatus.trailingAnchor, constant: -10),
+      linkStatusText.centerYAnchor.constraint(equalTo: linkStatus.centerYAnchor),
+      linkStatus.heightAnchor.constraint(equalToConstant: height),
+      // In from the edges, clear of the window's rounded corner
+      linkStatus.leadingAnchor.constraint(equalTo: webView.leadingAnchor, constant: 8),
+      linkStatus.bottomAnchor.constraint(equalTo: webView.bottomAnchor, constant: -8),
+      linkStatus.widthAnchor.constraint(lessThanOrEqualTo: webView.widthAnchor, multiplier: 0.7),
+    ])
+  }
+
+  func userContentController(
+    _ controller: WKUserContentController, didReceive message: WKScriptMessage
+  ) {
+    guard message.name == "hoveredLink", let href = message.body as? String else { return }
+    linkStatusText.stringValue = href
+    linkStatus.isHidden = href.isEmpty
+  }
 
   /** Say the server can't be reached, over the page, and try again in 2s */
   func showUnreachable(_ error: Error) {
