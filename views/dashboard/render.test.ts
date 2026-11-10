@@ -1,7 +1,9 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { test } from "vitest"
+// Not faked with the global setTimeout
+import { setTimeout as sleep } from "node:timers/promises"
+import { test, vi } from "vitest"
 import { ansiToHtml } from "./ansi.ts"
 import { opHeadsDir } from "../../platform/jj.ts"
 import { isIgnored, SnapshotWatcher } from "./jj.ts"
@@ -93,4 +95,27 @@ test("a SnapshotWatcher on a removed workspace logs instead of throwing", () => 
   const dir = mkdtempSync(join(tmpdir(), "ah-snapshot-"))
   rmSync(dir, { recursive: true })
   new SnapshotWatcher(dir).close()
+})
+
+test("a snapshot due after its workspace is removed logs instead of rejecting", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
+  const error = vi.spyOn(console, "error").mockImplementation(() => {})
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-snapshot-")))
+  const watcher = new SnapshotWatcher(dir)
+  try {
+    // A watch that has only just started can miss a write, so write until
+    // one starts the snapshot's timer
+    while (vi.getTimerCount() === 0) {
+      writeFileSync(join(dir, "a.txt"), String(Date.now()))
+      await sleep(50)
+    }
+    rmSync(dir, { recursive: true })
+    vi.runOnlyPendingTimers()
+    const failed = () => error.mock.calls.some(([m]) => String(m).includes("snapshot"))
+    while (!failed()) await sleep(10)
+  } finally {
+    watcher.close()
+    error.mockRestore()
+    vi.useRealTimers()
+  }
 })

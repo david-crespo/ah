@@ -134,7 +134,10 @@ export class SnapshotWatcher {
   }
 
   async #snapshot() {
-    const { success, stderr } = await run("jj", ["util", "snapshot"], { cwd: this.root })
+    // Nothing awaits this, and jj can't start in a workspace that's gone
+    const { success, stderr } = await run("jj", ["util", "snapshot"], {
+      cwd: this.root,
+    }).catch((e) => ({ success: false, stderr: String(e) }))
     if (!success) console.error(`ah: snapshot in ${this.root} failed:`, stderr)
   }
 
