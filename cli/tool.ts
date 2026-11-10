@@ -1,11 +1,10 @@
-// `ah tool`, `ah window` and `ah message`: the tools that show the user files
-// an agent wrote, with a conversation back to the agent, and the workspace's
-// trackers, which the dashboard shows; the windows they're in; and the
-// messages between pages and agents. `ah tool doc` is a markdown or AsciiDoc
-// file, rendered by ah with a helix pane (views/doc/); `ah tool page` is
-// an HTML file, the agent's own page, served as is on an origin of its own
-// (views/page/), as are `ah tool tracker`'s task lists and `ah tool stack`'s
-// stacks of PRs. Showing, listing and closing (subjects/files/), the thread
+// `ah tool` and `ah window`: the tools that show the user files an agent
+// wrote, with a conversation back to the agent, and the workspace's
+// trackers, which the dashboard shows; and the windows they're in. `ah tool
+// doc` is a markdown or AsciiDoc file, rendered by ah with a helix pane
+// (views/doc/); `ah tool page` is an HTML file, the agent's own page,
+// served as is on an origin of its own (views/page/), as are `ah tool
+// tracker`'s task lists and `ah tool stack`'s stacks of PRs. Showing, listing and closing (subjects/files/), the thread
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
@@ -13,9 +12,8 @@ import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from "no
 import { text } from "node:stream/consumers"
 import { basename, dirname, join, relative } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
-import { threadCommands } from "./message.ts"
 import { FILE_KINDS, fileKind } from "../model.ts"
-import { die, portOption, serverUrl } from "./shared.ts"
+import { die, portOption } from "./shared.ts"
 import { showUrl } from "../platform/window.ts"
 import {
   absolute,
@@ -34,16 +32,10 @@ import { mergeDisk } from "../views/doc/merge.ts"
 import { dashboard } from "./dashboard.ts"
 import { docFormat } from "../views/doc/doc.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
-import { sendToTab } from "./agents.ts"
 import { setCurrentTracker, setTrackerStatus, workspaceTrackers } from "./tracker.ts"
 import { taskListPage } from "../views/page/task_list_file.ts"
 import { STACK_FILE } from "../views/stack/data.ts"
 import { stackJson, stackPage } from "../views/stack/file.ts"
-
-/** Where the file's thread takes the agent's events, or requests from
- * outside its page */
-const fileUrl = (path: string, port: number, route: "thread" | "request") =>
-  serverUrl(port, `view/${fileKind(path)}/files/${route}?path=${encodeURIComponent(path)}`)
 
 /** The file's real path, or exit with a hint if it's only in the notes dir */
 /** `realPathOrDie`, for a file to serve: under the cwd or its workspace */
@@ -323,16 +315,6 @@ windows
     if (result !== "closed") return console.error(`ah: no window shows ${path}`)
     console.log(`closed ${path}`)
   })
-
-export const message = new Command("message")
-  .summary("Exchange messages with agent sessions")
-  .description(
-    "Messages between the user and agents: what's waiting, and the agent's answers",
-  )
-  .action(function () {
-    this.help()
-  })
-for (const command of threadCommands(fileUrl, sendToTab)) message.addCommand(command)
 
 const tracker = new Command("tracker")
   .description("Task trackers for a workspace")

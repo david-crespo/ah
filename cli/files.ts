@@ -25,6 +25,11 @@ export function absolute(file: string): string {
 
 const filesUrl = (kind: FileKind, port: number) => serverUrl(port, `view/${kind}/files`)
 
+/** Where the file's thread takes the agent's events, or requests from
+ * outside its page */
+export const fileUrl = (path: string, port: number, route: "thread" | "request") =>
+  `${filesUrl(fileKind(path), port)}/${route}?path=${encodeURIComponent(path)}`
+
 /** Bind `path` to the agent this runs in, or from a shell in Rex, an agent
  * in its tab; the URL of its page, and where pages already show it */
 export async function showInServer(
