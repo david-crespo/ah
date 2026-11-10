@@ -1,0 +1,226 @@
+/* A home page's look (client.ts draws it). Served at /home.css on the pages
+   port; the page links it. Light or dark with the OS, as the stack page is. */
+
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#fbfbfa, #16181b);
+  --fg: light-dark(#1d1f21, #e4e5e7);
+  --muted: light-dark(#6b6f75, #8d939b);
+  --line: light-dark(#e3e3e0, #2c3036);
+  --card: light-dark(#ffffff, #1d2024);
+  --accent: light-dark(#3b5bdb, #8ea4ff);
+  --error: light-dark(#cf222e, #ff7b72);
+  --you: light-dark(#b4540a, #f2a65a);
+  --you-bg: light-dark(#fdf0e2, #3a2a18);
+  --run: light-dark(#18794e, #5fd39a);
+  --run-bg: light-dark(#e4f5ec, #173326);
+  --idle: var(--muted);
+  --idle-bg: light-dark(#efede8, #2a2d32);
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font:
+    15px/1.45 -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px 16px 80px;
+  overflow-wrap: anywhere;
+}
+main a,
+main a:visited {
+  color: var(--accent);
+  text-decoration: none;
+}
+main h1 {
+  font-size: 20px;
+  margin: 0;
+}
+main h3 {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 16px 0 6px;
+  font-weight: 600;
+}
+main code {
+  font:
+    12.5px/1.45 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+main .head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+main .asof {
+  color: var(--muted);
+  font-size: 13px;
+}
+main .error {
+  color: var(--error);
+  font-size: 13px;
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+main ol,
+main ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Tabs scroll sideways on a narrow screen */
+main .tabs {
+  display: flex;
+  gap: 4px;
+  margin: 18px 0 12px;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+main .tabs button {
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  padding: 8px 10px;
+  margin-bottom: -1px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+main .tabs button[aria-selected="true"] {
+  color: var(--fg);
+  border-bottom-color: var(--fg);
+  font-weight: 600;
+}
+main .count {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+main .count.you {
+  color: var(--you);
+  font-weight: 600;
+}
+
+main .card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+main .row {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+}
+main .row:first-child {
+  border-top: 0;
+}
+main .empty {
+  color: var(--muted);
+  padding: 14px 12px;
+}
+main .top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+main .proj {
+  font-weight: 600;
+}
+main .meta,
+main .note {
+  color: var(--muted);
+  font-size: 13px;
+}
+main .note {
+  margin-top: 2px;
+}
+main .more {
+  display: inline-block;
+  font-size: 13px;
+  margin: 4px 12px 0 0;
+}
+main .chip {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+  vertical-align: 1px;
+}
+main .chip.you {
+  color: var(--you);
+  background: var(--you-bg);
+}
+main .chip.run {
+  color: var(--run);
+  background: var(--run-bg);
+}
+main .chip.idle {
+  color: var(--idle);
+  background: var(--idle-bg);
+}
+
+main .waiting .row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 4px;
+}
+main .waiting .n {
+  color: var(--you);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* Written long enough ago that it may not hold any more */
+main .waiting .row.stale > div {
+  opacity: 0.6;
+}
+
+main .finished .row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 6px;
+  font-size: 14px;
+}
+main .finished .at {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A project's first paragraph is clamped until it's opened */
+main .projects summary {
+  list-style: none;
+  cursor: pointer;
+}
+main .projects summary::-webkit-details-marker {
+  display: none;
+}
+main .projects p {
+  margin: 6px 0 0;
+}
+main .projects details:not([open]) .first {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}

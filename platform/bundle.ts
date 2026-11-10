@@ -18,11 +18,13 @@ export const bundles = {
     "preview.js": "preview.ts",
     "mermaid.js": "mermaid.ts",
   },
-  // A stack's page is a page too, so the pages port serves its script
+  // A stack's page and a home page are pages too, so the pages port serves
+  // their scripts
   page: {
     "chat.js": "client.ts",
     "task_list.js": "task_list.ts",
     "stack.js": "../stack/client.ts",
+    "home.js": "../home/client.ts",
   },
   dashboard: { "client.js": "client.ts" },
 } as const satisfies Record<FileKind | "dashboard", Record<string, string>>

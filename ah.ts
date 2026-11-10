@@ -10,7 +10,7 @@
 //   The server's code is the four layers under it.
 // - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
 //   and the doc and page subject types that serve a file's views, and the
-//   stack, an app on pages (views/page/app.ts). What more than one view uses is at the top of views/ (the terminal theme,
+//   stack and home, apps on pages (views/page/app.ts). What more than one view uses is at the top of views/ (the terminal theme,
 //   GitHub's markdown styles) and in views/thread/ (the conversation panel
 //   and selection popover).
 // - core/: the agents, their registry, the tab titles they give Rex tabs,
@@ -35,6 +35,7 @@ import { DocBackend } from "./views/doc/routes.ts"
 import { PageBackend } from "./views/page/routes.ts"
 import { pageScripts } from "./views/page/upgrade.ts"
 import { stackApp } from "./views/stack/routes.ts"
+import { homeApp } from "./views/home/routes.ts"
 import { tool } from "./cli/tool.ts"
 import { message } from "./cli/message.ts"
 import { doctor, workspace } from "./cli/workspace.ts"
@@ -202,6 +203,7 @@ async function serve(port: number) {
   const chatCss = await readFile(assetPath("views/thread/chat.css"), "utf8")
   const taskListCss = await readFile(assetPath("views/page/task_list.css"), "utf8")
   const stackCss = await readFile(assetPath("views/stack/stack.css"), "utf8")
+  const homeCss = await readFile(assetPath("views/home/home.css"), "utf8")
 
   // The core: the agents, and where pages find the ones they're bound to
   const core = Core.load()
@@ -219,7 +221,7 @@ async function serve(port: number) {
     pagesPort,
     core.directory,
     core.trackers,
-    [stackApp(openDoc)],
+    [stackApp(openDoc), homeApp(() => core.agents())],
     upgrades,
   )
   const dashboardBackend = new Dashboard({
@@ -329,6 +331,7 @@ async function serve(port: number) {
     if (pathname === "/chat.css") return cssResponse(chatCss)
     if (pathname === "/task_list.css") return cssResponse(taskListCss)
     if (pathname === "/stack.css") return cssResponse(stackCss)
+    if (pathname === "/home.css") return cssResponse(homeCss)
     return new Response("not found", { status: 404 })
   }
   // The dashboard frames them (its gate takes those loads), and nothing else may

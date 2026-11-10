@@ -6,7 +6,7 @@
 import type { FileUpgrade } from "../../core/upgrades.ts"
 
 /** Served at /<name> on the pages port */
-export const PUBLIC_SCRIPTS = ["task_list.js", "stack.js"]
+export const PUBLIC_SCRIPTS = ["task_list.js", "stack.js", "home.js"]
 
 /** Where pages loaded them from: views/html/ until the views were renamed
  * doc and page, then views/page/ */
