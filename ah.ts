@@ -106,6 +106,81 @@ async function serve(port: number) {
   process.on("uncaughtException", (e) => console.error("ah: uncaught exception:", e))
   process.on("unhandledRejection", (e) => console.error("ah: unhandled rejection:", e))
   scrubSessionEnv(process.env)
+  // Agents' HTML pages run whatever scripts they include, so they get an
+  // origin of their own, which this port refuses (views/page/routes.ts)
+  const pagesPort = port + 1
+
+  // Both ports before anything else: a second server, from two commands
+  // starting one at once, dies here rather than delivering held messages
+  // again and saving its registry over the winner's. Requests wait for the
+  // setup below.
+  const { promise: ready, resolve: setUp } = Promise.withResolvers<void>()
+  const sockets = new WebSocketServer({ noServer: true })
+  const refuse = (socket: Duplex, status: string) => {
+    // Nothing else listens on a socket the server hands over for an upgrade,
+    // so a client resetting it, as a page reconnecting to a file a restart
+    // forgot can, would crash the server
+    socket.on("error", () => {})
+    socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`)
+  }
+
+  /** Serve one port, taking only the requests its gate allows */
+  const listen = (
+    p: number,
+    fetch: (req: Request) => Response | Promise<Response>,
+    upgrade: (pathname: string, query: URLSearchParams) => ((ws: WebSocket) => void) | null,
+    framedBy?: number,
+  ) =>
+    new Promise<void>((resolve, reject) => {
+      const allowed = requestGate(p, { framedBy })
+      const gated = async (req: Request) => {
+        await ready
+        return allowed(gateHeaders(req.headers))
+          ? fetch(req)
+          : new Response("forbidden", { status: 403 })
+      }
+      const server = nodeServe({ fetch: gated, port: p, hostname: "127.0.0.1" }, () =>
+        resolve(),
+      )
+      server.on("upgrade", async (req, socket, head) => {
+        await ready
+        if (!allowed(gateHeaders(req.headers))) return refuse(socket, "403 Forbidden")
+        const { pathname, searchParams } = new URL(req.url ?? "/", "http://127.0.0.1")
+        const accept = upgrade(pathname, searchParams)
+        if (!accept) return refuse(socket, "404 Not Found")
+        sockets.handleUpgrade(req, socket, head, accept)
+      })
+      server.on("error", async (e: NodeJS.ErrnoException) => {
+        // Two commands starting the server at once: the other one won
+        if (e.code !== "EADDRINUSE") return reject(e)
+        reject(
+          new Error(
+            `port ${p} is in use${(await status(p)) ? " by another ah server" : ""}`,
+          ),
+        )
+      })
+    })
+
+  await Promise.all([
+    listen(
+      port,
+      (req) => handler(req),
+      (pathname, query) => {
+        const inView = viewRoute(pathname)
+        return (inView?.rest && inView.view.upgrade?.(inView.rest.slice(1), query)) || null
+      },
+    ),
+    listen(
+      pagesPort,
+      (req) => pagesHandler(req),
+      (pathname, query) => {
+        const rest = pageRoute(pathname)
+        return rest === undefined ? null : pageBackend.upgradePage(rest, query)
+      },
+      port,
+    ),
+  ])
+
   // Before anything reads ah's state
   for (const line of upgradeState()) console.error(line)
   const css = themeCss() + boxCss()
@@ -122,9 +197,6 @@ async function serve(port: number) {
   const taskListCss = await readFile(assetPath("views/page/task_list.css"), "utf8")
   const stackCss = await readFile(assetPath("views/page/stack.css"), "utf8")
 
-  // Agents' HTML pages run whatever scripts they include, so they get an
-  // origin of their own, which this port refuses (views/page/routes.ts)
-  const pagesPort = port + 1
   // The core: the agents, and where pages find the ones they're bound to
   const core = Core.load()
   // Files in people's repos that use an old ah format, and ah's setup
@@ -268,65 +340,10 @@ async function serve(port: number) {
     return framed
   }
 
-  const sockets = new WebSocketServer({ noServer: true })
-  const refuse = (socket: Duplex, status: string) => {
-    // Nothing else listens on a socket the server hands over for an upgrade,
-    // so a client resetting it, as a page reconnecting to a file a restart
-    // forgot can, would crash the server
-    socket.on("error", () => {})
-    socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`)
-  }
-
-  /** Serve one port, taking only the requests its gate allows */
-  const listen = (
-    p: number,
-    fetch: (req: Request) => Response | Promise<Response>,
-    upgrade: (pathname: string, query: URLSearchParams) => ((ws: WebSocket) => void) | null,
-    onListening: () => void,
-    framedBy?: number,
-  ) => {
-    const allowed = requestGate(p, { framedBy })
-    const gated = (req: Request) =>
-      allowed(gateHeaders(req.headers))
-        ? fetch(req)
-        : new Response("forbidden", { status: 403 })
-    const server = nodeServe({ fetch: gated, port: p, hostname: "127.0.0.1" }, onListening)
-    server.on("upgrade", (req, socket, head) => {
-      if (!allowed(gateHeaders(req.headers))) return refuse(socket, "403 Forbidden")
-      const { pathname, searchParams } = new URL(req.url ?? "/", "http://127.0.0.1")
-      const accept = upgrade(pathname, searchParams)
-      if (!accept) return refuse(socket, "404 Not Found")
-      sockets.handleUpgrade(req, socket, head, accept)
-    })
-    server.on("error", async (e: NodeJS.ErrnoException) => {
-      // Two commands starting the server at once: the other one won
-      if (e.code !== "EADDRINUSE") throw e
-      die(`ah: port ${p} is in use${(await status(port)) ? " by another ah server" : ""}`)
-    })
-  }
-
-  listen(
-    port,
-    handler,
-    (pathname, query) => {
-      const inView = viewRoute(pathname)
-      return (inView?.rest && inView.view.upgrade?.(inView.rest.slice(1), query)) || null
-    },
-    () => {
-      writePidFile(defaultFiles(), port)
-      console.error(`ah: serving http://127.0.0.1:${port} (pid ${process.pid})`)
-    },
-  )
-  listen(
-    pagesPort,
-    pagesHandler,
-    (pathname, query) => {
-      const rest = pageRoute(pathname)
-      return rest === undefined ? null : pageBackend.upgradePage(rest, query)
-    },
-    () => console.error(`ah: serving html pages on http://127.0.0.1:${pagesPort}`),
-    port,
-  )
+  writePidFile(defaultFiles(), port)
+  console.error(`ah: serving http://127.0.0.1:${port} (pid ${process.pid})`)
+  console.error(`ah: serving html pages on http://127.0.0.1:${pagesPort}`)
+  setUp()
 }
 
 const program = new Command("ah").description(
