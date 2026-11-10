@@ -250,6 +250,10 @@
                  (let ([path (editor-document->path doc)]
                        [saved (editor-document-last-saved doc)])
                    (when (and path saved) (remember! path saved (text-of doc))))))
+; And it's taken again if the file is opened again, so a closed document's
+; text isn't kept for as long as the editor runs
+(register-hook "document-closed"
+               (lambda (event) (set! *bases* (hash-remove *bases* (doc-closed-path event)))))
 (register-hook "terminal-focus-gained" check-all)
 ; Runs as insert mode ends, before a save deferred during it
 (register-hook "on-mode-switch"
