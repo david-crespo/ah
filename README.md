@@ -88,6 +88,8 @@ flowchart LR
 
 The server listens on `127.0.0.1:7420` and checks request headers to block DNS rebinding and requests from other web pages. HTML pages are served on a separate origin (`127.0.0.1:7421`) in order to prevent them from hitting the main API, which can message any agent and open windows.
 
+Markdown files are shown on `7420` and can contain raw HTML, so their pages' content security policy blocks the file's scripts, forms, and `<base>` tags, and local images the file links to are served sandboxed, so an SVG opened on its own can't run script either.
+
 However, HTML pages are not isolated from each other or from their own agent. A page's scripts can message the agent bound to that file, just like the chat panel does, and the agent treats those messages as coming from you. Pages can also load web assets from their own directory (except dot directories), and because all pages share the `7421` origin, a page that knows another page's URL can post into its thread. If an HTML page loads untrusted scripts, those scripts can talk to your agent.
 
 There's no local authentication yet. Any local process that can reach port `7420` can impersonate the CLI and send prompts to your running agents. You probably shouldn't run `ah` on a multi-user machine or forward or tunnel ports `7420` or `7421`. I plan to add token-based authentication on the model of [Jupyter](https://jupyter-server.readthedocs.io/en/latest/operators/security.html).
