@@ -194,6 +194,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     webView.allowsMagnification = true
     webView.navigationDelegate = self
     webView.uiDelegate = self
+    // A web view paints white until its page first draws, which flashes in a
+    // dark window. Until the load finishes, it shows the window behind it.
+    // WKWebView has no public setting for this
+    webView.setValue(false, forKey: "drawsBackground")
 
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 960, height: 760),
@@ -318,6 +322,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     overlay?.removeFromSuperview()
     overlay = nil
+    // A page that sets no background of its own gets the usual one
+    webView.setValue(true, forKey: "drawsBackground")
   }
 
   func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
