@@ -58,7 +58,7 @@ import {
   saveRegistry,
   type SummaryJob,
 } from "./registry.ts"
-import { isCurrent, listAgents } from "./agent_view.ts"
+import { type AgentView, isCurrent, listAgents } from "./agent_view.ts"
 import { buildSummaryPayload, cleanSummary, generateSummary } from "./summary.ts"
 
 /** A posted event, checked, or null if it isn't one */
@@ -501,9 +501,13 @@ export class Core {
       return Response.json({ status: await this.directory.send(block, body.text) })
     }
     if (rest !== "") return new Response("not found", { status: 404 })
-    const all = new URL(req.url).searchParams.has("all")
-    const processes = readClaudeProcesses()
-    const agents = listAgents(this.registry, processes, this.#rex)
-    return Response.json(all ? agents : agents.filter(isCurrent))
+    return Response.json(this.agents(new URL(req.url).searchParams.has("all")))
+  }
+
+  /** The live agents, or with `all`, also the ones that aren't in a block
+   * or running any more */
+  agents(all = false): AgentView[] {
+    const agents = listAgents(this.registry, readClaudeProcesses(), this.#rex)
+    return all ? agents : agents.filter(isCurrent)
   }
 }
