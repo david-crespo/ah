@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, test } from "vitest"
-import { isServeCommand, stopServer } from "./server.ts"
+import { ensureServer, isServeCommand, stopServer } from "./server.ts"
 
 test("isServeCommand knows the server however ah was run", () => {
   for (const command of [
@@ -34,6 +34,21 @@ test("stop kills a server that doesn't answer, from its pid file", async () => {
     await exited
   } finally {
     hung.kill("SIGKILL")
+    rmSync(dir, { recursive: true })
+  }
+})
+
+test("a server that exits as it starts is reported without waiting it out", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ah-server-"))
+  // ensureServer runs this script as the server: one that fails at once
+  const script = process.argv[1]
+  process.argv[1] = join(dir, "fails.mjs")
+  writeFileSync(process.argv[1], "process.exit(1)\n")
+  try {
+    const files = { pid: join(dir, "serve.pid"), log: join(dir, "serve.log") }
+    await expect(ensureServer(1, files)).rejects.toThrow("exited as it started")
+  } finally {
+    process.argv[1] = script
     rmSync(dir, { recursive: true })
   }
 })

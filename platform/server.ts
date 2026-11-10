@@ -105,15 +105,26 @@ export async function ensureServer(
     { stdio: ["ignore", log, log], detached: true },
   )
   child.unref()
-  for (let waited = 0; waited < 15_000; waited += 100) {
+  // One that exits as it starts (a syntax error, the port taken, state newer
+  // than this code) isn't waited out: a hook waits on this
+  let exited = false
+  child.on("exit", () => (exited = true))
+  const deadline = Date.now() + 15_000
+  while (!exited && Date.now() < deadline) {
     if (await status(port, 200)) {
       console.error(`ah: started the server (log: ${files.log})`)
       return null
     }
     await sleep(100)
   }
-  console.error(`ah: started the server but it isn't answering; see ${files.log}`)
-  process.exit(1)
+  // Two commands may have started one at once, and the other's has the port
+  const other = await status(port)
+  if (other) return other.pid
+  throw new Error(
+    exited
+      ? `the server exited as it started; see ${files.log}`
+      : `started the server but it isn't answering; see ${files.log}`,
+  )
 }
 
 /** Whether a command line is `ah server serve`: ah from PATH, ah.ts from
