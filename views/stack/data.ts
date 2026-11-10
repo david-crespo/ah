@@ -1,8 +1,10 @@
 // A stack page's data, which client.ts draws: the PRs an agent lists in
 // stack.json next to the page, filled in from jj. The agent writes only what
 // jj doesn't know (titles, notes, how each PR merges, summaries). The rest
-// comes from the graph: a PR is its bookmark's commits that trunk and the PRs
-// before it (lower n) don't have, and its base is where it forks from them.
+// comes from the graph. Commits above trunk are grouped by which PRs'
+// bookmarks have them. A PR's own are the ones its bookmark's commit is
+// grouped with: no PR below it has them. Any other group is commits below a
+// fork that no PR's bookmark is on, which the PRs above share.
 
 import { existsSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
@@ -47,30 +49,44 @@ export interface Commit {
   files: FileStat[]
 }
 
-/** `base` is the PR's parent PR's bookmark, or the commit it forks from
- * trunk at. Commits are newest first. */
-export interface Pr extends StackPr {
-  /** Its bookmark doesn't exist yet, so it has no base and no commits */
-  missing: boolean
+/** Commits drawn as one card, newest first. `head` is its newest commit and
+ * `base` the commit below its oldest, each by a PR's bookmark on it, else
+ * another bookmark, else its change ID. */
+export interface Group {
+  head: string
   base: string
-  /** Revsets for its diff, from its base to its bookmark, quoted as needed;
-   * null while it's missing */
+  /** Revsets for its diff, from its base to its head, quoted as needed;
+   * null without commits */
   diff: { from: string; to: string } | null
-  /** Set when the base is inside an earlier PR's commits, not at its tip */
-  forksFrom: { n: number; change: string; short: string } | null
-  /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
-  pushed: string | null
   files: FileStat[]
   commits: Commit[]
 }
 
-/** PRs newest first. `trunk` is the branch the bottom PR merges into on
- * GitHub, like main: trunk()'s remote bookmark, or empty without one. */
+/** A PR with no commits of its own has an empty base */
+export interface Pr extends StackPr, Group {
+  /** Its bookmark doesn't exist yet, so it has no commits */
+  missing: boolean
+  /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
+  pushed: string | null
+}
+
+/** Commits below a fork that no PR's bookmark is on */
+export interface Shared extends Group {
+  /** The lowest PRs that have them, so each would include them on GitHub */
+  prs: number[]
+}
+
+/** `rows` are the PRs and shared groups newest first, like jj log: each
+ * below the ones built on it, and of the ones built on the same one, the
+ * one leading to the highest PR first. PRs whose bookmark doesn't exist yet
+ * come first and PRs with no commits of their own, like merged ones, last.
+ * `trunk` is the branch the bottom PR merges into on GitHub, like main:
+ * trunk()'s remote bookmark, or empty without one. */
 export interface Stack {
   title: string
   notes: string[]
   trunk: string
-  prs: Pr[]
+  rows: (Pr | Shared)[]
 }
 
 export function parseStackFile(text: string): StackFile {
@@ -136,11 +152,12 @@ export async function readStack(pagePath: string): Promise<Stack> {
   const stack = await hit.stack
   // A body's title wins over stack.json's, since the body is what goes on
   // GitHub
-  const prs = stack.prs.map(async (pr) => ({
-    ...pr,
-    title: (await bodyTitle(pagePath, pr.bookmark)) ?? pr.title,
-  }))
-  return { ...stack, prs: await Promise.all(prs) }
+  const rows = stack.rows.map(async (row) =>
+    "bookmark" in row
+      ? { ...row, title: (await bodyTitle(pagePath, row.bookmark)) ?? row.title }
+      : row,
+  )
+  return { ...stack, rows: await Promise.all(rows) }
 }
 
 async function readCommits(file: StackFile, root: string): Promise<Stack> {
@@ -153,9 +170,6 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     if (!success) throw new Error(stderr.trim())
     return stdout
   }
-  // A string literal is a symbol in a revset; present() allows a PR whose
-  // bookmark doesn't exist yet
-  const symbol = (bookmark: string) => `present(${JSON.stringify(bookmark)})`
   // Awaited together: one that fails while the other is awaited would be an
   // unhandled rejection, which ends the server
   const [trunk, existing] = await Promise.all([
@@ -169,78 +183,136 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     ),
     jj("bookmark", "list", "-T", `name ++ "\n"`).then((out) => out.split("\n")),
   ])
-  const prs = await Promise.all(
-    file.prs.map(async (pr) => {
-      // Listed before its bookmark exists: shown with no commits
-      if (!existing.includes(pr.bookmark)) {
-        const missing: Pr = {
-          ...pr,
-          missing: true,
-          base: "",
-          diff: null,
-          forksFrom: null,
-          pushed: null,
-          files: [],
-          commits: [],
-        }
-        return [missing, ""] as const
-      }
-      const tip = JSON.stringify(pr.bookmark)
-      // Trunk and the PRs before this one
-      const earlier = file.prs.filter((q) => q.n < pr.n).map((q) => symbol(q.bookmark))
-      const below = `(${["trunk()", ...earlier].join(" | ")})`
-      const base = `heads(::${below} & ::${tip})`
-      // On a commit, a remote bookmark of this name, other than git's
-      const onRemote = `remote_bookmarks.filter(|b| b.remote() != "git" && b.name() == ${tip}).len() > 0`
-      const [commits, baseLine, pushed, diff] = await Promise.all([
-        jj("log", "--no-graph", "-r", `::${tip} ~ ::${below}`, "-T", COMMIT),
-        jj("log", "--no-graph", "-r", base, "-T", BASE),
-        jj(
-          "log",
-          "--no-graph",
-          "-r",
-          `remote_bookmarks(exact:${tip})`,
-          "-T",
-          `if(${onRemote}, commit_id.short(8) ++ "\n")`,
-        ),
-        jj("diff", "--git", "--context", "0", "--from", base, "--to", tip),
-      ])
-      const [change, bookmarks = ""] = baseLine.split("\n")[0].split("\t")
-      const names = bookmarks.split(" ").filter(Boolean)
-      const baseName =
-        file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0]
-      const result: Pr = {
-        ...pr,
-        missing: false,
-        forksFrom: null,
-        base: baseName ?? change,
-        diff: { from: baseName ? JSON.stringify(baseName) : change, to: tip },
-        pushed: pushed.split("\n")[0] || null,
-        files: parseGitDiff(diff),
-        commits: commits
-          .split("\n")
-          .filter(Boolean)
-          .map((line) => {
-            const c: Commit = JSON.parse(line)
-            for (const f of c.files) f.status = letter(f.status)
-            return c
-          }),
-      }
-      return [result, change] as const
-    }),
+  const live = file.prs.filter((pr) => existing.includes(pr.bookmark))
+  const tips = live.map((pr) => JSON.stringify(pr.bookmark))
+  // Each commit above trunk that a PR has, led by the PRs that have it and
+  // its bookmarks
+  const inPrs = live.map(
+    (pr, i) => `if(self.contained_in(${JSON.stringify(`::${tips[i]}`)}), "${pr.n} ")`,
   )
-  // A base that's in an earlier PR but isn't its tip: the PR forks mid-way
-  for (const [pr, change] of prs) {
-    for (const [q] of prs) {
-      const fork = q.commits.slice(1).find((c) => c.change === change)
-      if (q.n < pr.n && fork) pr.forksFrom = { n: q.n, change, short: fork.short }
-    }
+  const log = live.length
+    ? await jj(
+        "log",
+        "--no-graph",
+        "-r",
+        `::(${tips.join(" | ")}) ~ ::trunk()`,
+        "-T",
+        [
+          ...inPrs,
+          `"\\t"`,
+          `local_bookmarks.map(|b| b.name()).join(" ")`,
+          `"\\t"`,
+          COMMIT,
+        ].join(" ++ "),
+      )
+    : ""
+  type Found = { prs: number[]; bookmarks: string; commits: Commit[] }
+  // Keyed by which PRs have them, with the bookmarks on the newest
+  const groups = new Map<string, Found>()
+  for (const line of log.split("\n").filter(Boolean)) {
+    const [prs, bookmarks, json] = line.split("\t")
+    const c: Commit = JSON.parse(json)
+    for (const f of c.files) f.status = letter(f.status)
+    if (!groups.has(prs))
+      groups.set(prs, { prs: prs.trim().split(" ").map(Number), bookmarks, commits: [] })
+    groups.get(prs)!.commits.push(c)
   }
+  // The group with a PR's bookmark's commit: of the ones the PR has, the one
+  // the fewest PRs have
+  const tipGroup = (n: number) =>
+    [...groups.values()]
+      .filter((g) => g.prs.includes(n))
+      .sort((a, b) => a.prs.length - b.prs.length)[0]
+  // Of the PRs on one commit, the first has its commits
+  const owner = (g: Found) => live.find((pr) => tipGroup(pr.n) === g)
+
+  // A commit by a PR's bookmark on it, else another bookmark, else its change ID
+  const name = (change: string, bookmarks: string) => {
+    const names = bookmarks.split(" ").filter(Boolean)
+    return file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0] ?? change
+  }
+  /** A group's base, and its diff from there to `to` */
+  const measure = async (commits: Commit[], to: string) => {
+    const below = `${commits.at(-1)!.commit}-`
+    const [baseLine, diff] = await Promise.all([
+      jj("log", "--no-graph", "-r", below, "-T", BASE),
+      jj("diff", "--git", "--context", "0", "--from", below, "--to", to),
+    ])
+    const [change, bookmarks = ""] = baseLine.split("\n")[0].split("\t")
+    const base = name(change, bookmarks)
+    const from = base === change ? change : JSON.stringify(base)
+    return { base, diff: { from, to }, files: parseGitDiff(diff) }
+  }
+
+  // Each row with the PRs that have its commits, which are the ones built on
+  // it: none for a PR with no commits of its own
+  const prs = file.prs.map(async (pr) => {
+    const none = { head: pr.bookmark, base: "", diff: null, files: [], commits: [] }
+    // Listed before its bookmark exists
+    if (!existing.includes(pr.bookmark)) {
+      const row: Pr = { ...pr, ...none, missing: true, pushed: null }
+      return { row, has: [] }
+    }
+    const tip = JSON.stringify(pr.bookmark)
+    const own = [...groups.values()].find((g) => owner(g) === pr)
+    // On a commit, a remote bookmark of this name, other than git's
+    const onRemote = `remote_bookmarks.filter(|b| b.remote() != "git" && b.name() == ${tip}).len() > 0`
+    const [pushed, measured] = await Promise.all([
+      jj(
+        "log",
+        "--no-graph",
+        "-r",
+        `remote_bookmarks(exact:${tip})`,
+        "-T",
+        `if(${onRemote}, commit_id.short(8) ++ "\n")`,
+      ),
+      own && measure(own.commits, tip),
+    ])
+    const row: Pr = {
+      ...pr,
+      ...none,
+      ...measured,
+      commits: own?.commits ?? [],
+      missing: false,
+      pushed: pushed.split("\n")[0] || null,
+    }
+    return { row, has: own?.prs ?? [] }
+  })
+  const shared = [...groups.values()]
+    .filter((g) => !owner(g))
+    .map(async (g) => {
+      const top = g.commits[0].change
+      const row: Shared = {
+        head: name(top, g.bookmarks),
+        // The ones not built on another of them
+        prs: g.prs.filter(
+          (n) => !g.prs.some((m) => m !== n && tipGroup(m).prs.includes(n)),
+        ),
+        commits: g.commits,
+        ...(await measure(g.commits, top)),
+      }
+      return { row, has: g.prs }
+    })
+  const [prRows, sharedRows] = await Promise.all([Promise.all(prs), Promise.all(shared)])
+
+  const graph = [...prRows, ...sharedRows].filter((r) => r.has.length)
+  const heads = new Set(graph.map((r) => r.row.head))
+  /** The rows `on` picks, each after the ones built on it, as Stack has them */
+  const above = (on: (row: Group) => boolean): (Pr | Shared)[] =>
+    graph
+      .filter((r) => on(r.row))
+      .sort((a, b) => Math.max(...b.has) - Math.max(...a.has))
+      .flatMap((r) => [...above((row) => row.base === r.row.head), r.row])
+  const outside = (missing: boolean) =>
+    prRows
+      .filter((r) => !r.has.length && r.row.missing === missing)
+      .map((r) => r.row)
+      .sort((a, b) => b.n - a.n)
   return {
     title: file.title,
     notes: file.notes ?? [],
     trunk: trunk.trim().split(" ")[0],
-    prs: prs.map(([pr]) => pr).sort((a, b) => b.n - a.n),
+    rows: [...outside(true), ...above((row) => !heads.has(row.base)), ...outside(false)],
   }
 }
 

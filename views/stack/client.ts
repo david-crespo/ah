@@ -4,11 +4,12 @@
 // loads it and /stack.css. It draws the page's stack (data.ts, served
 // at _ah/stack) newest first, like jj log: each PR's title, its bookmark and
 // how it merges, its summary and files collapsed under it, and a line per
-// commit that opens to its description and files. A graph down the left
-// joins the commits, with a side lane for a PR that a later one shares a
-// base with. Each diff stat is a button that has the server open that diff
-// in skepsis (skepsis.ts). Until a PR is on GitHub, its Body button opens its
-// body in a doc page, starting the file if there isn't one. Once it is, GitHub
+// commit that opens to its description and files. Commits below a fork that
+// no PR's bookmark is on get a card of their own, shared by the PRs above. A
+// graph down the left joins the commits, like jj log's. Each diff stat is a
+// button that has the server open that diff in skepsis (skepsis.ts). Until a
+// PR is on GitHub, its Body button opens its body in a doc page, starting the
+// file if there isn't one. Once it is, GitHub
 // has the body, so the button gives way to a link to the PR, with GitHub's
 // title and where the PR stands there (github.ts, served at
 // _ah/stack-github, which comes after the stack since gh is slow). The stack
@@ -17,7 +18,7 @@
 // sections are open is kept across reloads and redraws, and after a reload
 // the last stack is drawn at once while the new one loads.
 
-import type { FileStat, Pr, Stack } from "./data.ts"
+import type { Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
 
 const threadUrl = (() => {
@@ -138,11 +139,12 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   return link + notes.join("")
 }
 
-function prCard(pr: Pr, side: boolean, gh: GithubPr | undefined, base: string): string {
-  const commits = pr.commits.map((c) => {
-    const [title, ...rest] = c.description.split("\n")
-    const body = rest.join("\n").trim()
-    return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
+const commitList = (commits: Commit[]) =>
+  `<ol class="commits">${commits
+    .map((c) => {
+      const [title, ...rest] = c.description.split("\n")
+      const body = rest.join("\n").trim()
+      return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
       <summary>
         <span class="mono cid" title="${c.change} @ ${c.commit}">${esc(c.short)}</span>
         <span class="title">${esc(title || "(no description)")}</span>
@@ -153,20 +155,38 @@ function prCard(pr: Pr, side: boolean, gh: GithubPr | undefined, base: string): 
         ${fileList(c.files)}
       </div>
     </details></li>`
-  })
-  return `<div class="row${side ? " side" : ""}"><section class="pr">
+    })
+    .join("")}</ol>`
+
+function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
+  return `<section class="pr">
     <div class="pr-head">
       <h2><span class="n">${pr.n}.</span> ${esc(gh?.title ?? pr.title)}</h2>
       ${pr.diff ? stat(pr.files, pr.diff) : ""}
     </div>
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${pr.forksFrom ? note(`forks from ${pr.forksFrom.short}, inside PR ${pr.forksFrom.n}, not its tip`, "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
       <summary>Summary and ${pr.files.length} file${pr.files.length === 1 ? "" : "s"}</summary>
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
       ${fileList(pr.files)}
     </details>
-    <ol class="commits">${commits.join("")}</ol>
-  </section></div>`
+    ${commitList(pr.commits)}
+  </section>`
+}
+
+/** Commits below a fork with no PR's bookmark on them, so each PR above
+ * would include them on GitHub */
+function sharedCard(group: Shared): string {
+  const { prs } = group
+  const bookmark = group.head !== group.commits[0].change
+  return `<section class="pr shared">
+    <div class="pr-head">
+      <h2>${bookmark ? `<span class="mono">${esc(group.head)}</span>` : "No bookmark"}</h2>
+      ${group.diff ? stat(group.files, group.diff) : ""}
+    </div>
+    <div class="pr-meta">${note(`shared by PRs ${prs.slice(0, -1).join(", ")} and ${prs.at(-1)}`, "warn")}</div>
+    ${commitList(group.commits)}
+  </section>`
 }
 
 const githubKey = `ah-stack-github:${location.pathname}`
@@ -174,29 +194,59 @@ let github = read<GithubPrs>(sessionStorage, githubKey) ?? {}
 let githubError = ""
 let drawn = ""
 
+/** Each row's lane in the graph, like jj log's: the lane on its way down to
+ * the row, else the first free one. When another lane is already on its way
+ * to the row's base, the row joins it just below itself, like jj's ├─╯;
+ * otherwise its lane goes on down to its base. Rows with no commits aren't
+ * in the graph. */
+function graphLanes(rows: Group[]): { lane: number; join: number | null }[] {
+  const heads = new Set(rows.filter((r) => r.commits.length).map((r) => r.head))
+  /** Per lane, the head it's on its way to, or null when it's free */
+  const waiting: (string | null)[] = []
+  return rows.map((row) => {
+    if (!row.commits.length) return { lane: 0, join: null }
+    let lane = waiting.indexOf(row.head)
+    if (lane < 0) lane = waiting.includes(null) ? waiting.indexOf(null) : waiting.length
+    // Every base below the graph is trunk
+    const to = heads.has(row.base) ? row.base : ""
+    const join = waiting.indexOf(to)
+    waiting[lane] = join < 0 ? to : null
+    return { lane, join: join < 0 ? null : join }
+  })
+}
+
 function draw(stack: Stack, error = "") {
   document.title = stack.title
-  // A PR is on a side lane when a later one has the same base
-  const side = (pr: Pr) =>
-    !pr.missing && stack.prs.some((q) => q.n > pr.n && q.base === pr.base)
+  const { rows } = stack
+  const lanes = graphLanes(rows)
+  /** The nearest PR under a row, past any shared commits */
+  const prBelow = (row: Group): Pr | undefined => {
+    const below = rows.find((r) => r.head === row.base)
+    return below && ("n" in below ? below : prBelow(below))
+  }
   // On GitHub, the PR below it, or trunk once that one has merged, since
   // GitHub then retargets this one
-  const base = (pr: Pr) =>
-    stack.prs.some((q) => q.bookmark === pr.base) && github[pr.base]?.state !== "MERGED"
-      ? pr.base
+  const base = (pr: Pr) => {
+    const below = prBelow(pr)
+    return below && github[below.bookmark]?.state !== "MERGED"
+      ? below.bookmark
       : stack.trunk
+  }
   const html = `
     <h1>${esc(stack.title)}</h1>
     ${error ? `<p class="error">${esc(error)}</p>` : ""}
     ${githubError ? `<p class="error">GitHub: ${esc(githubError)}</p>` : ""}
     <div class="notes">${stack.notes.map((n) => `<p>${prose(n)}</p>`).join("")}</div>
     ${
-      stack.prs.length
-        ? `<div class="prs"><svg class="graph"></svg>${stack.prs
-            .map((pr) => prCard(pr, side(pr), github[pr.bookmark], base(pr)))
+      rows.length
+        ? `<div class="prs"><svg class="graph"></svg>${rows
+            .map((row, i) => {
+              const { lane, join } = lanes[i]
+              return `<div class="row" style="--lane: ${lane}" data-lane="${lane}"${join === null ? "" : ` data-join="${join}"`}>${"n" in row ? prCard(row, github[row.bookmark], base(row)) : sharedCard(row)}</div>`
+            })
             .join(
               "",
-            )}<div class="trunk mono">${esc(stack.prs.findLast((pr) => !pr.missing)?.base ?? "")}</div></div>`
+            )}<div class="trunk mono">${esc(rows.findLast((r) => r.commits.length)?.base ?? "")}</div></div>`
         : `<p class="empty">No PRs in stack.json yet</p>`
     }`
   if (html === drawn) return
@@ -205,8 +255,8 @@ function draw(stack: Stack, error = "") {
   drawGraph()
 }
 
-// Lane x positions in the gutter: the main line, and a side lane
-const LANES = [10, 38] as const
+/** A lane's x position in the gutter, which matches the row's indent */
+const laneX = (lane: number) => 10 + 28 * lane
 
 /** The lines and dots, measured from where the commits are */
 function drawGraph() {
@@ -218,23 +268,29 @@ function drawGraph() {
     const r = el.getBoundingClientRect()
     return r.top - top + r.height / 2
   }
-  const dots = (row: Element) => [...row.querySelectorAll(".commit > summary")].map(mid)
-  const rows = [...box.querySelectorAll(".row")]
-  const [a, b] = LANES
+  const a = laneX(0)
   const trunkY = mid(box.querySelector(".trunk")!)
-  const mainYs = rows.filter((r) => !r.classList.contains("side")).flatMap(dots)
-  let paths = `<path d="M${a} ${mainYs[0] ?? trunkY} V${trunkY}"/>`
-  const circles = mainYs.map((y) => [a, y])
-  // A side branch runs down from its newest commit and joins the main line a
-  // little below its oldest one, like jj's ├─╯
-  for (const row of rows.filter((r) => r.classList.contains("side"))) {
-    const ys = dots(row)
+  let paths = ""
+  const circles: number[][] = []
+  /** Per lane, where the line on it so far starts */
+  const from: (number | undefined)[] = []
+  for (const row of box.querySelectorAll<HTMLElement>(".row")) {
+    const ys = [...row.querySelectorAll(".commit > summary")].map(mid)
     if (!ys.length) continue
+    const lane = Number(row.dataset.lane)
+    const x = laneX(lane)
+    if (from[lane] !== undefined) paths += `<path d="M${x} ${from[lane]} V${ys[0]}"/>`
+    circles.push(...ys.map((y) => [x, y]))
+    from[lane] = row.dataset.join ? undefined : ys[0]
+    if (!row.dataset.join) continue
+    // Down from its newest commit to a little below its oldest, then across
+    // to the lane it joins
     const cardBottom = row.querySelector(".pr")!.getBoundingClientRect().bottom - top
     const join = Math.min(ys.at(-1)! + 24, cardBottom + 8)
-    paths += `<path d="M${b} ${ys[0]} V${join - 12} A12 12 0 0 1 ${b - 12} ${join} H${a}"/>`
-    circles.push(...ys.map((y) => [b, y]))
+    paths += `<path d="M${x} ${ys[0]} V${join - 12} A12 12 0 0 1 ${x - 12} ${join} H${laneX(Number(row.dataset.join))}"/>`
   }
+  for (const [lane, y] of from.entries())
+    if (y !== undefined) paths += `<path d="M${laneX(lane)} ${y} V${trunkY}"/>`
   const diamond = `<rect x="${a - 4}" y="${trunkY - 4}" width="8" height="8" transform="rotate(45 ${a} ${trunkY})"/>`
   svg.setAttribute("height", String(box.offsetHeight))
   svg.innerHTML =
@@ -291,12 +347,13 @@ main.addEventListener("click", async (e) => {
   paintButtons()
 })
 
-const cacheKey = `ah-stack:${location.pathname}`
+// Named for the shape of Stack, so a tab never draws one from an older ah
+const cacheKey = `ah-stack-rows:${location.pathname}`
 const cached = read<Stack>(sessionStorage, cacheKey)
 let current: Stack | null = cached
 let currentError = ""
 const redraw = () =>
-  draw(current ?? { title: document.title, notes: [], trunk: "", prs: [] }, currentError)
+  draw(current ?? { title: document.title, notes: [], trunk: "", rows: [] }, currentError)
 if (cached) redraw()
 
 async function get<T>(path: string): Promise<T> {

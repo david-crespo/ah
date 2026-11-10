@@ -91,11 +91,9 @@ main .trunk {
   color: var(--muted);
   font-size: 13px;
 }
+/* Indented to its lane in the graph */
 main .row {
-  padding: 0 0 16px 28px;
-}
-main .row.side {
-  padding-left: 56px;
+  padding: 0 0 16px calc(28px + var(--lane) * 28px);
 }
 
 main .pr {
@@ -103,6 +101,14 @@ main .pr {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 14px 16px;
+}
+/* Commits no PR's bookmark is on, which the PRs above share */
+main .pr.shared {
+  background: none;
+  border-style: dashed;
+}
+main .pr.shared h2 {
+  color: var(--muted);
 }
 main .pr-head {
   display: flex;

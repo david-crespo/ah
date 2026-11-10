@@ -46,8 +46,10 @@ it in a window, and binds it to this session. Run the same command without
 - `n` is the PR's place in the stack, and the page shows it as `1.`, so don't
   number titles or bookmarks.
 - Don't list commits or bases. ah takes each PR's commits from the graph: the
-  bookmark's ancestors down to the nearest other PR's bookmark, or trunk. A PR
-  is drawn on a side lane when a later PR has the same base.
+  bookmark's ancestors down to the nearest other PR's bookmark, a fork, or
+  trunk. Commits below a fork that no PR's bookmark is on get a card of their
+  own, shared by the PRs above, since each of them would include those
+  commits on GitHub. The page draws the graph the way `jj log` does.
 - `notes` and `summary` are plain text with blank lines between paragraphs
   and backticks for code. Write the summary for a reviewer: what the PR does,
   then where to start reading.
