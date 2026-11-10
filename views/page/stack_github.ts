@@ -1,6 +1,7 @@
 // A stack's PRs as GitHub has them, which stack.ts shows beside what jj has:
-// each bookmark's newest PR, from gh. Kept for a few seconds, since the page
-// asks on every jj operation and gh takes a second or so.
+// each bookmark's newest PR, from one GraphQL query through gh. Kept for a
+// few seconds, since the page asks on every jj operation and gh takes a
+// second or so.
 
 import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
@@ -27,8 +28,29 @@ export type Checks = "pass" | "fail" | "pending"
 /** Bookmark to its newest PR; a bookmark with no PR isn't in it */
 export type GithubPrs = Record<string, GithubPr>
 
-const FIELDS =
-  "number,url,state,isDraft,title,baseRefName,headRefOid,reviewDecision,statusCheckRollup"
+/** A PR's fields, and the checks on its head commit */
+const PR = `number url state isDraft title baseRefName headRefOid reviewDecision
+  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
+    nodes { ... on CheckRun { status conclusion } ... on StatusContext { state } }
+  } } } } }`
+
+/** Each of `count` heads' newest PR, with an alias and a variable per head:
+ * h0, h1, and so on */
+function prsQuery(count: number): string {
+  const heads = Array.from({ length: count }, (_, i) => `h${i}`)
+  return `query($owner: String!, $name: String!, ${heads.map((h) => `$${h}: String!`).join(", ")}) {
+  repository(owner: $owner, name: $name) {
+    ${heads.map((h) => `${h}: pullRequests(headRefName: $${h}, first: 1, orderBy: { field: CREATED_AT, direction: DESC }) { nodes { ${PR} } }`).join("\n    ")}
+  }
+}`
+}
+
+type PrNode = Omit<GithubPr, "checks" | "reviewDecision"> & {
+  reviewDecision: string | null
+  commits: {
+    nodes: { commit: { statusCheckRollup: { contexts: { nodes: Check[] } } | null } }[]
+  }
+}
 
 const TTL = 15_000
 const cache = new Map<string, { at: number; prs: Promise<GithubPrs> }>()
@@ -55,29 +77,34 @@ async function fetchPrs(pagePath: string): Promise<GithubPrs> {
   const remotes = await run("jj", ["git", "remote", "list"], { cwd: root })
   const repo = githubRepo(remotes.stdout)
   // Nothing to show, as for PRs that aren't on GitHub yet
-  if (!repo) return {}
-  const entries = await Promise.all(
-    file.prs.map(async ({ bookmark }) => {
-      const args = ["pr", "list", "--repo", repo, "--head", bookmark, "--state", "all"]
-      const out = await run("gh", [...args, "--limit", "1", "--json", FIELDS]).catch(
-        (e: NodeJS.ErrnoException) => {
-          if (e.code !== "ENOENT") throw e
-          if (!warnedNoGh)
-            console.error("ah: gh isn't installed, so stack pages show no PRs")
-          warnedNoGh = true
-          return null
-        },
-      )
-      if (!out) return null
-      if (!out.success) throw new Error(out.stderr.trim() || "gh pr list failed")
-      const [pr]: (Omit<GithubPr, "checks"> & { statusCheckRollup: Check[] })[] =
-        JSON.parse(out.stdout)
-      if (!pr) return null
-      const { statusCheckRollup, ...rest } = pr
-      return [bookmark, { ...rest, checks: summarizeChecks(statusCheckRollup) }] as const
+  if (!repo || !file.prs.length) return {}
+  const [owner, name] = repo.split("/")
+  const args = ["api", "graphql", "-f", `query=${prsQuery(file.prs.length)}`]
+  args.push("-f", `owner=${owner}`, "-f", `name=${name}`)
+  for (const [i, { bookmark }] of file.prs.entries()) args.push("-f", `h${i}=${bookmark}`)
+  const out = await run("gh", args).catch((e: NodeJS.ErrnoException) => {
+    if (e.code !== "ENOENT") throw e
+    if (!warnedNoGh) console.error("ah: gh isn't installed, so stack pages show no PRs")
+    warnedNoGh = true
+    return null
+  })
+  if (!out) return {}
+  if (!out.success) throw new Error(out.stderr.trim() || "gh api graphql failed")
+  const heads: Record<string, { nodes: PrNode[] }> = JSON.parse(out.stdout).data.repository
+  return Object.fromEntries(
+    file.prs.flatMap(({ bookmark }, i) => {
+      const pr = heads[`h${i}`].nodes[0]
+      if (!pr) return []
+      const { commits, reviewDecision, ...rest } = pr
+      const checks = commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []
+      const github: GithubPr = {
+        ...rest,
+        reviewDecision: reviewDecision ?? "",
+        checks: summarizeChecks(checks),
+      }
+      return [[bookmark, github]]
     }),
   )
-  return Object.fromEntries(entries.filter((e) => e !== null))
 }
 
 /** owner/name of `origin`, or else the first GitHub remote, in
