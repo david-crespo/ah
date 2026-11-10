@@ -43,6 +43,17 @@ describe("diffMarkdown", () => {
     expect(diff("```\na\nb\n```\n", "```\na\n\nb\n```\n").changes).toBe(1)
   })
 
+  test("marks only the word typed before a list, which makes the list a paragraph", () => {
+    // The line breaks go from ending list items to continuing a paragraph:
+    // different keys for the same tokens, so nothing of theirs to mark
+    const list = "1. Clone the repo\n2. Run the build\n3. Start the server\n"
+    expect(inline(`# Setup\n\n${list}`, `# Setup\n\nFirst ${list}`)).toBe(
+      `# Setup\n\n[--]{+First+} ${list}`,
+    )
+    expect(diff(`# Setup\n\n${list}`, `# Setup\n\nFirst ${list}`).changes).toBe(1)
+    expect(inline(list, `First ${list}`)).toBe(`[--]{+First+} ${list}`)
+  })
+
   test("marks a changed word inline", () => {
     expect(inline("The pane saves after 650ms.\n", "The pane saves after 800ms.\n")).toBe(
       "The pane saves after [-650ms-]{+800ms+}.\n",

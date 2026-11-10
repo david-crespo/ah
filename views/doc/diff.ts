@@ -287,11 +287,15 @@ export function diffMarkdown(
       i = Math.max(1, i - 1)
     } else i++
   }
-  // A joined run can start or end with the same tokens on both sides
-  for (const r of runs) {
+  // A joined run can start or end with the same tokens on both sides. One
+  // that's the same throughout goes: a line break that ended a list item and
+  // now continues a paragraph has another key and the same token.
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const r = runs[i]
     for (; r.a < r.aEnd && r.b < r.bEnd && o.t[r.a] === n.t[r.b]; r.b++) r.a++
     for (; r.a < r.aEnd && r.b < r.bEnd && o.t[r.aEnd - 1] === n.t[r.bEnd - 1]; r.bEnd--)
       r.aEnd--
+    if (r.a === r.aEnd && r.b === r.bEnd) runs.splice(i, 1)
   }
 
   // An addition or removal can often sit at several places, as with a
@@ -304,7 +308,7 @@ export function diffMarkdown(
       r.a === r.aEnd ? ([n, "b", "bEnd"] as const) : ([o, "a", "aEnd"] as const)
     if (r.a !== r.aEnd && r.b !== r.bEnd) continue
     const t = side.t
-    const min = i > 0 ? runs[i - 1][s] : 0
+    const min = i > 0 ? runs[i - 1][e] : 0
     const max = i + 1 < runs.length ? runs[i + 1][s] : t.length
     const edge = (at: number) =>
       atBoundary(t, at, marker)

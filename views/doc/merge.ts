@@ -234,7 +234,7 @@ export function mergeDisk(
   return { text: text + o.slice(at).join(""), conflicts }
 }
 
-export const atLineStart = (o: string[], i: number) => i === 0 || o[i - 1] === "\n"
+export const atLineStart = (o: string[], i: number) => i <= 0 || o[i - 1] === "\n"
 
 /** Whether a sentence ends right before token i of `o`, or a line or the
  * marker that starts a heading, list item or quote, `marker` matching a
