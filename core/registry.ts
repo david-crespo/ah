@@ -192,7 +192,12 @@ export function apply(
   // label there if it reported one, else the hook's. It stays through a cd
   // within the workspace. A session that moves to another one (/cd) takes
   // the hook's label for where it is now, since the shell's is from before.
-  const moved = same && !!e.cwd && !!previous.cwd && rootOf(e.cwd) !== rootOf(previous.cwd)
+  const moved =
+    same &&
+    !!e.cwd &&
+    !!previous.cwd &&
+    e.cwd !== previous.cwd &&
+    rootOf(e.cwd) !== rootOf(previous.cwd)
   const label = (!moved && block && r.shellLabels.get(block)) || e.label
   const fresh = e.event === "SessionStart" || !same || moved
   const record: AgentRecord = {

@@ -29,28 +29,40 @@ export function findMoves(
 ): Move[] {
   const a = oldBlocks.map((b) => blockText(prev, b))
   const b = newBlocks.map((b) => blockText(next, b))
-  const weight = a.map((x) => b.map((y) => similarity(x, y) * (x.size + y.size)))
-
-  // The blocks that stay in place: the heaviest run of pairs in order in both
-  // versions, by a longest common subsequence over the blocks. Each one's
-  // partner in the other version, by index.
   const n = a.length
   const m = b.length
-  const best = Array.from({ length: n + 1 }, () => new Float64Array(m + 1))
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
+  const stayed = [new Map<number, number>(), new Map<number, number>()]
+  const stay = (i: number, j: number) => {
+    stayed[0].set(i, j)
+    stayed[1].set(j, i)
+  }
+
+  // The same blocks at the start and the end stay in place, which leaves the
+  // blocks between them for the table below: x and y, from `lo` on
+  let lo = 0
+  while (lo < n && lo < m && a[lo].text === b[lo].text) stay(lo, lo++)
+  let hi = 0
+  while (hi < Math.min(n, m) - lo && a[n - 1 - hi].text === b[m - 1 - hi].text) {
+    hi++
+    stay(n - hi, m - hi)
+  }
+  const x = a.slice(lo, n - hi)
+  const y = b.slice(lo, m - hi)
+  const weight = x.map((p) => y.map((q) => similarity(p, q) * (p.size + q.size)))
+
+  // Of those, the blocks that stay in place: the heaviest run of pairs in
+  // order in both versions, by a longest common subsequence over the blocks.
+  // Each one's partner in the other version, by index.
+  const best = Array.from({ length: x.length + 1 }, () => new Float64Array(y.length + 1))
+  for (let i = x.length - 1; i >= 0; i--) {
+    for (let j = y.length - 1; j >= 0; j--) {
       const pair = weight[i][j] && weight[i][j] + best[i + 1][j + 1]
       best[i][j] = Math.max(pair, best[i + 1][j], best[i][j + 1])
     }
   }
-  const stayed = [new Map<number, number>(), new Map<number, number>()]
-  for (let i = 0, j = 0; i < n && j < m;) {
-    if (weight[i][j] && best[i][j] === weight[i][j] + best[i + 1][j + 1]) {
-      stayed[0].set(i, j)
-      stayed[1].set(j, i)
-      i++
-      j++
-    }
+  for (let i = 0, j = 0; i < x.length && j < y.length;) {
+    if (weight[i][j] && best[i][j] === weight[i][j] + best[i + 1][j + 1])
+      stay(lo + i++, lo + j++)
     // On a tie, the old block goes first: of two the same size, the earlier
     // one moved
     else if (best[i + 1][j] >= best[i][j + 1]) i++
@@ -61,18 +73,18 @@ export function findMoves(
   // the closest matches first
   const taken = [new Set(stayed[0].keys()), new Set(stayed[1].keys())]
   const pairs: [number, number][] = []
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < m; j++) {
-      if (weight[i][j] && !taken[0].has(i) && !taken[1].has(j)) pairs.push([i, j])
+  for (let i = 0; i < x.length; i++) {
+    for (let j = 0; j < y.length; j++) {
+      if (weight[i][j] && !taken[0].has(lo + i) && !taken[1].has(lo + j)) pairs.push([i, j])
     }
   }
   pairs.sort(([i, j], [k, l]) => weight[k][l] - weight[i][j])
   const moved: [number, number][] = []
   for (const [i, j] of pairs) {
-    if (taken[0].has(i) || taken[1].has(j)) continue
-    taken[0].add(i)
-    taken[1].add(j)
-    moved.push([i, j])
+    if (taken[0].has(lo + i) || taken[1].has(lo + j)) continue
+    taken[0].add(lo + i)
+    taken[1].add(lo + j)
+    moved.push([lo + i, lo + j])
   }
   moved.sort(([, j], [, l]) => j - l)
 
@@ -140,6 +152,7 @@ export function moveBase(prev: string, next: string, moves: Move[]): string {
   }
   return out.join("\n")
 }
+
 type Text = { text: string; size: number; words: Map<string, number>; count: number }
 
 /** A block's lines, trimmed so indenting doesn't keep it from matching, and
