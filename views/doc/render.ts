@@ -11,6 +11,10 @@ import taskLists from "markdown-it-task-lists"
 
 export function createMarkdown() {
   const md = MarkdownExit({ html: true, linkify: true }).use(taskLists).use(footnote)
+  // Text rendered inside the document's: without its footnotes, which
+  // markdown-it-footnote would otherwise append to each
+  const inline = (text: string, env: object) =>
+    md.renderInline(text, { ...env, footnotes: undefined })
   // YAML frontmatter, which GitHub shows as a table. Before hr, which would
   // take the opening ---.
   md.block.ruler.before("hr", "front_matter", (state, startLine, endLine, silent) => {
@@ -33,12 +37,9 @@ export function createMarkdown() {
     if (!entries) {
       return `<pre${attrs}><code class="language-yaml">${md.utils.escapeHtml(token.content)}</code></pre>\n`
     }
-    // Without the document's footnotes, which markdown-it-footnote would
-    // otherwise append to each cell.
-    const cellEnv = { ...env, footnotes: undefined }
     const rows = entries.map(
       ([key, value]) =>
-        `<tr><th>${md.utils.escapeHtml(key)}</th><td>${md.renderInline(value, cellEnv)}</td></tr>`,
+        `<tr><th>${md.utils.escapeHtml(key)}</th><td>${inline(value, env)}</td></tr>`,
     )
     return `<table class="front-matter"${attrs}><tbody>${rows.join("")}</tbody></table>\n`
   }
@@ -82,7 +83,7 @@ export function createMarkdown() {
     const nth = seen.get(source) ?? 0
     seen.set(source, nth + 1)
     const side = (name: string, text: string) =>
-      `<span class="merge-${name}"${text ? "" : " data-empty"}><button class="merge-pick" data-side="${name}"></button>${md.renderInline(text, env)}</span>`
+      `<span class="merge-${name}"${text ? "" : " data-empty"}><button class="merge-pick" data-side="${name}"></button>${inline(text, env)}</span>`
     return `<span class="merge-conflict" data-source="${md.utils.escapeHtml(source)}" data-nth="${nth}">${side(MINE, mine)}${side(AGENT, agent)}</span>`
   }
   // The diff mode's marks around changed words (diff.ts): the old words,
@@ -105,7 +106,7 @@ export function createMarkdown() {
   })
   md.renderer.rules.diff_open = (tokens, idx, _opts, env) => {
     const { old } = tokens[idx].meta
-    const del = old ? `<del class="diff-old">${md.renderInline(old, env)}</del>` : ""
+    const del = old ? `<del class="diff-old">${inline(old, env)}</del>` : ""
     return `${del}<ins class="diff-new">`
   }
   md.renderer.rules.diff_close = () => "</ins>"

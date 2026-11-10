@@ -65,6 +65,14 @@ test("frontmatter cells don't repeat the document's footnotes", () => {
   expect(html.match(/<section class="footnotes"/g)).toHaveLength(1)
 })
 
+test("diff marks and conflict sides don't repeat the document's footnotes", () => {
+  const notes = "\n\n[^a]: A note\n"
+  const sections = (html: string) => html.match(/<section class="footnotes"/g)
+  expect(sections(md.render(`Text.[^a] {~~one~>two~~}${notes}`))).toHaveLength(1)
+  const marked = `Text.[^a] ${OPEN}0}new${CLOSE}${notes}`
+  expect(sections(md.render(marked, { diff: { old: ["old"] } }))).toHaveLength(1)
+})
+
 test("frontmatter that isn't a flat map shows as YAML", () => {
   expect(md.render("---\na:\n  b: c\n# note\n---\n")).toContain(
     '<pre data-line="0:5"><code class="language-yaml">a:\n  b: c\n# note</code></pre>',
