@@ -53,7 +53,7 @@ import { installProblems } from "./platform/install_check.ts"
 import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
-import type { AgentId, FileKind, RexState } from "./model.ts"
+import { type AgentId, type FileKind, fileKind, type RexState } from "./model.ts"
 import { showPage, windows } from "./cli/files.ts"
 import {
   onRexHealth,
@@ -211,9 +211,11 @@ async function serve(port: number) {
   const upgrades = new Upgrades([pageScripts])
   core.useUpgrades(upgrades, () => installProblems().filter((p) => !p.optional).length)
   const docBackend = new DocBackend(port, core.directory)
-  // A stack page's PR body opens in the doc page, as `ah tool doc` would open it
-  const openDoc = async (path: string, agent: AgentId | null) => {
-    const { url, views } = await docBackend.files.bind(path, null, agent)
+  // A stack page's PR body, and the stacks and files a home page lists, open
+  // in a window, as `ah tool doc` or `ah tool page` would open them
+  const openFile = async (path: string, agent: AgentId | null) => {
+    const { files } = fileKind(path) === "page" ? pageBackend : docBackend
+    const { url, views } = await files.bind(path, null, agent)
     await showPage("window", new URL(url, `http://127.0.0.1:${port}`), path, views)
   }
   const pageBackend = new PageBackend(
@@ -221,7 +223,7 @@ async function serve(port: number) {
     pagesPort,
     core.directory,
     core.trackers,
-    [stackApp(openDoc), homeApp(() => core.agents())],
+    [stackApp(openFile), homeApp(() => core.agents(), openFile)],
     upgrades,
   )
   const dashboardBackend = new Dashboard({

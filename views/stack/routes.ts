@@ -6,23 +6,19 @@
 
 import { stat } from "node:fs/promises"
 import { dirname, join } from "node:path"
-import type { AgentId } from "../../model.ts"
 import { rootFinder } from "../../core/workspace.ts"
-import type { PageApp } from "../page/app.ts"
+import type { OpenFile, PageApp } from "../page/app.ts"
 import { noStore } from "../page/routes.ts"
 import { ensureBody, readStack, STACK_FILE, stackOpsDir } from "./data.ts"
 import { readGithub } from "./github.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
-
-/** Open a markdown file in its doc page, bound to `agent` */
-export type OpenDoc = (path: string, agent: AgentId | null) => Promise<void>
 
 const json = (data: unknown) => Response.json(data, { headers: noStore })
 const failed = (e: Error) => new Response(e.message, { status: 500 })
 const done = () => new Response(null, { status: 204 })
 
 /** `openDoc` opens a PR's body */
-export function stackApp(openDoc: OpenDoc): PageApp {
+export function stackApp(openDoc: OpenFile): PageApp {
   return {
     async routes(sub, req, path, agent) {
       if (sub === "_ah/stack") return await readStack(path).then(json, failed)

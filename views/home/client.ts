@@ -5,7 +5,9 @@
 // in four tabs: the live agents (In progress), the items in home.json that
 // wait on the user, with how long ago each was written, what finished, and
 // every project in workstreams.md with its computed status, its first
-// paragraph opening to the rest. The tab is kept in the URL hash, so a
+// paragraph opening to the rest. A project with a stack page has a Stack
+// button by its name wherever it's shown, and a waiting item can link to a
+// file; both ask the server to open it in a window. The tab is kept in the URL hash, so a
 // reload stays on it, and which projects are open is kept across redraws and
 // reloads. The data is read again when the server says a file changed, and
 // every 5 seconds while the page is in view, since agents start and stop
@@ -14,6 +16,7 @@
 
 import type { AgentRow, Home, Status, Waiting } from "./data.ts"
 import { escapeHtml } from "../escape.ts"
+import { sameProject } from "./names.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -27,6 +30,14 @@ const link = (href: string, text: string, cls = "") =>
   /^\s*(javascript|data|vbscript):/i.test(href)
     ? text
     : `<a${cls ? ` class="${cls}"` : ""} href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${text}</a>`
+
+/** `text`, already HTML, as a button that opens `file` (as home.json has it)
+ * in a window */
+const fileLink = (file: string, text: string, cls = "") =>
+  `<button type="button" class="file${cls ? ` ${cls}` : ""}" data-file="${escapeHtml(file)}">${text}</button>`
+
+/** A Stack button for a project with a stack page, else nothing */
+type StackButton = (project: string) => string
 
 /** Escaped, with `code`, **bold** and [text](url) */
 const inline = (s: string) =>
@@ -94,19 +105,19 @@ const chip = (status: Status) => `<span class="chip ${CHIPS[status]}">${status}<
 const empty = (text: string) => `<li class="empty">${text}</li>`
 
 /** A live agent. Its row is a container, so a panel can open under it. */
-const agentRow = (a: AgentRow) => {
+const agentRow = (a: AgentRow, stack: StackButton) => {
   const project = a.project ?? a.cwd.split("/").filter(Boolean).at(-1) ?? a.label
   const what = a.asked ?? a.summary
   return `<li class="row agent" data-id="${escapeHtml(a.id)}">
     <div class="top">
-      <span class="proj">${escapeHtml(project)}</span>
+      <span><span class="proj">${escapeHtml(project)}</span>${a.project ? stack(a.project) : ""}</span>
       <span class="meta">${escapeHtml(a.harness)} ${a.busy ? '<span class="chip run">working</span>' : '<span class="chip idle">idle</span>'}</span>
     </div>
     ${what ? `<div>${escapeHtml(what)}</div>` : `<div class="note">${escapeHtml(a.cwd.replace(/^\/(Users|home)\/[^/]+(?=\/|$)/, "~"))}</div>`}
   </li>`
 }
 
-const waitingRow = (w: Waiting, i: number) => {
+const waitingRow = (w: Waiting, i: number, stack: StackButton) => {
   const at = new Date(w.written)
   const valid = !isNaN(+at)
   const stale = valid && Date.now() - +at > STALE
@@ -115,12 +126,18 @@ const waitingRow = (w: Waiting, i: number) => {
     <span class="n">${i + 1}</span>
     <div>
       <div class="top">
-        <span class="proj">${escapeHtml(w.project)}</span>
+        <span><span class="proj">${escapeHtml(w.project)}</span>${stack(w.project)}</span>
         ${valid ? `<span class="meta" title="${escapeHtml(at.toLocaleString())}">${age(Date.now() - +at)}</span>` : ""}
       </div>
-      <div>${w.link ? link(w.link, text) : text}</div>
+      <div>${w.link ? link(w.link, text) : w.file ? fileLink(w.file, text) : text}</div>
       ${w.note ? `<div class="note">${escapeHtml(w.note)}</div>` : ""}
-      ${w.links.map((l) => link(l.href, escapeHtml(l.label), "more")).join("")}
+      ${w.links
+        .map((l) =>
+          l.href
+            ? link(l.href, escapeHtml(l.label), "more")
+            : fileLink(l.file!, escapeHtml(l.label), "more"),
+        )
+        .join("")}
       ${stale ? `<div class="note">not rechecked since ${when(w.written)}</div>` : ""}
     </div>
   </li>`
@@ -140,6 +157,10 @@ function html(home: Home, error: string): string {
   const selected = hashTab() ?? (file.waiting.length ? "waiting" : "progress")
   const tab = (id: Tab, label: string, count: number, you = false) =>
     `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === selected}">${label}<span class="count${you && count ? " you" : ""}">${count}</span></button>`
+  const stack: StackButton = (project) =>
+    file.projects.some((p) => p.stack && sameProject(p.name, project))
+      ? `<button type="button" class="stack" data-project="${escapeHtml(project)}">Stack</button>`
+      : ""
   const panel = (id: Tab, body: string) =>
     `<section class="panel"${id === selected ? "" : " hidden"}>${body}</section>`
 
@@ -151,7 +172,7 @@ function html(home: Home, error: string): string {
         const [first = "", ...rest] = p.paragraphs
         return `<li class="row"><details data-key="${escapeHtml(key)}"${open.has(key) ? " open" : ""}>
           <summary>
-            <div><span class="proj">${escapeHtml(p.name)}</span> ${chip(p.status)}</div>
+            <div><span class="proj">${escapeHtml(p.name)}</span> ${chip(p.status)}${stack(p.name)}</div>
             <p class="first">${inline(first)}</p>
           </summary>
           ${rest.map((para) => `<p>${inline(para)}</p>`).join("")}
@@ -172,8 +193,8 @@ function html(home: Home, error: string): string {
       ${tab("finished", "Finished", finished.length)}
       ${tab("projects", "All projects", projects.length)}
     </div>
-    ${panel("progress", `<ul class="card">${agents.map(agentRow).join("") || empty("Nothing is running.")}</ul>`)}
-    ${panel("waiting", `<ol class="card waiting">${file.waiting.map(waitingRow).join("") || empty("Nothing is waiting on you.")}</ol>`)}
+    ${panel("progress", `<ul class="card">${agents.map((a) => agentRow(a, stack)).join("") || empty("Nothing is running.")}</ul>`)}
+    ${panel("waiting", `<ol class="card waiting">${file.waiting.map((w, i) => waitingRow(w, i, stack)).join("") || empty("Nothing is waiting on you.")}</ol>`)}
     ${panel(
       "finished",
       `<ul class="card finished">${
@@ -191,6 +212,8 @@ function html(home: Home, error: string): string {
 const cacheKey = `ah-home-data:${location.pathname}`
 let current = read<Home>(cacheKey)
 let error = ""
+/** Why the last Stack button or file link didn't open, until one does */
+let openError = ""
 let drawn = ""
 
 function draw() {
@@ -199,7 +222,7 @@ function draw() {
     return
   }
   if (current.file.title) document.title = current.file.title
-  const next = html(current, error)
+  const next = html(current, [error, openError].filter(Boolean).join("; "))
   if (next !== drawn) {
     main.innerHTML = drawn = next
     // On a narrow screen the tabs scroll, and the selected one may be off it
@@ -218,6 +241,28 @@ main.addEventListener("click", (e) => {
   draw()
 })
 addEventListener("hashchange", draw)
+
+// A Stack button or a file link: the server opens it in a window
+main.addEventListener("click", async (e) => {
+  const button = (e.target as Element).closest<HTMLButtonElement>(
+    "button[data-project], button[data-file]",
+  )
+  if (!button || !threadUrl) return
+  // In a project's summary, the click shouldn't also open the project
+  e.preventDefault()
+  const { project, file } = button.dataset
+  try {
+    const res = await fetch(new URL("open", threadUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(project ? { project } : { file }),
+    })
+    openError = res.ok ? "" : `Can't open it: ${(await res.text()) || res.status}`
+  } catch (e) {
+    openError = `Can't open it: ${(e as Error).message}`
+  }
+  draw()
+})
 
 if (current) draw()
 

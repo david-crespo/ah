@@ -6,6 +6,7 @@ import type { AgentView } from "../../core/agent_view.ts"
 import {
   type HomeFile,
   joinAgents,
+  listedFile,
   parseHomeFile,
   parseWorkstreams,
   projectStatus,
@@ -150,6 +151,43 @@ test("home.json is read leniently: entries missing what they need are left out",
     finished: [],
   })
   expect(() => parseHomeFile("[]")).toThrow("isn't a JSON object")
+})
+
+test("a page opens only the stacks and files its home.json lists, resolved from home.json", () => {
+  const listed: HomeFile = {
+    ...file,
+    projects: [
+      { ...file.projects[0], name: "ah", stack: "../stack/index.html" },
+      { ...file.projects[1], stack: "/abs/docs-stack/index.html" },
+    ],
+    waiting: [
+      {
+        id: "1",
+        project: "ah",
+        text: "Read it",
+        written: "",
+        file: "notes/plan.md",
+        links: [
+          { label: "Replies", file: "/abs/replies.md" },
+          { label: "PR", href: "https://x" },
+        ],
+      },
+    ],
+  }
+  const open = (request: unknown) => listedFile("/home/c/home/index.html", listed, request)
+  // A project by its name in workstreams.md, note and all
+  expect(open({ project: "ah (doc editor, stack)" })).toBe("/home/c/stack/index.html")
+  expect(open({ project: "Docs" })).toBe("/abs/docs-stack/index.html")
+  expect(open({ file: "notes/plan.md" })).toBe("/home/c/home/notes/plan.md")
+  expect(open({ file: "/abs/replies.md" })).toBe("/abs/replies.md")
+  expect(open({ file: "../stack/index.html" })).toBe("/home/c/stack/index.html")
+  // Only as written: the same file by another path, a URL, or anything else isn't listed
+  expect(open({ file: "/home/c/home/notes/plan.md" })).toBeNull()
+  expect(open({ file: "https://x" })).toBeNull()
+  expect(open({ file: "/etc/passwd" })).toBeNull()
+  expect(open({ project: "Concierge" })).toBeNull()
+  expect(open({})).toBeNull()
+  expect(open(null)).toBeNull()
 })
 
 test("a page's home is null without home.json, and a bad file is an error, not a failure", async () => {

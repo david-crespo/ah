@@ -8,8 +8,16 @@ import { LiveReload } from "../page/files.ts"
 import { HOME_FILE } from "./data.ts"
 import { homeApp } from "./routes.ts"
 
-const app = homeApp(() => [])
+const opened: string[] = []
+const app = homeApp(
+  () => [],
+  async (path) => {
+    opened.push(path)
+  },
+)
 const get = new Request("http://127.0.0.1/")
+const post = (body: unknown) =>
+  new Request("http://127.0.0.1/", { method: "POST", body: JSON.stringify(body) })
 
 test("a home page is told its data changed, and to reload for anything else", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ah-home-")))
@@ -50,6 +58,43 @@ test("only a page with home.json next to it is the app's, and a bad one is still
     expect(res?.status).toBe(200)
     expect((await res!.json()).errors).toHaveLength(2)
     expect(await app.routes("_ah/other", get, page, null)).toBeNull()
+  } finally {
+    rmSync(root, { recursive: true })
+  }
+})
+
+test("a home page's buttons open what its home.json lists, if it's there, and nothing else", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "ah-home-")))
+  const page = join(root, "home", "index.html")
+  mkdirSync(join(root, "home"))
+  const open = async (body: unknown) => {
+    const res = await app.routes("_ah/open", post(body), page, null)
+    return res && res.status
+  }
+  try {
+    expect(await open({ file: "plan.md" })).toBeNull()
+    writeFileSync(
+      join(root, "home", HOME_FILE),
+      JSON.stringify({
+        projects: [{ name: "ah", stack: "../stack/index.html" }],
+        waiting: [{ id: "1", project: "ah", text: "Read", file: "plan.md", links: [] }],
+      }),
+    )
+    // Listed, but not there yet
+    expect(await open({ file: "plan.md" })).toBe(404)
+    writeFileSync(join(root, "home", "plan.md"), "# Plan")
+    mkdirSync(join(root, "stack"))
+    writeFileSync(join(root, "stack", "index.html"), "")
+    opened.length = 0
+    expect(await open({ file: "plan.md" })).toBe(204)
+    expect(await open({ project: "ah" })).toBe(204)
+    expect(opened).toEqual([
+      join(root, "home", "plan.md"),
+      join(root, "stack", "index.html"),
+    ])
+    expect(await open({ file: join(root, "home", "plan.md") })).toBe(404)
+    expect(await open({ project: "Docs" })).toBe(404)
+    expect(opened).toHaveLength(2)
   } finally {
     rmSync(root, { recursive: true })
   }

@@ -10,6 +10,7 @@ import { dirname, join, resolve } from "node:path"
 import type { AgentId } from "../../model.ts"
 import { type AgentView, isCurrent } from "../../core/agent_view.ts"
 import { isRecord, isString } from "../../platform/guards.ts"
+import { sameProject } from "./names.ts"
 
 export const HOME_FILE = "home.json"
 const WORKSTREAMS = "../workstreams.md"
@@ -31,6 +32,16 @@ export interface Project {
   prs: string[]
   /** Workers the agent keeping the page started */
   workers: Worker[]
+  /** The project's stack page, its index.html, absolute or relative to home.json */
+  stack?: string
+}
+
+/** A link to a URL, or to a file the page opens in a window: a markdown
+ * file or an HTML page, absolute or relative to home.json */
+export interface Link {
+  label: string
+  href?: string
+  file?: string
 }
 
 export interface Waiting {
@@ -40,8 +51,10 @@ export interface Waiting {
   /** ISO time it was written */
   written: string
   note?: string
+  /** Where its text links to: a URL, or a file as in Link */
   link?: string
-  links: { label: string; href: string }[]
+  file?: string
+  links: Link[]
 }
 
 export interface Finished {
@@ -120,6 +133,7 @@ export function parseHomeFile(text: string): HomeFile {
             session: optional(w.session),
             asked: w.asked as string,
           })),
+        stack: optional(p.stack),
       })),
     waiting: records(file.waiting)
       .filter((w) => isString(w.id) && isString(w.project) && isString(w.text))
@@ -130,9 +144,14 @@ export function parseHomeFile(text: string): HomeFile {
         written: optional(w.written) ?? "",
         note: optional(w.note),
         link: optional(w.link),
+        file: optional(w.file),
         links: records(w.links)
-          .filter((l) => isString(l.label) && isString(l.href))
-          .map((l) => ({ label: l.label as string, href: l.href as string })),
+          .filter((l) => isString(l.label) && (isString(l.href) || isString(l.file)))
+          .map((l) => ({
+            label: l.label as string,
+            href: optional(l.href),
+            file: optional(l.file),
+          })),
       })),
     finished: records(file.finished)
       .filter((f) => isString(f.project) && isString(f.text))
@@ -173,11 +192,6 @@ export function parseWorkstreams(markdown: string): Workstream[] {
   }
   return projects
 }
-
-/** A project's name without a note in parentheses after it, so "ah (doc
- * editor, trackers)" in workstreams.md is the "ah" of home.json */
-export const projectKey = (name: string) => name.replace(/\s*\(.*\)$/, "")
-const sameProject = (a: string, b: string) => projectKey(a) === projectKey(b)
 
 /** Each live agent, busy ones first, with its project: the one that lists
  * it as a worker, else the one with the longest repo its cwd is in */
@@ -231,6 +245,27 @@ export function projectStatus(name: string, waiting: Waiting[], rows: AgentRow[]
 /** Where home.json says workstreams.md is */
 export const workstreamsPath = (pagePath: string, file: HomeFile) =>
   resolve(dirname(pagePath), file.workstreams ?? WORKSTREAMS)
+
+/** The file a page asks to open, absolute: `{ project }`'s stack page, or
+ * `{ file }`, a path as home.json has it for a waiting item or a stack.
+ * Null for anything else, so a page opens only what its home.json lists. */
+export function listedFile(
+  pagePath: string,
+  file: HomeFile,
+  request: unknown,
+): string | null {
+  if (!isRecord(request)) return null
+  const { project, file: path } = request
+  const listed = isString(project)
+    ? file.projects.find((p) => p.stack && sameProject(p.name, project))?.stack
+    : isString(path)
+      ? [
+          ...file.projects.map((p) => p.stack),
+          ...file.waiting.flatMap((w) => [w.file, ...w.links.map((l) => l.file)]),
+        ].find((f) => f === path)
+      : undefined
+  return listed ? resolve(dirname(pagePath), listed) : null
+}
 
 /** The home.json next to `pagePath`, or null if there isn't one */
 export async function readHomeFile(pagePath: string): Promise<string | null> {

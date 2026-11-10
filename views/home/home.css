@@ -158,6 +158,31 @@ main .more {
   font-size: 13px;
   margin: 4px 12px 0 0;
 }
+/* A project's Stack button, and a link to a file, which opens in a window */
+main button.stack {
+  font: inherit;
+  font-size: 11px;
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 6px;
+  margin-left: 6px;
+  cursor: pointer;
+  vertical-align: 1px;
+}
+main button.file {
+  font: inherit;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+main button.file.more {
+  font-size: 13px;
+}
 main .chip {
   display: inline-block;
   font-size: 11px;

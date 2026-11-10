@@ -53,6 +53,7 @@ opened.
       "name": "Docs versioning",
       "repos": ["/Users/me/oxide/docs"],
       "prs": ["oxidecomputer/docs#935"],
+      "stack": "/Users/me/oxide/docs/.claude/notes/2026-11-05-vdocs-stack/index.html",
       "workers": [{ "session": "8f2c…", "asked": "Answer Joe's three comments on #935" }]
     }
   ],
@@ -64,7 +65,10 @@ opened.
       "written": "2026-11-10T09:27:00-05:00",
       "note": "Open: whether v21 should list Terraform v0.21.0.",
       "link": "https://github.com/oxidecomputer/docs/pull/935",
-      "links": [{ "label": "Suggested replies", "href": "http://…" }]
+      "links": [
+        { "label": "Suggested replies", "file": "notes/joe-935-replies.md" },
+        { "label": "CI run", "href": "https://…" }
+      ]
     }
   ],
   "finished": [
@@ -88,10 +92,23 @@ opened.
   you asked it to do. The In progress tab shows that line, so a worker you
   list here reads better than one ah only finds by its cwd.
 - `prs` are shown as links for now.
+- `stack` is the project's stack page (the ah-stack skill), the path to its
+  `index.html`. The project gets a Stack button by its name wherever it's
+  shown, which opens the stack page in a window bound to you. Do PR work
+  there: the home page only points to it.
 - `waiting` items have a stable `id` and `written`, the ISO time you wrote or
   last checked the item. The page shows its age, and dims an item older than
   six hours with "not rechecked since". When an item changes, rewrite it with
   a new `written`; when it's done, remove it and add a `finished` entry.
+- A waiting item's text links to `link`, a URL, or `file`, and each of its
+  `links` has a `label` and an `href` or a `file`. A file is a markdown file,
+  which opens in a doc page, or an HTML page, which opens in its page, in a
+  window bound to you, as `ah tool doc` or `ah tool page` would open it. Use
+  a file rather than the URL of an ah page, which opens in the browser and
+  changes with the port.
+- Paths in `stack` and `file` are absolute or relative to `home.json`. The
+  page opens only files `home.json` lists, so add one there before you point
+  the user at it.
 - `finished` entries are drawn newest first by `at`.
 
 ah reads the file leniently: an entry missing what it needs is left out, and a

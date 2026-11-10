@@ -13,6 +13,10 @@ export interface AppWatch {
   data(filename: string): boolean
 }
 
+/** Open a file in its tool's page, a markdown file's doc page or an HTML
+ * file's page, in a window, bound to `agent` */
+export type OpenFile = (path: string, agent: AgentId | null) => Promise<void>
+
 export interface PageApp {
   /** The response for `sub`, the path after the page's, of the page at
    * `path`, bound to `agent`; null for a path that isn't the app's */
