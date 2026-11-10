@@ -28,7 +28,7 @@ vi.mock("../../platform/proc.ts", async (importOriginal) => {
   }
 })
 
-test("readGithub asks gh once for the whole stack", async () => {
+test("readGithub asks gh once for the whole stack, and skips forks' PRs", async () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-github-")))
   try {
     execFileSync("jj", ["git", "init"], { cwd: dir, stdio: "pipe" })
@@ -49,6 +49,7 @@ test("readGithub asks gh once for the whole stack", async () => {
       title: "One on GitHub",
       baseRefName: "main",
       headRefOid: "abcdef12",
+      isCrossRepository: false,
       reviewDecision: null,
       commits: {
         nodes: [
@@ -62,11 +63,14 @@ test("readGithub asks gh once for the whole stack", async () => {
         ],
       },
     }
+    // two's newest is a fork's, from a branch of the same name
+    const fork = { ...pr, number: 9, isCrossRepository: true }
+    const older = { ...pr, number: 5 }
     gh.calls = []
     gh.answer = (args) =>
       args[0] === "api"
         ? JSON.stringify({
-            data: { repository: { h0: { nodes: [pr] }, h1: { nodes: [] } } },
+            data: { repository: { h0: { nodes: [pr] }, h1: { nodes: [fork, older] } } },
           })
         : "[]"
     const github = await readGithub(join(dir, "index.html"))
@@ -74,8 +78,9 @@ test("readGithub asks gh once for the whole stack", async () => {
     expect(gh.calls[0]).toEqual(
       expect.arrayContaining(["owner=o", "name=r", "h0=one", "h1=two"]),
     )
-    const { commits: _, ...rest } = pr
-    expect(github).toEqual({ one: { ...rest, reviewDecision: "", checks: "pass" } })
+    const { commits: _, isCrossRepository: __, ...rest } = pr
+    const want = { ...rest, reviewDecision: "", checks: "pass" }
+    expect(github).toEqual({ one: want, two: { ...want, number: 5 } })
   } finally {
     rmSync(dir, { recursive: true })
   }

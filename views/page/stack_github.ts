@@ -30,23 +30,25 @@ export type GithubPrs = Record<string, GithubPr>
 
 /** A PR's fields, and the checks on its head commit */
 const PR = `number url state isDraft title baseRefName headRefOid reviewDecision
-  commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
+  isCrossRepository commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
     nodes { ... on CheckRun { status conclusion } ... on StatusContext { state } }
   } } } } }`
 
-/** Each of `count` heads' newest PR, with an alias and a variable per head:
- * h0, h1, and so on */
+/** Each of `count` heads' newest PRs, with an alias and a variable per
+ * head: h0, h1, and so on. A few, since a head's name matches a fork's
+ * branch of that name too. */
 function prsQuery(count: number): string {
   const heads = Array.from({ length: count }, (_, i) => `h${i}`)
   return `query($owner: String!, $name: String!, ${heads.map((h) => `$${h}: String!`).join(", ")}) {
   repository(owner: $owner, name: $name) {
-    ${heads.map((h) => `${h}: pullRequests(headRefName: $${h}, first: 1, orderBy: { field: CREATED_AT, direction: DESC }) { nodes { ${PR} } }`).join("\n    ")}
+    ${heads.map((h) => `${h}: pullRequests(headRefName: $${h}, first: 5, orderBy: { field: CREATED_AT, direction: DESC }) { nodes { ${PR} } }`).join("\n    ")}
   }
 }`
 }
 
 type PrNode = Omit<GithubPr, "checks" | "reviewDecision"> & {
   reviewDecision: string | null
+  isCrossRepository: boolean
   commits: {
     nodes: { commit: { statusCheckRollup: { contexts: { nodes: Check[] } } | null } }[]
   }
@@ -93,9 +95,9 @@ async function fetchPrs(pagePath: string): Promise<GithubPrs> {
   const heads: Record<string, { nodes: PrNode[] }> = JSON.parse(out.stdout).data.repository
   return Object.fromEntries(
     file.prs.flatMap(({ bookmark }, i) => {
-      const pr = heads[`h${i}`].nodes[0]
+      const pr = heads[`h${i}`].nodes.find((pr) => !pr.isCrossRepository)
       if (!pr) return []
-      const { commits, reviewDecision, ...rest } = pr
+      const { commits, reviewDecision, isCrossRepository: _, ...rest } = pr
       const checks = commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []
       const github: GithubPr = {
         ...rest,
