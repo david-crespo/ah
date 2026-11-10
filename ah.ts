@@ -30,16 +30,16 @@ import { serve as nodeServe } from "@hono/node-server"
 import { readFile } from "node:fs/promises"
 import type { Duplex } from "node:stream"
 import { WebSocketServer, type WebSocket } from "ws"
-import { debugTabs } from "./cli/dashboard.ts"
 import { Dashboard } from "./views/dashboard/routes.ts"
 import { DocBackend } from "./views/doc/routes.ts"
 import { PageBackend } from "./views/page/routes.ts"
 import { pageScripts } from "./views/page/upgrade.ts"
 import { stackApp } from "./views/stack/routes.ts"
-import { tool, windows } from "./cli/tool.ts"
+import { tool } from "./cli/tool.ts"
 import { message } from "./cli/message.ts"
-import { debugAgents, doctor, workspace } from "./cli/workspace.ts"
+import { doctor, workspace } from "./cli/workspace.ts"
 import { hook } from "./cli/hook.ts"
+import { debug } from "./cli/debug.ts"
 import { watchOpencode } from "./core/opencode.ts"
 import { Core } from "./core/core.ts"
 import { Upgrades } from "./core/upgrades.ts"
@@ -53,7 +53,7 @@ import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
 import type { AgentId, FileKind, RexState } from "./model.ts"
-import { showPage } from "./cli/files.ts"
+import { showPage, windows } from "./cli/files.ts"
 import {
   onRexHealth,
   type RexHealth,
@@ -415,11 +415,6 @@ server
     console.log(`log: ${defaultFiles().log}`)
   })
 
-const debug = new Command("debug").description(
-  "Inspect how ah sees Rex tabs and the agents in them",
-)
-debug.addCommand(debugTabs)
-debug.addCommand(debugAgents)
 for (const command of [tool, windows, message, workspace, doctor, server, hook, debug])
   program.addCommand(command)
 

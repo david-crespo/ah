@@ -1,16 +1,60 @@
-// `ah tool dashboard`, and `ah debug tabs`, which shows the workspaces the
-// dashboard maps tabs to and the titles ah gives them
+// `ah tool dashboard`, and what other commands use to show the dashboard:
+// whether a page is open, and opening one. Setting what it shows, the
+// workspace's current tracker, is tracker.ts.
 
 import { Command, Option } from "@commander-js/extra-typings"
-import { portOption } from "./shared.ts"
-import { readRex } from "../platform/rex.ts"
+import { callServer, ensureStarted, portOption, serverUrl } from "./shared.ts"
+import { status } from "../platform/server.ts"
+import { focusHere } from "../platform/focus.ts"
 import { currentAgent } from "../platform/session.ts"
-import { emptyRegistry, loadRegistry } from "../core/registry.ts"
-import { tabLabel } from "../core/tabtitle/setter.ts"
-import { currentTracker } from "./tracker.ts"
-import { rootFinder } from "../core/workspace.ts"
-import { dashboardStatus, ensureDashboardPage } from "./dashboard_api.ts"
-import { resolve } from "../views/dashboard/workspace.ts"
+import { focusWindow, openWindow } from "../platform/window.ts"
+import type { AgentRef } from "../model.ts"
+
+const dashboardUrl = (port: number) => serverUrl(port, "view/dashboard/")
+
+/** Open a dashboard page in a window, taking focus only as `focusHere`
+ * allows */
+async function openDashboard(port: number, otherDisplay = true) {
+  await ensureStarted(port)
+  await openWindow(
+    dashboardUrl(port),
+    { name: "Dashboard", badge: "ah", color: "#4f46e5", otherDisplay },
+    await focusHere(),
+  )
+}
+
+/** One line for agents deciding where to show things */
+async function dashboardStatus(port: number): Promise<string> {
+  const s = await status(port)
+  if (!s) return "dashboard: not running"
+  if (!s.pages) return "dashboard: server running, no page open"
+  return `dashboard: open (${s.pages} ${s.pages === 1 ? "page" : "pages"})`
+}
+
+/** Make sure a dashboard page is open to show what we just put in it,
+ * opening one if there is none. With `raise`, an open one's window comes
+ * forward if `focusHere` allows; without, it stays where it is, since it
+ * updates in place. Returns a status line like dashboardStatus. */
+export async function ensureDashboardPage(
+  port: number,
+  { otherDisplay = true, raise = true }: { otherDisplay?: boolean; raise?: boolean } = {},
+): Promise<string> {
+  const s = await status(port)
+  if (s?.pages) {
+    if (raise && (await focusHere()).take) await focusWindow(dashboardUrl(port))
+    return await dashboardStatus(port)
+  }
+  await openDashboard(port, otherDisplay)
+  return "dashboard: no page was open, opened one"
+}
+
+/** The agent's workspace's current tracker, or null if it has none or the
+ * server isn't running */
+async function currentTracker(port: number, agent: AgentRef): Promise<string | null> {
+  if (!(await status(port))) return null
+  const url = serverUrl(port, "core/current-tracker")
+  return (await callServer<{ path: string | null }>(url, { body: { agent } })).path
+}
 
 export const dashboard = new Command("dashboard")
   .summary("A window that follows the focused Rex tab")
@@ -50,35 +94,4 @@ dashboard
     const agent = currentAgent()
     const path = agent && (await currentTracker(port, agent))
     if (path) console.log(`in the dashboard: ${path}`)
-  })
-
-/** `ah debug tabs` */
-export const debugTabs = new Command("tabs")
-  .summary("Show Rex's tabs as ah sees them")
-  .description(
-    "Read Rex's state once and print it, along with how long the read took, the workspaces it maps to, and each tab's title next to the title ah computes.",
-  )
-  .action(async () => {
-    const start = performance.now()
-    const rex = await readRex()
-    const totalMs = Math.round(performance.now() - start)
-    const state = resolve(rex, rootFinder(), null)
-    // From the registry as last saved, which can trail the server's by a
-    // moment; /tabtitles has the server's own
-    const registry = loadRegistry() ?? emptyRegistry()
-    const titles = rex.sessions
-      .flatMap((s) => s.tabs)
-      .map((tab) => {
-        const ah = tabLabel(
-          tab.blocks.map((t) => t.id),
-          registry,
-        )
-        return {
-          id: tab.id,
-          shows: tab.name,
-          ah,
-          same: ah === undefined || ah === tab.name,
-        }
-      })
-    console.log(JSON.stringify({ totalMs, state, titles, rex }, null, 2))
   })

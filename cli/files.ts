@@ -1,16 +1,17 @@
-// What the commands of every backend for files share: binding a file in the
-// server and showing its page, listing what pages show, and closing a file's
-// windows.
+// `ah window`, and what every command that shows a file shares: its path,
+// binding it in the server (/view/<kind>/files) and showing its page, its
+// thread's URL, and listing what pages show and closing a file's windows.
 
-import { realpathSync } from "node:fs"
-import { resolve as resolvePath } from "node:path"
-import { styleText } from "node:util"
-import select from "@inquirer/select"
-import { callServer, die, ensureStarted, serverUrl } from "./shared.ts"
+import { realpathSync, statSync } from "node:fs"
+import { join, relative, resolve as resolvePath } from "node:path"
+import { Command } from "@commander-js/extra-typings"
+import { callServer, die, ensureStarted, portOption, serverUrl } from "./shared.ts"
+import { pickAgentNear } from "./agents.ts"
 import { showUrl, windowName } from "../platform/window.ts"
 import { currentAgent, currentAddress } from "../platform/session.ts"
 import { status } from "../platform/server.ts"
-import { type AgentId, type FileKind, type NearbyAgent, fileKind } from "../model.ts"
+import { openable, rootFinder } from "../core/workspace.ts"
+import { FILE_KINDS, type FileKind, fileKind } from "../model.ts"
 import type { FileInfo, Location } from "../subjects/files/files.ts"
 import type { ShowRequest } from "../subjects/files/routes.ts"
 
@@ -20,6 +21,34 @@ export function absolute(file: string): string {
     return realpathSync(file)
   } catch {
     return resolvePath(file)
+  }
+}
+
+/** `realPathOrDie`, for a file to serve: under the cwd or its workspace */
+export function openablePathOrDie(file: string): string {
+  const path = realPathOrDie(file)
+  if (!openable(path, process.cwd())) {
+    die(`ah: ${path} is outside this directory and its jj workspace, so ah won't serve it`)
+  }
+  return path
+}
+
+/** The file's real path, or exit with a hint if it's only in the notes dir */
+function realPathOrDie(file: string): string {
+  try {
+    return realpathSync(file)
+  } catch {
+    const root = rootFinder()(process.cwd()) ?? process.cwd()
+    const inNotes = join(root, ".claude/notes", file)
+    let hint = ""
+    try {
+      if (statSync(inNotes).isFile()) {
+        hint = ` (did you mean ${relative(process.cwd(), inNotes)}?)`
+      }
+    } catch {
+      /* not there either */
+    }
+    die(`no such file: ${file}${hint}`)
   }
 }
 
@@ -68,76 +97,6 @@ function whereCommentsGo({ address, addressAlive, via }: FileInfo): string {
   }
 }
 
-/** A nearby agent as its tab's title has it */
-export const agentLine = (a: NearbyAgent) =>
-  [a.label, a.summary].filter(Boolean).join(" | ") +
-  ` (${a.harness}${a.busy ? ", working" : ""})`
-
-/** The live agents in the Rex tab of `block`, in its layout order */
-export async function agentsNear(port: number, block: string): Promise<NearbyAgent[]> {
-  return await callServer<NearbyAgent[]>(
-    serverUrl(port, `core/agents-near?block=${encodeURIComponent(block)}`),
-  )
-}
-
-/** Make `agent` the one the shell in `block` sends to from now on */
-export async function pickAgent(port: number, block: string, agent: AgentId) {
-  await callServer(serverUrl(port, "core/pick"), { body: { block, agent } })
-}
-
-/** From a shell in no agent session: the agent its comments go to (its
- * pick, or its Rex tab's only agent), or else the one the user picks, which
- * becomes the pane's pick; null with no agent in its tab. Picking takes a
- * terminal, so without one, several is an error. */
-async function pickAgentNear(port: number): Promise<AgentId | null> {
-  const block = process.env.REX_BLOCK
-  if (!block) return null
-  const agents = await agentsNear(port, block)
-  const target = agents.find((a) => a.target)
-  if (target) console.error(`ah: comments go to ${agentLine(target)}`)
-  if (target || !agents.length) return target?.id ?? null
-  if (!process.stdin.isTTY) {
-    const list = agents.map((a) => `  ${agentLine(a)}`).join("\n")
-    die(`ah: this tab has ${agents.length} agents; run in a terminal to pick one:\n${list}`)
-  }
-  // q quits, which select has no key for
-  const quit = new AbortController()
-  const onKey = (_: string, key?: { name?: string }) => {
-    if (key?.name === "q") quit.abort()
-  }
-  process.stdin.on("keypress", onKey)
-  try {
-    const picked = await select(
-      {
-        message: "Which agent gets comments?",
-        choices: agents.map((a) => ({ name: agentLine(a), value: a.id })),
-        theme: {
-          // j and k move too
-          keybindings: ["vim"],
-          style: {
-            keysHelpTip: (keys: [string, string][]) =>
-              [...keys, ["q", "quit"]]
-                .map(([k, action]) => `${styleText("bold", k)} ${styleText("dim", action)}`)
-                .join(styleText("dim", " • ")),
-          },
-        },
-      },
-      // stdout is for the page's URL
-      { output: process.stderr, signal: quit.signal },
-    )
-    await pickAgent(port, block, picked)
-    return picked
-  } catch (e) {
-    // q, Ctrl+C, or Ctrl+D
-    if (e instanceof Error && ["AbortPromptError", "ExitPromptError"].includes(e.name)) {
-      die("ah: no agent picked, nothing shown")
-    }
-    throw e
-  } finally {
-    process.stdin.off("keypress", onKey)
-  }
-}
-
 /** `path`'s page in a window of its own or a tab of the default browser,
  * taking focus only as `focusHere` allows. With `shown` saying a window
  * already shows it, that window comes forward instead. */
@@ -161,19 +120,19 @@ export async function showPage(
 
 /** The files pages of the backend for `kind` show, oldest first; the server
  * must be running */
-export const shownFiles = (kind: FileKind, port: number) =>
+const shownFiles = (kind: FileKind, port: number) =>
   callServer<FileInfo[]>(filesUrl(kind, port))
 
 /** A file as `ah window ls` prints it: id, path, where its pages are, agent,
  * and where its comments go */
-export function fileLine(f: FileInfo): string {
+function fileLine(f: FileInfo): string {
   const address = f.address ? `${f.address}${f.addressAlive ? "" : " (gone)"}` : "-"
   const views = f.views.length ? f.views.join(",") : "-"
   return [f.id, f.path, views, f.agent ?? "-", address].join("\t")
 }
 
 /** Close the windows and tabs that show the file */
-export async function closeInServer(
+async function closeInServer(
   kind: FileKind,
   port: number,
   path: string,
@@ -185,3 +144,45 @@ export async function closeInServer(
   if (!res.ok) die(`ah: ${(await res.text()).trim()}`)
   return "closed"
 }
+
+export const windows = new Command("window")
+  .summary("The windows and tabs tools are open in")
+  .description(
+    "The windows and browser tabs ah's tools are open in, and the dashboard's slot",
+  )
+  .action(function () {
+    this.help()
+  })
+
+windows
+  .command("ls")
+  .summary("List the files pages show")
+  .description(
+    "List the files pages show now, one line per file. Each line shows the file's id, its path, where its pages are (window, tab, or dashboard), the agent it's bound to, and where its comments go.",
+  )
+  .addOption(portOption())
+  .action(async ({ port }) => {
+    if (!(await status(port))) return console.error("ah: server not running, nothing shown")
+    const files = (
+      await Promise.all(FILE_KINDS.map((kind) => shownFiles(kind, port)))
+    ).flat()
+    for (const f of files) console.log(fileLine(f))
+  })
+
+windows
+  .command("close")
+  .summary("Close the windows showing a file")
+  .description(
+    "Close the windows and browser tabs that show a file. The dashboard keeps showing it if it's a tracker there. The file stays bound to its agent, and comments sent to it still arrive.",
+  )
+  .argument("<file>")
+  .addOption(portOption())
+  .action(async (file, { port }) => {
+    // The file may be gone by now
+    const path = absolute(file)
+    const result = await closeInServer(fileKind(path), port, path)
+    if (result === "no server")
+      return console.error("ah: server not running, nothing shown")
+    if (result !== "closed") return console.error(`ah: no window shows ${path}`)
+    console.log(`closed ${path}`)
+  })

@@ -1,47 +1,19 @@
-// `ah workspace` and `ah debug agents`, which read the registry as the
-// server last saved it, so they work with the server down, except
-// `ah workspace agents`, which asks the server; and `ah doctor`.
+// `ah workspace`, which reads the registry as the server last saved it, so
+// it works with the server down, except `ah workspace agents`, which asks
+// the server; and `ah doctor`.
 
 import { Command } from "@commander-js/extra-typings"
 import { resolve } from "node:path"
-import type { RexState, Tab, WorkspaceRoot } from "../model.ts"
+import type { Tab, WorkspaceRoot } from "../model.ts"
 import { assetPath } from "../platform/assets.ts"
 import { callServer, die, ensureStarted, portOption, serverUrl } from "./shared.ts"
 import { installProblems, type Problem } from "../platform/install_check.ts"
 import { currentAddress } from "../platform/session.ts"
-import { agentsNear } from "./files.ts"
+import { agentsNear } from "./agents.ts"
 import { readRex } from "../platform/rex.ts"
 import { blockOf, emptyRegistry, loadRegistry } from "../core/registry.ts"
 import { rootFinder, tabRoot } from "../core/workspace.ts"
-import { isCurrent } from "../core/core.ts"
-import { listAgents, readClaudeProcesses } from "../core/agent_view.ts"
 import type { Outdated } from "../core/upgrades.ts"
-
-/** `ah debug agents` */
-export const debugAgents = new Command("agents")
-  .summary("List the agents ah knows about")
-  .description(
-    "List agents that are in a Rex pane or still running, as reported by agent hooks and Claude.",
-  )
-  .option("-a, --all", "Include agents no longer in a block or running")
-  .option("--json", "Print JSON")
-  .action(async ({ all, json }) => {
-    // Without Rex there are no tabs, only agents
-    const rex: RexState | null = await readRex().catch(() => null)
-    const list = listAgents(
-      loadRegistry() ?? emptyRegistry(),
-      await readClaudeProcesses(),
-      rex,
-    ).filter((s) => all || isCurrent(s))
-    if (json) return console.log(JSON.stringify(list, null, 2))
-    for (const s of list.toSorted((a, b) => (a.tab ?? "").localeCompare(b.tab ?? ""))) {
-      const where = s.tab ?? (s.block ? "gone" : "-")
-      const proc = s.process ? `pid ${s.process.pid}` : ""
-      const activity = [s.busy ? "🌀" : "", s.summary ?? ""].filter(Boolean).join(" ")
-      const session = s.session.slice(0, 8)
-      console.log([session, s.harness, where, s.label, proc, activity].join("\t"))
-    }
-  })
 
 interface WorkspaceView {
   root: WorkspaceRoot
