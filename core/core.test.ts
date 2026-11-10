@@ -36,6 +36,7 @@ beforeEach(() => {
 })
 afterEach(() => {
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   rmSync(dir, { recursive: true, force: true })
 })
 
@@ -94,6 +95,35 @@ test("the event log keeps only the start of a prompt", async () => {
   })
   const lines = readFileSync(join(dir, "registry-events.jsonl"), "utf8").trim().split("\n")
   expect(JSON.parse(lines.at(-1)!).prompt).toBe("x".repeat(300))
+})
+
+test("a Claude session in a running Claude's pane is a nested run, until that one ends", async () => {
+  // Claude's record of its running sessions, by pid
+  vi.stubEnv("HOME", dir)
+  const sessions = join(dir, ".claude", "sessions")
+  mkdirSync(sessions, { recursive: true })
+  const running = (pid: number, sessionId: string) =>
+    writeFileSync(
+      join(sessions, `${pid}.json`),
+      JSON.stringify({ sessionId, messagingSocketPath: `/s/${pid}.sock` }),
+    )
+  running(process.pid, "s1")
+  await report(start("claude", "s1"))
+  // `claude -p` from its Bash tool, with no AH_SESSION to tell
+  const nested = await report({ ...start("claude", "s2"), event: "UserPromptSubmit" })
+  expect(await nested.json()).toEqual({ context: null })
+  expect(core.registry.agents.get("block:1")?.session).toBe("s1")
+  await report({ ...start("claude", "s2"), event: "SessionEnd" })
+  expect(core.registry.agents.get("block:1")).toMatchObject({ session: "s1", ended: false })
+  // /clear: the first session ends before the next starts
+  await report({ ...start("claude", "s1"), event: "SessionEnd" })
+  await report(start("claude", "s3"))
+  expect(core.registry.agents.get("block:1")?.session).toBe("s3")
+  // A process that died without ending its session doesn't hold the pane
+  running(99_999_999, "s4")
+  await report(start("claude", "s4", undefined, "block:2"))
+  await report(start("claude", "s5", undefined, "block:2"))
+  expect(core.registry.agents.get("block:2")?.session).toBe("s5")
 })
 
 const rex = (tabs: Record<string, string[]>) =>

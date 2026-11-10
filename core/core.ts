@@ -21,7 +21,7 @@ import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { isOneOf, isRecord, isString, str } from "../platform/guards.ts"
 import { rotateLog } from "../platform/paths.ts"
-import { parseAddress, parseAgentRef, postTo } from "../platform/session.ts"
+import { claudeSocket, parseAddress, parseAgentRef, postTo } from "../platform/session.ts"
 import {
   type Address,
   type AgentRef,
@@ -197,11 +197,30 @@ export class Core {
    * was for, if any. `address` is where the agent says it can be reached. */
   receive(event: RegistryEvent, address: Address | null = null): string | null {
     try {
-      return this.#apply(this.#locate(event), address)
+      const located = this.#locate(event)
+      if (!this.#nested(located)) return this.#apply(located, address)
+      this.#write("nested", event)
+      return null
     } catch (e) {
       console.error(`ah: couldn't apply an event: ${e}`)
       return null
     }
+  }
+
+  /** Whether the event is from a Claude session in a pane whose agent is
+   * another Claude session that hasn't ended and still runs: a `claude -p`
+   * the agent ran, which its hooks can't tell when the agent's session
+   * started before they exported AH_SESSION (cli/hook.ts). /clear and
+   * /resume end the first session before the next one starts. */
+  #nested(event: RegistryEvent): boolean {
+    if (event.kind !== "hook" || event.harness !== "claude" || !event.block) return false
+    const record = this.registry.agents.get(event.block)
+    return (
+      record?.harness === "claude" &&
+      record.session !== event.session &&
+      !record.ended &&
+      claudeSocket(record.session) !== null
+    )
   }
 
   /** Where the agent `ref` names is, for finding its workspace: the tab

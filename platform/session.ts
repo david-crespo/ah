@@ -223,7 +223,9 @@ export function claudeSocket(session: string): string | null {
       continue
     }
     for (const name of names) {
-      if (!/^\d+\.json$/.test(name)) continue
+      // Not one a process that died left behind
+      const pid = name.match(/^(\d+)\.json$/)?.[1]
+      if (!pid || !processRunning(Number(pid))) continue
       try {
         const raw: unknown = JSON.parse(readFileSync(join(dir, name), "utf8"))
         if (
