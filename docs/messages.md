@@ -18,7 +18,7 @@ Request 22e00d40-34dd-4d34-a7f7-1f04315e1416: a comment on the passage "a sessio
 accurate?
 ```
 
-The header tells the agent which file the message is for, which agent skill says how to handle it, and the command that answers it. The header starts with `Doc` for a markdown or AsciiDoc file or `Page` for an HTML page, task tracker or stack. The command has `-p <n>` when the server isn't on the default port, and the path is quoted if it isn't one shell word (`subjects/thread/thread.ts`).
+The header tells the agent which file the message is for, which agent skill says how to handle it, and the command that answers it. The header starts with `Doc` for a markdown or AsciiDoc file or `Page` for an HTML page, task tracker, stack or home page. The command has `-p <n>` when the server isn't on the default port, and the path is quoted if it isn't one shell word (`subjects/thread/thread.ts`).
 
 Each request starts with `Request <id>: `, or `Request <id>, answering <earlier id>: ` when you're replying to a question from the agent. The agent passes that request ID back to `ah message respond`.
 

@@ -3,8 +3,8 @@
 // dashboard shows. `ah tool doc` is a markdown or AsciiDoc file, rendered by
 // ah with a helix pane (views/doc/); `ah tool page` is an HTML file, the
 // agent's own page, served as is on an origin of its own (views/page/), as
-// are `ah tool tracker`'s task lists (tracker.ts) and `ah tool stack`'s
-// stacks of PRs. Showing, listing and closing (subjects/files/), the thread
+// are `ah tool tracker`'s task lists (tracker.ts), `ah tool stack`'s
+// stacks of PRs and `ah tool home`'s home pages. Showing, listing and closing (subjects/files/), the thread
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
@@ -30,6 +30,8 @@ import { mergeDisk } from "../views/doc/merge.ts"
 import { docFormat } from "../views/doc/doc.ts"
 import { STACK_FILE } from "../views/stack/data.ts"
 import { stackJson, stackPage } from "../views/stack/file.ts"
+import { HOME_FILE } from "../views/home/data.ts"
+import { homeJson, homePage } from "../views/home/file.ts"
 
 /** Run a command with inherited stdio, exiting with its code if it fails */
 async function runInherited(cmd: string, args: string[]) {
@@ -41,18 +43,25 @@ async function runInherited(cmd: string, args: string[]) {
   if (code !== 0) process.exit(code ?? 1)
 }
 
-/** Write a new stack's page and its stack.json, unless the page is there */
-function ensureStack(file: string, title?: string) {
+/** Write a page app's new page and the JSON file next to it, unless the
+ * page is there: a stack's, or a home page's */
+function ensureApp(
+  tool: string,
+  file: string,
+  title: string | undefined,
+  page: (title: string) => string,
+  data: [name: string, json: (title: string) => string],
+) {
   if (existsSync(file)) return
   if (!/\.html$/i.test(file)) die(`no such file: ${file}`)
-  if (!title) die("ah tool stack: a new stack needs --title")
+  if (!title) die(`ah tool ${tool}: a new ${tool} page needs --title`)
   newPathOrDie(file)
   mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, stackPage(title))
+  writeFileSync(file, page(title))
   console.log(`wrote ${absolute(file)}`)
-  const json = join(dirname(file), STACK_FILE)
+  const json = join(dirname(file), data[0])
   if (existsSync(json)) return
-  writeFileSync(json, stackJson(title))
+  writeFileSync(json, data[1](title))
   console.log(`wrote ${absolute(json)}`)
 }
 
@@ -227,16 +236,31 @@ const stack = new Command("stack")
   .option("--title <title>", "A new stack's title")
   .addOption(portOption())
   .action(async (file, { title, port }) => {
-    ensureStack(file, title)
+    ensureApp("stack", file, title, stackPage, [STACK_FILE, stackJson])
+    await openFile(openablePathOrDie(file), "window", port)
+  })
+
+const home = new Command("home")
+  .summary("A home page for an agent that coordinates others across projects")
+  .description(
+    `Open a home page: what an agent that runs other agents across projects (a concierge) keeps for its user, in four tabs. In progress is the live agents, each joined to a project; Waiting on you, Finished and All projects come from the home.json next to the page and the workstreams.md it points to. In home.json: \`title\` is the page's; \`workstreams\` is the path to the prose file of projects, relative to home.json (default ../workstreams.md), whose \`## Group\` headings and \`**Name.**\` paragraphs are the projects; \`projects\` lists each project by its name there, with the \`repos\` (absolute paths) an agent's cwd puts it in, its \`prs\` ("owner/repo#n"), and its \`workers\` ({agent or session, asked}) for agents started for it; \`waiting\` is what waits on the user ({id, project, text, written as an ISO time, and optionally note, link and links of {label, href}}); \`finished\` is what's done ({project, text, at}). A project's status and the agents are computed, so they aren't written. The page redraws when home.json or workstreams.md changes, and asks for the agents every 5 seconds while it's in view. If the file isn't there, ah writes it and a home.json to fill in, which needs --title. ${BINDING}`,
+  )
+  .argument("<file>")
+  .option("--title <title>", "A new home page's title")
+  .addOption(portOption())
+  .action(async (file, { title, port }) => {
+    ensureApp("home", file, title, homePage, [HOME_FILE, homeJson])
     await openFile(openablePathOrDie(file), "window", port)
   })
 
 export const tool = new Command("tool")
-  .summary("Open one of ah's tools: a doc, a page, a tracker, a stack, or the dashboard")
+  .summary(
+    "Open one of ah's tools: a doc, a page, a tracker, a stack, a home page, or the dashboard",
+  )
   .description(
     "ah's tools, each a page whose comments and buttons talk back to agent sessions",
   )
   .action(function () {
     this.help()
   })
-for (const command of [doc, page, tracker, stack, dashboard]) tool.addCommand(command)
+for (const command of [doc, page, tracker, stack, home, dashboard]) tool.addCommand(command)

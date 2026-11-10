@@ -45,7 +45,7 @@ Codex fires `SessionStart` on the first prompt rather than at launch, so a Codex
 
 ## Skills
 
-`skills/` contains agent-facing instructions for using the `ah` tools (`ah-doc`, `ah-page`, `ah-tracker`, `ah-stack`, and `ah-skepsis`) and for opening panes with `rex split` (`ah-panes`). Copy them into your harness's skills directory. Claude Code also takes a symlink to each; Codex, OpenCode and pi skip links, so they need copies.
+`skills/` contains agent-facing instructions for using the `ah` tools (`ah-doc`, `ah-page`, `ah-tracker`, `ah-stack`, `ah-home`, and `ah-skepsis`) and for opening panes with `rex split` (`ah-panes`). Copy them into your harness's skills directory. Claude Code also takes a symlink to each; Codex, OpenCode and pi skip links, so they need copies.
 
 ## Helix
 
