@@ -5,7 +5,7 @@ description: "Show the user an HTML page you wrote (a dashboard, a report, a vis
 
 # HTML pages in ah
 
-ah's `html` backend serves an HTML file you wrote, as is, plus files next to it
+ah's `page` view serves an HTML file you wrote, as is, plus files next to it
 (scripts, stylesheets, data), so relative links work. The page reloads
 whenever anything in the file's directory changes, keeping its scroll
 position, so keep editing the files with Edit or Write and the user sees
@@ -28,7 +28,9 @@ for every `ah` command. opencode has no sandbox.
    on. Keep data in files next to it (`data.json`) when it will change, so
    updating it is a small write. Wrap the content in `<main>`: a comment's
    surrounding text comes from there. ah adds its own elements with the ids
-   `conversation`, `popover`, and `toast`; don't use those. The
+   `conversation`, `conversation-history`, `popover`, `comment-text`,
+   `dellm`, `send` and `toast`, and finds them by id; don't use those, or
+   ah's handlers land on the page's element. The
    conversation button is fixed in the bottom-right corner at `z-index: 9`,
    so keep the page's own fixed elements out of that corner, and give
    `main` about 80px of bottom padding so the end of the page can scroll

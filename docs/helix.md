@@ -23,11 +23,12 @@ cargo xtask steel
 
 ## Steel config
 
-`editors/helix/` has three Steel modules:
+`editors/helix/` has four Steel modules:
 
 - `ah.scm` defines the commands `:ah-comment` for the selected lines and `:ah-comment-file` for the whole file. They shell out to the `ah` CLI, which has to be on Helix's `PATH`.
 - `comment-box.scm` draws the UI component: a text input under the selected lines with an optional list underneath. It doesn't know anything about `ah`.
 - `auto-merge.scm` takes the agent's edits (see [Taking the agent's edits](#taking-the-agents-edits)). `ah.scm` requires it.
+- `auto-merge-clients.scm` makes the merge wait while any client is typing, in a Helix with sessions, where `auto-merge.scm` loads it (see [My fork](#my-fork)).
 
 Symlink the `editors/helix` directory into Helix's config directory (`~/.config/helix`), which is on Steel's module search path:
 

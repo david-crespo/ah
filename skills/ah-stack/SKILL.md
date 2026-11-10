@@ -50,9 +50,12 @@ it in a window, and binds it to this session. Run the same command without
   trunk. Commits below a fork that no PR's bookmark is on get a card of their
   own, shared by the PRs above, since each of them would include those
   commits on GitHub. The page draws the graph the way `jj log` does.
-- `notes` and `summary` are plain text with blank lines between paragraphs
-  and backticks for code. Write the summary for a reviewer: what the PR does,
-  then where to start reading.
+- `notes` is a list of plain-text strings, each one paragraph. `summary` is
+  plain text with blank lines between paragraphs. Both take backticks for
+  code. Write the summary for a reviewer: what the PR does, then where to
+  start reading.
+- A PR can be listed before its bookmark exists; the page shows it with "no
+  bookmark yet" until it does.
 - The page redraws when `stack.json` or a PR's body changes and when a jj
   operation lands, so rewriting commits or moving bookmarks shows up on its
   own.
@@ -73,7 +76,8 @@ server open that diff in skepsis: `-r <change>` for a commit,
 the agent the page is bound to as messages; treat them as the user's. A
 second click on the same diff brings its page back rather than starting
 another. The server runs skepsis with `AH_SKEPSIS` from its environment
-(like `node ~/skepsis/cli.ts`), else `skepsis` on PATH; if a button outlines
+(like `node /Users/me/skepsis/cli.ts`: an absolute path, since it runs
+without a shell to expand `~`), else `skepsis` on PATH; if a button outlines
 red, its tooltip says why.
 
 ## PR bodies

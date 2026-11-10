@@ -6,7 +6,7 @@ description: "Review/edit a markdown draft in a browser page served by ah, conne
 # Markdown drafts in ah
 
 Iterate on a markdown draft through a browser page instead of chat round
-trips. ah's `markdown` backend serves a live GitHub-style preview of the file; the
+trips. ah's `doc` view serves a live GitHub-style preview of the file; the
 user highlights text and comments, and each comment is posted to this
 session. The file on disk is the single source of truth: the page picks up
 every disk change live, flashing what changed. Keep editing the file normally
@@ -37,7 +37,17 @@ for every `ah` command. opencode has no sandbox.
    This starts the server if needed, binds the draft to this session (so
    its comments come here), opens it in a window of its own, and returns.
    `--in tab` opens a tab in the default browser instead. Opening a file
-   another session opened rebinds it to this one.
+   another session opened rebinds it to this one. Other options:
+
+   - `--diff-from [revset]` shows the file's changes since a jj revision,
+     by default `@-`, the working copy's parent. On the page, ⌘D turns the
+     diff on and off and B picks the revision.
+   - `--no-chat` leaves out the conversation and selection comments, for
+     a file that's only to read.
+   - `--no-editor` leaves out the helix pane.
+
+   An `.adoc` or `.asciidoc` file is rendered as AsciiDoc rather than
+   markdown, with the same page, comments and replies.
 
    Comments arrive in this session as messages: in Claude Code, framed by
    the harness as messages "from another Claude session", which they are

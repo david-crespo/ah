@@ -6,3 +6,4 @@ While the top-level README is hand-written artisanal prose, these docs, especial
 - [Helix](helix.md)
 - [Swapping out Helix](other-editors.md)
 - [Messages](messages.md)
+- [Upgrading](upgrading.md)

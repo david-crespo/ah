@@ -18,7 +18,7 @@ Request 22e00d40-34dd-4d34-a7f7-1f04315e1416: a comment on the passage "a sessio
 accurate?
 ```
 
-The header tells the agent which file the message is for, which agent skill says how to handle it, and the command that answers it. The header starts with `Markdown` for a markdown file or `HTML` for an HTML page or task tracker. The command has `-p <n>` when the server isn't on the default port, and the path is quoted if it isn't one shell word (`subjects/thread/thread.ts`).
+The header tells the agent which file the message is for, which agent skill says how to handle it, and the command that answers it. The header starts with `Doc` for a markdown or AsciiDoc file or `Page` for an HTML page, task tracker or stack. The command has `-p <n>` when the server isn't on the default port, and the path is quoted if it isn't one shell word (`subjects/thread/thread.ts`).
 
 Each request starts with `Request <id>: `, or `Request <id>, answering <earlier id>: ` when you're replying to a question from the agent. The agent passes that request ID back to `ah message respond`.
 
@@ -30,7 +30,7 @@ The rest of the request depends on its kind (`subjects/thread/kinds.ts`, `views/
 | `comment`      | a selection                     | `a comment on the passage "<selection>" (after "<prefix>", before "<suffix>"):` and the text on the next line          |
 | `dellm`        | a selection's de-LLM button     | `de-LLM the passage "<selection>" (...): rewrite it to sound like a person`, then `. Guidance: <text>` if there is any |
 | `go`           | a tracker item's Go button      | `Go ahead with item <id>: <title>`                                                                                     |
-| `item-comment` | a tracker item's comment button | `a comment on item <id>: <title>`, a blank line, then the text                                                         |
+| `item-comment` | a tracker item's comment button | `a comment on item <id>: <title>` (`step <id><letter>` for a step), a blank line, then the text                        |
 | `status`       | a tracker status icon's menu    | `set item <id> to <status>: <title>`, or `step <id><letter>`                                                           |
 
 Selections are quoted from the rendered text, not the source, with up to 60 characters of surrounding context (`<prefix>` and `<suffix>`) on each side to tell repeated passages apart. If the selection is inside an embed, like a code snippet from a GitHub permalink, the request adds `in the embed of <url>` after the passage.
@@ -47,9 +47,31 @@ The text is JSON-quoted so the notice stays on a single line. If a change only a
 
 ### Held requests
 
-Each file is bound to the agent that opened its page with `ah tool doc` or `ah tool page`. When you open a page from a shell in Rex instead, it uses the pane's existing agent pick or the tab's only agent; if there are several and no pick, it asks you to choose. Requests go to that agent. In Rex, the binding follows the agent through `/clear` or a restart in its pane. If it's gone, requests go to another live agent in its tab.
+Each file is bound to the agent that opened its page with `ah tool doc` or `ah tool page`. When you open a page from a shell in Rex instead, it uses the pane's existing agent pick or the tab's only agent; if there are several and no pick, it asks you to choose. Requests go to that agent. In Rex, the binding follows the agent through `/clear` or a restart in its pane. If it's gone, requests go to another live agent in its tab, or failing that, to the live agent in the file's jj workspace that last did something (`core/directory.ts`).
 
 If you submit a request when no agent is reachable, the request waits in the thread's log and the page tells you it's held. Once an agent connects, or another agent runs `ah tool doc` or `ah tool page` on the file and so binds it, requests still waiting that have never been delivered are sent together in a single message, oldest first. Requests already delivered and interrupted work aren't automatically resent; an agent can find them with `ah message pending <file>`.
+
+## Notices from the hooks
+
+The agent's own hooks (`ah hook agent`) get text back from the server, which the harness shows the agent (`core/notices.ts`). When a session starts in a workspace with active trackers, it's told them, with the current one marked:
+
+```
+Active trackers in this workspace (`ah tool tracker ls`). The ah dashboard shows the current one, which is what a request that doesn't name a tracker refers to.
+- /path/to/.claude/notes/2026-11-09-review-tracker/index.html (current)
+When picking up work, check the tracker it belongs to, and keep it updated.
+```
+
+If `ah doctor` would find files in the workspace that use an old ah format, or problems with how ah is set up, a line after that says so and asks the agent to run it (`core/upgrades.ts`).
+
+On each prompt after that, the agent gets one line for each of these that changed since it was last told, and nothing if none did:
+
+```
+ah: the dashboard now shows <path> as this workspace's current tracker
+ah: no window shows <path>, which you opened, any more
+ah: the dashboard is closed now
+```
+
+The first is `ah: this workspace has no current tracker now` when the current tracker is parked or finished with none to take over. What each agent was last told is kept in memory, so after a server restart an agent's next prompt says nothing.
 
 ## Comments sent to a tab
 
@@ -161,7 +183,7 @@ Page requests for /path/to/workspace/hello/index.html (load the /ah-page skill b
 Request <request-id>: Say hello in this page's chat.
 ```
 
-The agent can reply by running the command below with the `<request-id>` it received. The reply shows up in the page's chat history. When using the CLI, `done` automatically starts the work if it isn't already running.
+The agent can reply by running the command below with the `<request-id>` it received. The reply shows up in the page's chat history. `done` doesn't need a `start` first.
 
 ```sh
 ah message respond hello/index.html done <request-id> --text 'Hello!'
@@ -188,7 +210,7 @@ Both request endpoints take chat messages and selection comments. For example:
 
 `kind` is required. `chat` requires `text`, and `comment` also requires `args.selection`. The other request kinds are listed under [Requests from a page](#requests-from-a-page); `go`, `item-comment` and `status` only work on HTML pages. `replyTo` is optional and names the earlier request you're answering. Successful requests return `request` and `agentConnected`, just like in the button example.
 
-The WebSockets send a snapshot on connect and whenever the thread changes: `type` is `"thread"`, `file` is the absolute path, `entries` is the conversation history, and `requests` holds the current request states. `agentConnected` indicates whether the bound agent is reachable, and `replay` is true on the initial snapshot. On HTML pages, `ah`'s injected script already listens to this socket and dispatches an `ah-thread` event on `document` with the snapshot in `event.detail`.
+The WebSockets send a snapshot on connect and whenever the thread changes: `type` is `"thread"`, `subject` is the file's absolute path, `entries` is the conversation history, and `requests` holds the current request states. `agentConnected` indicates whether the bound agent is reachable, and `replay` is true on the initial snapshot. On HTML pages, `ah`'s injected script already listens to this socket and dispatches an `ah-thread` event on `document` with the snapshot in `event.detail`.
 
 ### API endpoints
 
