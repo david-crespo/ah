@@ -161,15 +161,21 @@ main .more {
 /* A project's Stack button, and a link to a file, which opens in a window */
 main button.stack {
   font: inherit;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 20px;
   color: var(--accent);
-  background: none;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 6px;
-  margin-left: 6px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 5px;
+  padding: 0 9px;
+  margin-left: 8px;
   cursor: pointer;
+  white-space: nowrap;
   vertical-align: 1px;
+}
+main button.stack:hover {
+  background: color-mix(in srgb, var(--accent) 18%, var(--card));
 }
 main button.file {
   font: inherit;
