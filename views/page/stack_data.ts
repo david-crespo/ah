@@ -57,7 +57,7 @@ export interface Pr extends StackPr {
    * null while it's missing */
   diff: { from: string; to: string } | null
   /** Set when the base is inside an earlier PR's commits, not at its tip */
-  forksFrom: { n: number; change: string } | null
+  forksFrom: { n: number; change: string; short: string } | null
   /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
   pushed: string | null
   files: FileStat[]
@@ -232,8 +232,8 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   // A base that's in an earlier PR but isn't its tip: the PR forks mid-way
   for (const [pr, change] of prs) {
     for (const [q] of prs) {
-      if (q.n < pr.n && q.commits.slice(1).some((c) => c.change === change))
-        pr.forksFrom = { n: q.n, change }
+      const fork = q.commits.slice(1).find((c) => c.change === change)
+      if (q.n < pr.n && fork) pr.forksFrom = { n: q.n, change, short: fork.short }
     }
   }
   return {

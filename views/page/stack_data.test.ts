@@ -224,7 +224,13 @@ test("readStack drops an earlier PR's commits from one that forks inside it", as
       })),
     ).toEqual([
       { n: 3, base: "one", commits: ["Add f"], forksFrom: null },
-      { n: 2, base: b, commits: ["Add e"], forksFrom: { n: 1, change: b } },
+      {
+        n: 2,
+        base: b,
+        commits: ["Add e"],
+        // As the commit's own row has it
+        forksFrom: { n: 1, change: b, short: stack.prs[2].commits[2].short },
+      },
       {
         n: 1,
         base: expect.any(String),
