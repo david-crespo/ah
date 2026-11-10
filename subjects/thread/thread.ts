@@ -15,13 +15,7 @@ import { join } from "node:path"
 import { DEFAULT_PORT } from "../../platform/cli.ts"
 import { ahStateDir } from "../../platform/paths.ts"
 import { describeAddress, postTo, addressAlive } from "../../platform/session.ts"
-import {
-  type Address,
-  type Request,
-  type Requestable,
-  type SubjectKey,
-  subjectKey,
-} from "../../core/model.ts"
+import type { Address, Request, Subject } from "../../core/model.ts"
 import {
   type ActivityInput,
   type RequestInput,
@@ -30,25 +24,25 @@ import {
   ThreadLog,
 } from "./events.ts"
 
-function logPath(kind: string, key: SubjectKey): string {
+function logPath(kind: string, path: string): string {
   const dir = ahStateDir(kind)
   mkdirSync(dir, { recursive: true })
-  // One log per subject, named by its key, a file's with slashes flattened
-  return join(dir, key.replaceAll("/", "-") + ".comments.jsonl")
+  // One log per subject, named by its path with slashes flattened
+  return join(dir, path.replaceAll("/", "-") + ".comments.jsonl")
 }
 
 /** The one line before the requests in every post: where they're from,
  * and the command that answers them, so the agent doesn't have to work out
- * the subject's key or the server's port. The skill explains the rest. */
+ * the subject's path or the server's port. The skill explains the rest. */
 export function header(
   { kind, skill }: Pick<ThreadOptions, "kind" | "skill">,
-  key: SubjectKey,
+  path: string,
   port: number,
 ): string {
   const portFlag = port === DEFAULT_PORT ? "" : ` -p ${port}`
   const tool = kind[0].toUpperCase() + kind.slice(1)
-  const respond = `ah message respond${portFlag} ${shellWord(key)} <phase> <request ids>`
-  return `${tool} requests for ${key} (load the /${skill} skill before handling these, and answer on the page with ${respond}):`
+  const respond = `ah message respond${portFlag} ${shellWord(path)} <phase> <request ids>`
+  return `${tool} requests for ${path} (load the /${skill} skill before handling these, and answer on the page with ${respond}):`
 }
 
 /** A path as one shell word, single-quoted only if it needs to be */
@@ -66,7 +60,7 @@ export function render(request: Request, kinds: RequestKinds): string {
  * changes as the agent moves through sessions, or the session that opened
  * it */
 export interface Bound {
-  readonly subject: Requestable
+  readonly subject: Subject
   address(): Address | null
 }
 
@@ -105,8 +99,8 @@ export class Thread {
   }
 
   static async open(bound: Bound, options: ThreadOptions): Promise<Thread> {
-    const key = subjectKey(bound.subject)
-    const log = await ThreadLog.open(logPath(options.kind, key), key)
+    const { path } = bound.subject
+    const log = await ThreadLog.open(logPath(options.kind, path), path)
     return new Thread(bound, log, options)
   }
 

@@ -176,10 +176,7 @@ export interface WorkspaceRecord {
 
 // Subjects and requests
 
-/** A jj change id. Only diff subjects use it, which aren't built yet. */
-export type ChangeId = string
-
-/** The kinds of subject that are files. A file's is by its extension. */
+/** The kinds of subject, which decide the views that can show one */
 export const FILE_KINDS = ["doc", "page"] as const
 export type FileKind = (typeof FILE_KINDS)[number]
 
@@ -188,61 +185,18 @@ export type FileKind = (typeof FILE_KINDS)[number]
 export const fileKind = (path: string): FileKind =>
   /\.html?$/i.test(path) ? "page" : "doc"
 
-/** Subjects there's only one of, known by their kind */
-export const SINGLETONS = ["github-notifications"] as const
-export type Singleton = (typeof SINGLETONS)[number]
-
-/** What a view ah hosts or binds is about. The kind is the subject's type,
- * which decides the views that can show it. A file's is by extension: page
- * or doc. A page is its own view, and decides what it is (a task
- * list, say) and the requests it sends. Views Rex places without ah (the
- * harness TUI, glow) aren't covered.
- *
- * Partly a target rather than what the code does: only the file kinds are
- * built, and code that handles them mostly takes a path and a `FileKind`. */
-export type Subject =
-  | { kind: "doc"; path: string }
-  | { kind: "page"; path: string }
-  /** Not built: the GitHub tool's, for the threads it shows */
-  | { kind: Singleton }
-  /** Not built: there's no diff view yet */
-  | { kind: "diff"; from: ChangeId; to: ChangeId }
-  /** Not used as values yet: the dashboard shows the focused tab and its
-   * workspace without naming them as subjects. Same for the two below. */
-  | { kind: "workspace"; root: WorkspaceRoot }
-  | { kind: "tab"; tab: TabId }
-  | { kind: "rex-session"; session: RexSessionId }
-
-/** A subject that takes requests and has a bound agent: a file, a
- * singleton, or a diff, when it's built */
-export type Requestable = Extract<Subject, { kind: FileKind | Singleton | "diff" }>
-
-export type FileSubject = Extract<Subject, { kind: FileKind }>
-
-export const fileSubject = (path: string): FileSubject => ({ kind: fileKind(path), path })
-
-export const isFile = (subject: Subject): subject is FileSubject =>
-  subject.kind === "doc" || subject.kind === "page"
-
-/** A requestable subject as a string, for keeping its thread, binding and
- * held requests by, in the registry and in its log's name: a file's
- * absolute path, a singleton's kind, or `diff:<from>..<to>` */
-export type SubjectKey = string
-
-export function subjectKey(subject: Requestable): SubjectKey {
-  if (isFile(subject)) return subject.path
-  if (subject.kind === "diff") return `diff:${subject.from}..${subject.to}`
-  return subject.kind
+/** What a view ah hosts or binds is about: a file, which takes requests and
+ * has a bound agent. The registry keeps its binding and held requests by its
+ * absolute path, and its thread's log is named by it. A page is its own
+ * view, and decides what it is (a task list, say) and the requests it
+ * sends. Views Rex places without ah (the harness TUI, glow) aren't
+ * covered. */
+export interface Subject {
+  kind: FileKind
+  path: string
 }
 
-/** The subject a key is for; null if it's no key `subjectKey` makes */
-export function keySubject(key: string): Requestable | null {
-  if (key.startsWith("/")) return fileSubject(key)
-  const diff = /^diff:(.+)\.\.(.+)$/.exec(key)
-  if (diff) return { kind: "diff", from: diff[1], to: diff[2] }
-  const singleton = SINGLETONS.find((kind) => kind === key)
-  return singleton ? { kind: singleton } : null
-}
+export const fileSubject = (path: string): Subject => ({ kind: fileKind(path), path })
 
 export type RequestId = string
 
@@ -278,7 +232,7 @@ export interface Activity {
   at: string
 }
 
-/** One line of a requestable subject's request log */
+/** One line of a subject's request log */
 export type ThreadEntry = (Request | Activity) & { seq: number }
 
 /** Where a request stands, worked out from the log */

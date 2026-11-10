@@ -42,14 +42,10 @@ import {
   type BlockId,
   fileSubject,
   HARNESSES,
-  isFile,
-  keySubject,
   type NearbyAgent,
   type RexState,
-  type Requestable,
   type Route,
-  type SubjectKey,
-  subjectKey,
+  type Subject,
   type WorkspaceRoot,
 } from "./model.ts"
 import { Notices, type Showing, startContext } from "./notices.ts"
@@ -187,12 +183,8 @@ export class Core implements AgentDirectory {
     core.trackers.prune()
     // Files that are gone take no more requests
     const { bindings, held } = core.registry
-    const gone = (key: SubjectKey) => {
-      const subject = keySubject(key)
-      return !subject || (isFile(subject) && !existsSync(subject.path))
-    }
-    for (const key of bindings.keys()) if (gone(key)) bindings.delete(key)
-    for (const key of held) if (gone(key)) held.delete(key)
+    for (const path of bindings.keys()) if (!existsSync(path)) bindings.delete(path)
+    for (const path of held) if (!existsSync(path)) held.delete(path)
     // A stop exits on SIGTERM, which would drop a change from the last 200ms
     process.on("exit", () => {
       if (core.#saveTimer) core.#save()
@@ -254,25 +246,23 @@ export class Core implements AgentDirectory {
     if (address) this.#addresses.set(agent, address)
   }
 
-  bindSubject(subject: Requestable, agent: AgentId) {
-    const key = subjectKey(subject)
-    if (this.registry.bindings.get(key) === agent) return
-    this.registry.bindings.set(key, agent)
+  bindSubject({ path }: Subject, agent: AgentId) {
+    if (this.registry.bindings.get(path) === agent) return
+    this.registry.bindings.set(path, agent)
     this.#scheduleSave()
   }
 
-  binding(subject: Requestable): AgentId | null {
-    return this.registry.bindings.get(subjectKey(subject)) ?? null
+  binding({ path }: Subject): AgentId | null {
+    return this.registry.bindings.get(path) ?? null
   }
 
-  route(subject: Requestable, target: AgentId | null = null): Route | null {
+  route(subject: Subject, target: AgentId | null = null): Route | null {
     const agent = target ?? this.binding(subject)
     const own = agent && this.address(agent)
     if (own && addressAlive(own)) return { address: own, via: "agent" }
     const standIn = agent && this.standIn(agent)
     if (standIn) return { address: standIn, via: "tab" }
-    const workspace =
-      !target && isFile(subject) ? this.#liveInWorkspace(subject.path) : null
+    const workspace = target ? null : this.#liveInWorkspace(subject.path)
     if (workspace) return { address: workspace, via: "workspace" }
     return own ? { address: own, via: "agent" } : null
   }
@@ -300,17 +290,16 @@ export class Core implements AgentDirectory {
     return addressAlive(own) ? own : (this.standIn(agent) ?? own)
   }
 
-  hold(subject: Requestable, held: boolean) {
-    const key = subjectKey(subject)
-    if (this.registry.held.has(key) === held) return
-    if (held) this.registry.held.add(key)
-    else this.registry.held.delete(key)
+  hold({ path }: Subject, held: boolean) {
+    if (this.registry.held.has(path) === held) return
+    if (held) this.registry.held.add(path)
+    else this.registry.held.delete(path)
     this.#scheduleSave()
   }
 
   /** The subjects whose threads hold requests, to send when agents come and go */
-  get held(): Requestable[] {
-    return [...this.registry.held].flatMap((key) => keySubject(key) ?? [])
+  get held(): Subject[] {
+    return [...this.registry.held].map(fileSubject)
   }
 
   /** Codex and opencode are reached by their session, so an agent's is

@@ -5,7 +5,6 @@ import {
   type Request,
   type RequestState,
   type ThreadEntry,
-  type SubjectKey,
 } from "../../core/model.ts"
 import { isOneOf, isRecord } from "../../platform/guards.ts"
 
@@ -40,7 +39,8 @@ export type RequestResult = { request: ThreadEntry & Request; agentConnected: bo
 /** The thread as a page gets it: on connecting, and after each change */
 export type ThreadSnapshot = {
   type: "thread"
-  subject: SubjectKey
+  /** The subject's path */
+  subject: string
   entries: ThreadEntry[]
   requests: RequestState[]
   agentConnected: boolean
@@ -136,13 +136,14 @@ export class ThreadLog {
   /** The requests a post has carried to an agent */
   private delivered = new Set<string>()
   private path: string
-  subject: SubjectKey
-  private constructor(path: string, subject: SubjectKey) {
+  /** The subject's path */
+  subject: string
+  private constructor(path: string, subject: string) {
     this.path = path
     this.subject = subject
   }
 
-  static async open(path: string, subject: SubjectKey) {
+  static async open(path: string, subject: string) {
     const log = new ThreadLog(path, subject)
     let source: string
     try {

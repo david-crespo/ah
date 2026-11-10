@@ -197,10 +197,9 @@ test("with its agent's tab gone, a file's requests go to an agent in its workspa
 test("bindings and held subjects outlast the server, while their files do", () => {
   const kept = fileSubject(join(dir, "kept.md"))
   const gone = fileSubject(join(dir, "gone.md"))
-  const github = { kind: "github-notifications" } as const
   writeFileSync(kept.path, "")
   writeFileSync(gone.path, "")
-  for (const subject of [kept, gone, github]) {
+  for (const subject of [kept, gone]) {
     core.bindSubject(subject, "block:1")
     core.hold(subject, true)
   }
@@ -209,8 +208,7 @@ test("bindings and held subjects outlast the server, while their files do", () =
   const after = Core.load(join(dir, "registry.json"))
   expect(after.binding(kept)).toEqual("block:1")
   expect(after.binding(gone)).toEqual(null)
-  expect(after.binding(github)).toEqual("block:1")
-  expect(after.held).toEqual([kept, github])
+  expect(after.held).toEqual([kept])
 })
 
 test("a change still waiting to be saved is saved as the server exits", () => {
