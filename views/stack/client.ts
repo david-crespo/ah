@@ -22,10 +22,17 @@
 // on every jj operation, and when stack.json or a body is saved. Which
 // sections are open is kept across reloads and redraws, and after a reload
 // the last stack is drawn at once while the new one loads.
+//
+// Any PR's card folds to one line: its title, its state on GitHub and its
+// diff stat. A merged one starts folded, and the user's own choice wins and
+// is kept. A PR whose bookmark is gone but which GitHub has merged or closed
+// goes with the PRs with no commits of their own (layout.ts). GitHub's side
+// from the last load is kept too, so neither waits on gh after a reload.
 
 import type { Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
 import { escapeHtml } from "../escape.ts"
+import { arrangeRows, doneOnGithub, isCollapsed } from "./layout.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -115,12 +122,17 @@ const REVIEWS: Record<string, [string, string, string]> = {
 const note = (text: string, cls: string, title = "") =>
   `<span class="gh-note ${cls}"${title ? ` title="${escapeHtml(title)}"` : ""}>${escapeHtml(text)}</span>`
 
+/** The PR's link on GitHub, with its state */
+function githubLink(gh: GithubPr): string {
+  const state = gh.state === "OPEN" && gh.isDraft ? "draft" : gh.state.toLowerCase()
+  return `<a class="gh-pr ${state}" href="${escapeHtml(gh.url)}" target="_blank" rel="noreferrer">#${gh.number} ${STATES[state as keyof typeof STATES]}</a>`
+}
+
 /** The PR's link and where it stands on GitHub, with what doesn't match
  * here: its head, saying which side moved, and its base, which should be the
  * PR below it or trunk */
 function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
-  const state = gh.state === "OPEN" && gh.isDraft ? "draft" : gh.state.toLowerCase()
-  const link = `<a class="gh-pr ${state}" href="${escapeHtml(gh.url)}" target="_blank" rel="noreferrer">#${gh.number} ${STATES[state as keyof typeof STATES]}</a>`
+  const link = githubLink(gh)
   if (gh.state !== "OPEN") return link
   const notes: string[] = []
   if (gh.checks) {
@@ -196,23 +208,44 @@ function commitList(commits: Commit[], unpushed = 0, button = ""): string {
   return `<ol class="commits">${items.join("")}</ol>`
 }
 
+// Lucide's chevron-right, turned down when the card is open
+const CHEVRON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>`
+
 function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
+  const collapsed = isCollapsed(folds[pr.bookmark], gh)
+  const title = escapeHtml(gh?.title ?? pr.title)
+  // A dot on the graph for its commits, which aren't drawn
+  const dot = collapsed && pr.commits.length ? " dot" : ""
+  const head = `<div class="pr-head${dot}">
+      <button type="button" class="fold" data-fold="${escapeHtml(pr.bookmark)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>
+      <h2><span class="n">${pr.n}.</span> ${title}</h2>
+      ${collapsed && gh ? githubLink(gh) : ""}
+      ${pr.diff ? stat(pr.files, pr.diff) : ""}
+    </div>`
+  if (collapsed) return `<section class="pr collapsed">${head}</section>`
   // Before a first push, all of them are to push, which goes without saying
   const unpushed = pr.pushed ? pr.unpushed : 0
   // Its bookmark is new on the remote, so the button goes by Body
   const fresh = !pr.pushed && pr.commits.length > 0
+  const files = pr.files.length
+  const more = files
+    ? `Summary and ${files} file${files === 1 ? "" : "s"}`
+    : pr.summary
+      ? "Summary"
+      : ""
   return `<section class="pr">
-    <div class="pr-head">
-      <h2><span class="n">${pr.n}.</span> ${escapeHtml(gh?.title ?? pr.title)}</h2>
-      ${pr.diff ? stat(pr.files, pr.diff) : ""}
-    </div>
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    ${head}
+    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     ${pushResult(pr)}
-    <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
-      <summary>Summary and ${pr.files.length} file${pr.files.length === 1 ? "" : "s"}</summary>
+    ${
+      more
+        ? `<details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
+      <summary>${more}</summary>
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
-      ${fileList(pr.files)}
-    </details>
+      ${files ? fileList(pr.files) : ""}
+    </details>`
+        : ""
+    }
     ${commitList(pr.commits, unpushed, unpushed ? pushButton(pr) : "")}
   </section>`
 }
@@ -232,8 +265,12 @@ function sharedCard(group: Shared): string {
   </section>`
 }
 
+// In localStorage, so a new window knows which PRs merged before gh answers
 const githubKey = `ah-stack-github:${location.pathname}`
-let github = read<GithubPrs>(sessionStorage, githubKey) ?? {}
+let github = read<GithubPrs>(localStorage, githubKey) ?? {}
+/** By bookmark, whether the user folded the PR (true) or opened it */
+const foldsKey = `ah-stack-folds:${location.pathname}`
+const folds = read<Record<string, boolean>>(localStorage, foldsKey) ?? {}
 let githubError = ""
 let drawn = ""
 
@@ -260,7 +297,7 @@ function graphLanes(rows: Group[]): { lane: number; join: number | null }[] {
 
 function draw(stack: Stack, error = "") {
   document.title = stack.title
-  const { rows } = stack
+  const rows = arrangeRows(stack.rows, github)
   const lanes = graphLanes(rows)
   /** The nearest PR under a row, past any shared commits */
   const prBelow = (row: Group): Pr | undefined => {
@@ -318,7 +355,8 @@ function drawGraph() {
   /** Per lane, where the line on it so far starts */
   const from: (number | undefined)[] = []
   for (const row of box.querySelectorAll<HTMLElement>(".row")) {
-    const ys = [...row.querySelectorAll(".commit > summary")].map(mid)
+    // A folded card's commits as one dot, by its title
+    const ys = [...row.querySelectorAll(".commit > summary, .pr-head.dot")].map(mid)
     if (!ys.length) continue
     const lane = Number(row.dataset.lane)
     const x = laneX(lane)
@@ -390,6 +428,16 @@ main.addEventListener("click", async (e) => {
   paintButtons()
 })
 
+// A PR's fold button, whose choice is kept over the default
+main.addEventListener("click", (e) => {
+  const bookmark = (e.target as Element).closest<HTMLElement>("button[data-fold]")?.dataset
+    .fold
+  if (!bookmark) return
+  folds[bookmark] = !isCollapsed(folds[bookmark], github[bookmark])
+  write(localStorage, foldsKey, folds)
+  redraw()
+})
+
 // A Push button: the server asks the user in a dialog, and pushes if they
 // say so. The stack redraws by itself after, since the push is a jj
 // operation.
@@ -438,7 +486,7 @@ async function loadGithub() {
   try {
     github = await get<GithubPrs>("stack-github")
     githubError = ""
-    write(sessionStorage, githubKey, github)
+    write(localStorage, githubKey, github)
   } catch (e) {
     githubError = (e as Error).message
   }

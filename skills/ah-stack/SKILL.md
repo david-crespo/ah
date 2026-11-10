@@ -55,7 +55,12 @@ it in a window, and binds it to this session. Run the same command without
   code. Write the summary for a reviewer: what the PR does, then where to
   start reading.
 - A PR can be listed before its bookmark exists; the page shows it with "no
-  bookmark yet" until it does.
+  bookmark yet" until it does. Keep a PR listed after it merges, even once a
+  fetch deletes its bookmark: GitHub still knows it by its branch, so the
+  page puts it with the other PRs that have no commits of their own.
+- Each PR's card folds to one line (its title, its state on GitHub and its
+  diff stat). Merged PRs start folded; the user's own choice wins and is
+  kept.
 - The page redraws when `stack.json` or a PR's body changes and when a jj
   operation lands, so rewriting commits or moving bookmarks shows up on its
   own.

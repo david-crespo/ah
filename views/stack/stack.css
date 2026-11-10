@@ -122,6 +122,45 @@ main .pr-head h2 {
   flex: 1;
   min-width: 0;
 }
+/* Folds the card to its head line, or opens it */
+/* On the title's first line: 24px tall, at 16px and 1.5 */
+main button.fold {
+  align-self: flex-start;
+  margin-top: 2px;
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  margin-inline: -4px -6px;
+  padding: 2px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+main button.fold:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+main button.fold svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.1s;
+}
+main button.fold[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+main .pr.collapsed {
+  padding-block: 8px;
+}
+main .pr-head .gh-pr {
+  font-size: 12.5px;
+}
 /* Dim, so a title from the PR's body doesn't read as starting with it */
 main .pr-head h2 .n {
   color: var(--muted);
