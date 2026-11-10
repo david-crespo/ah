@@ -14,9 +14,14 @@
 // the registry finds the block from the TUI processes (tuis.ts). The
 // summary is opencode's own title for the session, which it writes on the
 // first prompt and the user can rename. Child sessions (subagents) are
-// skipped so they can't claim the tab from their parent.
+// skipped so they can't claim the tab from their parent, and so are the
+// sessions of an `opencode run` an agent runs from its shell, which would
+// take over the agent's pane. Nothing in the stream tells one from a TUI's,
+// so a session is taken for one when an `opencode run` runs in its
+// directory as it's created.
 
 import { str } from "../platform/guards.ts"
+import { processCwds, processTable } from "../platform/proc.ts"
 import { opencodeService, processRunning } from "../platform/session.ts"
 import { abbreviatePath, type HookEventName, type RegistryEvent } from "./registry.ts"
 import type { Core } from "./core.ts"
@@ -58,6 +63,15 @@ export function readUpdate(raw: unknown): OpencodeUpdate | null {
   }
 }
 
+/** Whether an `opencode run` is running in `directory` */
+function runIn(directory: string | null): boolean {
+  if (!directory) return false
+  const runs = processTable()
+    .filter((p) => /(^|\/)opencode(\.exe)?\s+run\b/.test(p.args))
+    .map((p) => p.pid)
+  return runs.length > 0 && [...processCwds(runs).values()].includes(directory)
+}
+
 interface Service {
   url: string
   auth: string
@@ -66,7 +80,8 @@ interface Service {
 interface SessionInfo {
   cwd: string | null
   title: string | null
-  child: boolean
+  /** A child session, or an `opencode run`'s */
+  skipped: boolean
 }
 
 async function fetchSession(service: Service, id: string): Promise<SessionInfo | null> {
@@ -79,7 +94,11 @@ async function fetchSession(service: Service, id: string): Promise<SessionInfo |
     const body = (await res.json()) as { data?: Record<string, unknown> }
     const s = body.data ?? (body as Record<string, unknown>)
     const location = s.location as { directory?: unknown } | undefined
-    return { cwd: str(location?.directory), title: str(s.title), child: !!str(s.parentID) }
+    return {
+      cwd: str(location?.directory),
+      title: str(s.title),
+      skipped: !!str(s.parentID),
+    }
   } catch {
     return null
   }
@@ -125,19 +144,19 @@ async function follow(service: Service, core: Core, known: Map<string, SessionIn
   }
 }
 
-async function apply(
+export async function apply(
   service: Service,
-  core: Core,
+  core: Pick<Core, "receive" | "retitle">,
   known: Map<string, SessionInfo>,
   update: OpencodeUpdate,
 ) {
   if (update.kind === "child") {
-    known.set(update.session, { cwd: null, title: null, child: true })
+    known.set(update.session, { cwd: null, title: null, skipped: true })
     return
   }
   let info = known.get(update.session)
   if (update.kind === "event" && update.event === "SessionStart") {
-    info = { cwd: update.cwd, title: null, child: false }
+    info = { cwd: update.cwd, title: null, skipped: runIn(update.cwd) }
     known.set(update.session, info)
   }
   // A session that started before ah was following: ask the service
@@ -147,7 +166,7 @@ async function apply(
     info = fetched
     known.set(update.session, info)
   }
-  if (info.child) return
+  if (info.skipped) return
   if (update.kind === "title") return core.retitle(update.session, update.title)
   const event: RegistryEvent = {
     kind: "hook",

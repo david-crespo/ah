@@ -64,6 +64,26 @@ export function processTable(): Proc[] {
   })
 }
 
+/** Each process's working directory, by pid, for those `lsof` can see */
+export function processCwds(pids: number[]): Map<number, string> {
+  const cwds = new Map<number, string>()
+  let out: string
+  try {
+    out = execFileSync("lsof", ["-a", "-d", "cwd", "-p", pids.join(","), "-Fn"], {
+      encoding: "utf8",
+    })
+  } catch (e) {
+    // Exits 1 when some pid is gone, with the rest still listed
+    out = String((e as { stdout?: unknown }).stdout ?? "")
+  }
+  let pid: number | null = null
+  for (const line of out.split("\n")) {
+    if (line.startsWith("p")) pid = Number(line.slice(1))
+    else if (line.startsWith("n") && pid !== null) cwds.set(pid, line.slice(1))
+  }
+  return cwds
+}
+
 /** The processes above this one, nearest first */
 export function ancestors(table: Proc[]): Proc[] {
   const procs = new Map(table.map((p) => [p.pid, p]))
