@@ -83,7 +83,7 @@ test("a Claude agent's address is the one its latest process reported", async ()
   await report(start("claude", "s2", claude(2)))
   expect(core.directory.address("block:1")).toEqual(claude(2))
   // Kept apart from the logged event
-  expect(readFileSync(join(dir, "registry-events.jsonl"), "utf8")).not.toContain("t2")
+  expect(readFileSync(join(dir, "registry-events.jsonl"), "utf8")).not.toContain("2.sock")
 })
 
 test("the event log keeps only the start of a prompt", async () => {

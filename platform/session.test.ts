@@ -45,7 +45,9 @@ test("the session comes from whichever harness's variables are set", () => {
   expect(currentAddress()).toEqual({ harness: "opencode", id: "ses_1" })
   delete process.env.OPENCODE_SESSION_ID
   process.env.CODEX_THREAD_ID = "019a"
-  expect(currentAddress()).toEqual({ harness: "codex", thread: "019a", pid: null })
+  // The pid is a Codex process this runs under, if any: the real process
+  // table's, so it isn't checked here
+  expect(currentAddress()).toMatchObject({ harness: "codex", thread: "019a" })
   delete process.env.CODEX_THREAD_ID
   process.env.CLAUDE_CODE_MESSAGING_SOCKET = "/s/1.sock"
   expect(currentAddress()).toEqual({ harness: "claude", socket: "/s/1.sock" })

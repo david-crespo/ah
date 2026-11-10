@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, test } from "vitest"
@@ -90,6 +90,20 @@ describe("the API and pages ports", () => {
     expect(js.status).toEqual(200)
     expect(js.headers.get("content-type")).toContain("text/javascript")
     for (const path of [".git/config", ".env", "key.pem", "assets/../.env", "..%2Fstate"]) {
+      expect((await pages(`${id}/${path}`)).status, path).toEqual(404)
+    }
+  })
+
+  test("not even a web file in a dot directory or above the page, or through a link", async () => {
+    await mkdir(join(dir, "site", ".hidden"), { recursive: true })
+    // Writes data.json a level up, next to site/
+    const { id } = await open("site/report.html")
+    await writeFile(join(dir, "site", "ok.json"), "{}")
+    await writeFile(join(dir, "site", ".hidden", "data.json"), "{}")
+    await symlink("../data.json", join(dir, "site", "up.json"))
+    await symlink(".hidden/data.json", join(dir, "site", "hidden.json"))
+    expect((await pages(`${id}/ok.json`)).status).toEqual(200)
+    for (const path of [".hidden/data.json", "..%2Fdata.json", "up.json", "hidden.json"]) {
       expect((await pages(`${id}/${path}`)).status, path).toEqual(404)
     }
   })
