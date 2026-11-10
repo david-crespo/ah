@@ -48,7 +48,7 @@ import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
 import type { AgentId, FileKind, RexState } from "./core/model.ts"
-import { showUrl, windowName } from "./platform/window.ts"
+import { showPage } from "./subjects/files/cli.ts"
 import {
   onRexHealth,
   type RexHealth,
@@ -207,15 +207,7 @@ async function serve(port: number) {
   // A stack page's PR body opens in the doc page, as `ah tool doc` would open it
   const openDoc = async (path: string, agent: AgentId | null) => {
     const { url, views } = await docBackend.files.bind(path, null, agent)
-    const page = new URL(url, `http://127.0.0.1:${port}`)
-    page.searchParams.set("in", "window")
-    const name = windowName(path)
-    await showUrl(
-      "window",
-      page.href,
-      { name, badge: name.charAt(0).toUpperCase(), color: "#0d9488" },
-      views.includes("window"),
-    )
+    await showPage("window", new URL(url, `http://127.0.0.1:${port}`), path, views)
   }
   const pageBackend = new PageBackend(
     port,

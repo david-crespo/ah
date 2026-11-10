@@ -127,6 +127,7 @@ async function openFile(
   const { url, views } = await showInServer(fileKind(path), port, path)
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
   await showPage(place, url, path, views)
+  console.log(url.href)
 }
 
 const BINDING =

@@ -157,7 +157,6 @@ export async function showPage(
     { name, badge: name.charAt(0).toUpperCase(), color: html ? "#d97706" : "#0d9488" },
     shown.includes("window"),
   )
-  console.log(url.href)
 }
 
 /** The files pages of the backend for `kind` show, oldest first; the server
