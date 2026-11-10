@@ -12,7 +12,7 @@
 
 import { mkdirSync } from "node:fs"
 import { join } from "node:path"
-import { DEFAULT_PORT } from "../../platform/cli.ts"
+import { DEFAULT_PORT } from "../../platform/server.ts"
 import { ahStateDir } from "../../platform/paths.ts"
 import { describeAddress, postTo, addressAlive } from "../../platform/session.ts"
 import type { Address, Request, Subject } from "../../model.ts"

@@ -1,5 +1,5 @@
 import { expect, test } from "vitest"
-import { comment, replyText } from "./cli.ts"
+import { comment, replyText } from "./message.ts"
 
 test("a comment names the file, the lines and the selection ahead of the text", () => {
   expect(comment("/r/a.ts", null, null, "why?")).toBe(

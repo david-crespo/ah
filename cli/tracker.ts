@@ -3,7 +3,7 @@
 // in the registry, which the server owns (trackers.ts), so these need it
 // running.
 
-import { callServer, serverUrl } from "../platform/cli.ts"
+import { callServer, serverUrl } from "./shared.ts"
 import { status } from "../platform/server.ts"
 import type { AgentRef, TrackerEntry, TrackerStatus, WorkspaceTrackers } from "../model.ts"
 

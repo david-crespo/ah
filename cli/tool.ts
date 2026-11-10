@@ -13,9 +13,9 @@ import { existsSync, mkdirSync, realpathSync, statSync, writeFileSync } from "no
 import { text } from "node:stream/consumers"
 import { basename, dirname, join, relative } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
-import { threadCommands } from "../subjects/thread/cli.ts"
+import { threadCommands } from "./message.ts"
 import { FILE_KINDS, fileKind } from "../model.ts"
-import { die, portOption, serverUrl } from "../platform/cli.ts"
+import { die, portOption, serverUrl } from "./shared.ts"
 import { showUrl } from "../platform/window.ts"
 import {
   absolute,
@@ -24,25 +24,21 @@ import {
   showInServer,
   shownFiles,
   showPage,
-} from "../subjects/files/cli.ts"
+} from "./files.ts"
 import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
 import { focusHere } from "../platform/focus.ts"
 import { openFloat } from "../platform/rex.ts"
-import { ensureDashboardPage } from "./dashboard/api.ts"
-import { mergeDisk } from "./doc/merge.ts"
-import { dashboard } from "./dashboard/cli.ts"
-import { docFormat } from "./doc/doc.ts"
+import { ensureDashboardPage } from "./dashboard_api.ts"
+import { mergeDisk } from "../views/doc/merge.ts"
+import { dashboard } from "./dashboard.ts"
+import { docFormat } from "../views/doc/doc.ts"
 import { openable, rootFinder } from "../core/workspace.ts"
-import { sendToTab } from "../core/send.ts"
-import {
-  setCurrentTracker,
-  setTrackerStatus,
-  workspaceTrackers,
-} from "../core/tracker_api.ts"
-import { taskListPage } from "./page/task_list_file.ts"
-import { STACK_FILE } from "./stack/data.ts"
-import { stackJson, stackPage } from "./stack/file.ts"
+import { sendToTab } from "./agents.ts"
+import { setCurrentTracker, setTrackerStatus, workspaceTrackers } from "./tracker.ts"
+import { taskListPage } from "../views/page/task_list_file.ts"
+import { STACK_FILE } from "../views/stack/data.ts"
+import { stackJson, stackPage } from "../views/stack/file.ts"
 
 /** Where the file's thread takes the agent's events, or requests from
  * outside its page */

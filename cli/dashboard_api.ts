@@ -1,11 +1,11 @@
 // What other groups' commands use to show the dashboard: whether a page is
 // open, and opening one. Setting what it shows, the workspace's current
-// tracker, is core/tracker_api.ts.
+// tracker, is tracker.ts.
 
-import { status } from "../../platform/server.ts"
-import { focusHere } from "../../platform/focus.ts"
-import { focusWindow } from "../../platform/window.ts"
-import { dashboardUrl, openDashboard } from "./open.ts"
+import { status } from "../platform/server.ts"
+import { focusHere } from "../platform/focus.ts"
+import { focusWindow } from "../platform/window.ts"
+import { dashboardUrl, openDashboard } from "./dashboard_open.ts"
 
 /** One line for agents deciding where to show things */
 export async function dashboardStatus(port: number): Promise<string> {

@@ -11,7 +11,7 @@
 // - Save 650ms after typing stops, and when the pane loses focus.
 // - Check the file on disk every 300ms and when the pane gains focus
 //   (`checktime`). An unmodified buffer reloads. A modified one gets the
-//   file on disk merged into it by `ah tool doc merge` (views/cli.ts), with
+//   file on disk merged into it by `ah tool doc merge` (cli/tool.ts), with
 //   the text as of the last read or save as the base.
 //   The agent's edits and the unsaved typing both survive, with both
 //   versions marked where they overlap (merge.ts). Every save checks

@@ -2,8 +2,8 @@
 // review, to an agent in its tab (`ah message send`). ah only routes the
 // message, and holds it while no agent is there (core.ts).
 
-import { callServer, die, ensureStarted, serverUrl } from "../platform/cli.ts"
-import { agentLine, agentsNear } from "../subjects/files/cli.ts"
+import { callServer, die, ensureStarted, serverUrl } from "./shared.ts"
+import { agentLine, agentsNear } from "./files.ts"
 
 /** Send text to agent, or else to the agent a send from block goes to, and
  * say whether it took it or it's held for the next one in the tab. With

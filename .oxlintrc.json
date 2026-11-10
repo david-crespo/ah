@@ -10,7 +10,7 @@
           {
             "patterns": [
               {
-                "group": ["**/core/**", "**/subjects/**", "**/views/**"],
+                "group": ["**/core/**", "**/subjects/**", "**/views/**", "**/cli/**"],
                 "message": "platform/ is the bottom layer"
               }
             ]
@@ -27,8 +27,8 @@
           {
             "patterns": [
               {
-                "group": ["**/core/**", "**/views/**"],
-                "message": "subjects/ is under core/ and views/"
+                "group": ["**/core/**", "**/views/**", "**/cli/**"],
+                "message": "subjects/ is under core/, views/ and cli/"
               }
             ]
           }
@@ -42,7 +42,24 @@
         "no-restricted-imports": [
           "error",
           {
-            "patterns": [{ "group": ["**/views/**"], "message": "core/ is under views/" }]
+            "patterns": [
+              {
+                "group": ["**/views/**", "**/cli/**"],
+                "message": "core/ is under views/ and cli/"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["views/**/*.ts"],
+      "excludeFiles": ["**/*.test.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [{ "group": ["**/cli/**"], "message": "views/ is under cli/" }]
           }
         ]
       }

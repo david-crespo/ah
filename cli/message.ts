@@ -1,24 +1,22 @@
 // `ah message respond` and `ah message pending`: how the agent answers a
 // page's thread; and `ah message send`, the user's comment from their editor
 // or a diff review, as a plain message to an agent in the Rex tab
-// (core/send.ts) or, from a markdown page's helix pane, into the file's
+// (agents.ts) or, from a markdown page's helix pane, into the file's
 // thread
 
 import { existsSync, readFileSync } from "node:fs"
 import { Argument, Command } from "@commander-js/extra-typings"
+import { callServer, die, ensureStarted, portOption, readStdin } from "./shared.ts"
+import { absolute } from "./files.ts"
 import {
-  callServer,
-  die,
-  ensureStarted,
-  portOption,
-  readStdin,
-} from "../../platform/cli.ts"
-import { absolute } from "../files/cli.ts"
-import { type RequestResult, type ThreadSnapshot, PHASES } from "./events.ts"
+  type RequestResult,
+  type ThreadSnapshot,
+  PHASES,
+} from "../subjects/thread/events.ts"
 
 /** `fileUrl` is where the file's `thread` takes the agent's events, and its
  * `request` route takes requests from outside the page, on that port.
- * `sendToTab` sends a plain message to an agent in a Rex tab (core/send.ts). */
+ * `sendToTab` sends a plain message to an agent in a Rex tab (agents.ts). */
 export function threadCommands(
   fileUrl: (path: string, port: number, route: "thread" | "request") => string,
   sendToTab: (

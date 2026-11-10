@@ -3,9 +3,11 @@
 // views of files they show the user. The CLI's groups (`ah -h`) are the
 // tools agents show the user (tool), the windows they're in (window), the
 // messages between pages and agents (message), workspaces, doctor, the
-// server, hooks, and debug. The code is in four layers, each using only the
+// server, hooks, and debug. The code is in five layers, each using only the
 // ones under it, and all of them the model's types (model.ts):
 //
+// - cli/: the commands, and the clients of the server's routes they call.
+//   The server's code is the four layers under it.
 // - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
 //   and the doc and page subject types that serve a file's views, and the
 //   stack, an app on pages (views/page/app.ts). What more than one view uses is at the top of views/ (the terminal theme,
@@ -28,15 +30,15 @@ import { serve as nodeServe } from "@hono/node-server"
 import { readFile } from "node:fs/promises"
 import type { Duplex } from "node:stream"
 import { WebSocketServer, type WebSocket } from "ws"
-import { debugTabs } from "./views/dashboard/cli.ts"
+import { debugTabs } from "./cli/dashboard.ts"
 import { Dashboard } from "./views/dashboard/routes.ts"
 import { DocBackend } from "./views/doc/routes.ts"
 import { PageBackend } from "./views/page/routes.ts"
 import { pageScripts } from "./views/page/upgrade.ts"
 import { stackApp } from "./views/stack/routes.ts"
-import { message, tool, windows } from "./views/cli.ts"
-import { debugAgents, doctor, workspace } from "./core/cli.ts"
-import { hook } from "./core/hook.ts"
+import { message, tool, windows } from "./cli/tool.ts"
+import { debugAgents, doctor, workspace } from "./cli/workspace.ts"
+import { hook } from "./cli/hook.ts"
 import { watchOpencode } from "./core/opencode.ts"
 import { Core } from "./core/core.ts"
 import { Upgrades } from "./core/upgrades.ts"
@@ -44,13 +46,13 @@ import { TitleSetter } from "./core/tabtitle/setter.ts"
 import { assetPath } from "./platform/assets.ts"
 import { upgradeState } from "./platform/state_version.ts"
 import { boxCss } from "./views/dashboard/box.ts"
-import { die, portOption } from "./platform/cli.ts"
+import { die, portOption } from "./cli/shared.ts"
 import { installProblems } from "./platform/install_check.ts"
 import { scrubSessionEnv } from "./platform/session.ts"
 import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
 import type { AgentId, FileKind, RexState } from "./model.ts"
-import { showPage } from "./subjects/files/cli.ts"
+import { showPage } from "./cli/files.ts"
 import {
   onRexHealth,
   type RexHealth,

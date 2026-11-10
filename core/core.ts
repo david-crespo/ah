@@ -2,12 +2,12 @@
 // /core/: GET the agents as JSON,
 // from the registry and Rex's latest state (`?all` includes ones
 // that aren't in a block or running any more), POST `event` for the
-// hooks (hook.ts) to report into the registry, which answers with what the
+// hooks (cli/hook.ts) to report into the registry, which answers with what the
 // hook should tell the agent (notices.ts), POST `current-tracker` to set,
 // read, or clear an agent's workspace's current tracker, GET `trackers`
 // for one workspace's,
 // and POST `tracker-status` to park or finish one (trackers.ts). The CLI's
-// client for the tracker routes is tracker_api.ts.
+// client for the tracker routes is cli/tracker.ts.
 //
 // It's also where files' requests find their agents (subjects/files/files.ts):
 // which agent each file is bound to, kept in the registry, and where that

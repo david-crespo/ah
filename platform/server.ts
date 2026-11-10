@@ -12,6 +12,9 @@ import { ahStateDir, rotateLog } from "./paths.ts"
 import { run } from "./proc.ts"
 import type { RexHealth } from "./rex.ts"
 
+/** The port `-p` defaults to */
+export const DEFAULT_PORT = 7420
+
 export interface ServerFiles {
   pid: string
   log: string

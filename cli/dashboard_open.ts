@@ -1,9 +1,9 @@
 // Opening the dashboard window, shared by `ah tool dashboard` and the
 // commands that put something in the dashboard
 
-import { ensureStarted, serverUrl } from "../../platform/cli.ts"
-import { focusHere } from "../../platform/focus.ts"
-import { openWindow } from "../../platform/window.ts"
+import { ensureStarted, serverUrl } from "./shared.ts"
+import { focusHere } from "../platform/focus.ts"
+import { openWindow } from "../platform/window.ts"
 
 export const dashboardUrl = (port: number) => serverUrl(port, "view/dashboard/")
 

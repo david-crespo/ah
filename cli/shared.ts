@@ -2,9 +2,7 @@
 // session they run in, reading the server's responses, and erroring out.
 
 import { InvalidArgumentError, Option } from "@commander-js/extra-typings"
-import { ensureServer } from "./server.ts"
-
-export const DEFAULT_PORT = 7420
+import { DEFAULT_PORT, ensureServer } from "../platform/server.ts"
 
 /** Start the server unless it's running; returns the running one's pid, if any */
 export async function ensureStarted(port: number): Promise<number | null> {

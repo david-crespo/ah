@@ -2,15 +2,15 @@
 // dashboard maps tabs to and the titles ah gives them
 
 import { Command, Option } from "@commander-js/extra-typings"
-import { portOption } from "../../platform/cli.ts"
-import { readRex } from "../../platform/rex.ts"
-import { currentAgent } from "../../platform/session.ts"
-import { emptyRegistry, loadRegistry } from "../../core/registry.ts"
-import { tabLabel } from "../../core/tabtitle/setter.ts"
-import { currentTracker } from "../../core/tracker_api.ts"
-import { rootFinder } from "../../core/workspace.ts"
-import { dashboardStatus, ensureDashboardPage } from "./api.ts"
-import { resolve } from "./workspace.ts"
+import { portOption } from "./shared.ts"
+import { readRex } from "../platform/rex.ts"
+import { currentAgent } from "../platform/session.ts"
+import { emptyRegistry, loadRegistry } from "../core/registry.ts"
+import { tabLabel } from "../core/tabtitle/setter.ts"
+import { currentTracker } from "./tracker.ts"
+import { rootFinder } from "../core/workspace.ts"
+import { dashboardStatus, ensureDashboardPage } from "./dashboard_api.ts"
+import { resolve } from "../views/dashboard/workspace.ts"
 
 export const dashboard = new Command("dashboard")
   .summary("A window that follows the focused Rex tab")

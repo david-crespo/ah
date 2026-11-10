@@ -22,6 +22,7 @@
 // does the async parts afterwards, so two events can't interleave.
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
 import { dirname } from "node:path"
 import { isOneOf, isRecord, isString, isStringOrNull } from "../platform/guards.ts"
 import { ahStateDir } from "../platform/paths.ts"
@@ -130,6 +131,16 @@ export type RegistryEvent =
       transcript?: string
     }
   | { kind: "shell"; block: BlockId; label: string }
+
+/** ~/repos/ah → ah, ~/x → ~/x: a session's label when there's no shell label */
+export function abbreviatePath(path: string, home = homedir()): string {
+  for (const dir of ["repos", "oxide", "jj-workspaces"]) {
+    const prefix = `${home}/${dir}/`
+    if (path.startsWith(prefix)) return path.slice(prefix.length)
+  }
+  if (path === home) return "~"
+  return path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path
+}
 
 export interface SummaryJob {
   agent: AgentId

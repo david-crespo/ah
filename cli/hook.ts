@@ -23,28 +23,17 @@
 // another shell: the server finds those sessions' blocks (tuis.ts).
 
 import { Command, Option } from "@commander-js/extra-typings"
-import { homedir } from "node:os"
-import { portOption } from "../platform/cli.ts"
+import { portOption } from "./shared.ts"
 import { isOneOf, str } from "../platform/guards.ts"
 import { ensureServer } from "../platform/server.ts"
 import { currentAgent, currentAddress } from "../platform/session.ts"
-import { underCodexDaemon } from "./tuis.ts"
+import { underCodexDaemon } from "../core/tuis.ts"
 import { type Address, HARNESSES, type Harness } from "../model.ts"
-import { HOOK_EVENTS, type RegistryEvent } from "./registry.ts"
-import { sanitizeTitle } from "./summary.ts"
+import { abbreviatePath, HOOK_EVENTS, type RegistryEvent } from "../core/registry.ts"
+import { sanitizeTitle } from "../core/summary.ts"
 
 /** The block a process was started in, from its env */
 const envBlock = (env: NodeJS.ProcessEnv) => env.REX_BLOCK || null
-
-/** ~/repos/ah → ah, ~/x → ~/x: a session's label when there's no shell label */
-export function abbreviatePath(path: string, home = homedir()): string {
-  for (const dir of ["repos", "oxide", "jj-workspaces"]) {
-    const prefix = `${home}/${dir}/`
-    if (path.startsWith(prefix)) return path.slice(prefix.length)
-  }
-  if (path === home) return "~"
-  return path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path
-}
 
 /** An event, and where the agent can be reached now, which the server keeps
  * apart from the event */
