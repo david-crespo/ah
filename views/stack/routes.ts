@@ -1,24 +1,32 @@
 // A stack's page as a page app (views/page/app.ts): its PRs from jj and from
-// GitHub, its diff buttons, which open skepsis, and its Body buttons, all
-// under the page's _ah/; and a watch on its repo's operations, so the page
+// GitHub, its diff buttons, which open skepsis, its Body buttons and its Push
+// buttons (push.ts), all under the page's _ah/; and a watch on its repo's operations, so the page
 // reads its stack again after each one, and whenever stack.json or a PR's
 // body is saved.
 
 import { stat } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
+import { type Confirm, confirmDialog } from "../../platform/dialog.ts"
+import { type JjRun, jjRun } from "../../platform/jj.ts"
 import type { OpenFile, PageApp } from "../page/app.ts"
 import { noStore } from "../page/routes.ts"
 import { ensureBody, readStack, STACK_FILE, stackOpsDir } from "./data.ts"
 import { readGithub } from "./github.ts"
+import { push } from "./push.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
 
 const json = (data: unknown) => Response.json(data, { headers: noStore })
 const failed = (e: Error) => new Response(e.message, { status: 500 })
 const done = () => new Response(null, { status: 204 })
 
-/** `openDoc` opens a PR's body */
-export function stackApp(openDoc: OpenFile): PageApp {
+/** `openDoc` opens a PR's body. `confirm` and `run` are for tests, which
+ * answer the push dialog and stand in for jj. */
+export function stackApp(
+  openDoc: OpenFile,
+  confirm: Confirm = confirmDialog,
+  run: JjRun = jjRun,
+): PageApp {
   return {
     async routes(sub, req, path, agent) {
       if (sub === "_ah/stack") return await readStack(path).then(json, failed)
@@ -37,6 +45,10 @@ export function stackApp(openDoc: OpenFile): PageApp {
         const body = typeof bookmark === "string" ? await ensureBody(path, bookmark) : null
         if (!body) return new Response("not a PR in this stack", { status: 404 })
         return await openDoc(body, agent).then(done, failed)
+      }
+      if (sub === "_ah/push" && req.method === "POST") {
+        const { bookmark }: { bookmark?: unknown } = await req.json().catch(() => ({}))
+        return await push(path, bookmark, confirm, run).catch(failed)
       }
       return null
     },

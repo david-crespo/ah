@@ -1,18 +1,20 @@
-// Running jj for ah's reads, and where a jj repo keeps itself: its repo dir,
-// and the op heads views watch to redraw when an operation lands
+// Running jj for ah's reads and the stack page's push, and where a jj repo
+// keeps itself: its repo dir, and the op heads views watch to redraw when an
+// operation lands
 
 import { readFileSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
-import { run } from "./proc.ts"
+import { type Output, run } from "./proc.ts"
 
-/** jj's output in `cwd`, uncolored and without snapshotting the working copy:
- * a read shouldn't take its lock. Throws jj's complaint. */
+/** Running jj in `cwd`, uncolored */
+export type JjRun = (cwd: string, ...args: string[]) => Promise<Output>
+
+export const jjRun: JjRun = (cwd, ...args) => run("jj", ["--color=never", ...args], { cwd })
+
+/** jj's output in `cwd`, without snapshotting the working copy: a read
+ * shouldn't take its lock. Throws jj's complaint. */
 export async function jj(cwd: string, ...args: string[]): Promise<string> {
-  const { success, stdout, stderr } = await run(
-    "jj",
-    ["--ignore-working-copy", "--color=never", ...args],
-    { cwd },
-  )
+  const { success, stdout, stderr } = await jjRun(cwd, "--ignore-working-copy", ...args)
   if (!success) throw new Error(stderr.trim())
   return stdout
 }

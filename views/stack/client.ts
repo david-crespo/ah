@@ -5,7 +5,11 @@
 // at _ah/stack) newest first, like jj log: each PR's title, its bookmark and
 // how it merges, its summary and files collapsed under it, and a line per
 // commit that opens to its description and files. Once a PR is pushed, a line
-// under its newest commits marks the ones still to push. Commits below a fork
+// under its newest commits marks the ones still to push, with a Push button
+// on it; a PR whose bookmark isn't on the remote yet has its Push button by
+// its Body button. Push has the server push the bookmark once the user
+// confirms it in a dialog the server shows (push.ts), and jj's answer shows
+// on the PR. Commits below a fork
 // that no PR's bookmark is on get a card of their own, shared by the PRs
 // above. A graph down the left joins the commits, like jj log's. Each diff
 // stat is a button that has the server open that diff in skepsis
@@ -148,9 +152,26 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   return link + notes.join("")
 }
 
+/** Pushes from this page by bookmark: out ("busy"), or how they ended, which
+ * shows on the PR until the page reloads or it's pushed again */
+const pushes = new Map<string, "busy" | { how: "ok" | "bad" | "cancelled"; text: string }>()
+
+/** The Push button for `pr`, disabled while its push is out */
+function pushButton(pr: Pr): string {
+  const busy = pushes.get(pr.bookmark) === "busy"
+  return `<button type="button" class="push-button" data-push="${escapeHtml(pr.bookmark)}" title="${busy ? "Waiting for you to confirm in ah's dialog, then pushing" : `Push ${escapeHtml(pr.bookmark)}, after a dialog asks you`}"${busy ? " disabled" : ""}>${busy ? "Pushing…" : "Push"}</button>`
+}
+
+/** How the PR's last push from this page went, if there was one */
+function pushResult(pr: Pr): string {
+  const result = pushes.get(pr.bookmark)
+  if (!result || result === "busy") return ""
+  return `<pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>`
+}
+
 /** The commits, with a line under the first `unpushed` of them, the newest,
- * when there are any */
-function commitList(commits: Commit[], unpushed = 0): string {
+ * when there are any, with `button` on it */
+function commitList(commits: Commit[], unpushed = 0, button = ""): string {
   const items = commits.map((c) => {
     const [title, ...rest] = c.description.split("\n")
     const body = rest.join("\n").trim()
@@ -170,7 +191,7 @@ function commitList(commits: Commit[], unpushed = 0): string {
     items.splice(
       unpushed,
       0,
-      `<li class="to-push"><span>↑ ${unpushed} to push</span>${unpushed < commits.length ? "<span>pushed ↓</span>" : ""}</li>`,
+      `<li class="to-push"><span>↑ ${unpushed} to push</span>${button}${unpushed < commits.length ? '<span class="pushed">pushed ↓</span>' : ""}</li>`,
     )
   return `<ol class="commits">${items.join("")}</ol>`
 }
@@ -178,18 +199,21 @@ function commitList(commits: Commit[], unpushed = 0): string {
 function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   // Before a first push, all of them are to push, which goes without saying
   const unpushed = pr.pushed ? pr.unpushed : 0
+  // Its bookmark is new on the remote, so the button goes by Body
+  const fresh = !pr.pushed && pr.commits.length > 0
   return `<section class="pr">
     <div class="pr-head">
       <h2><span class="n">${pr.n}.</span> ${escapeHtml(gh?.title ?? pr.title)}</h2>
       ${pr.diff ? stat(pr.files, pr.diff) : ""}
     </div>
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    ${pushResult(pr)}
     <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
       <summary>Summary and ${pr.files.length} file${pr.files.length === 1 ? "" : "s"}</summary>
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
       ${fileList(pr.files)}
     </details>
-    ${commitList(pr.commits, unpushed)}
+    ${commitList(pr.commits, unpushed, unpushed ? pushButton(pr) : "")}
   </section>`
 }
 
@@ -364,6 +388,33 @@ main.addEventListener("click", async (e) => {
   if (error) requests.set(key, error)
   else requests.delete(key)
   paintButtons()
+})
+
+// A Push button: the server asks the user in a dialog, and pushes if they
+// say so. The stack redraws by itself after, since the push is a jj
+// operation.
+main.addEventListener("click", async (e) => {
+  const button = (e.target as Element).closest<HTMLButtonElement>("button[data-push]")
+  const bookmark = button?.dataset.push
+  if (!bookmark || !threadUrl || pushes.get(bookmark) === "busy") return
+  pushes.set(bookmark, "busy")
+  redraw()
+  let result: { how: "ok" | "bad" | "cancelled"; text: string }
+  try {
+    const res = await fetch(new URL("push", threadUrl), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bookmark }),
+    })
+    if (res.ok) {
+      const { pushed, output }: { pushed: boolean; output: string } = await res.json()
+      result = { how: pushed ? "ok" : "cancelled", text: output }
+    } else result = { how: "bad", text: (await res.text()) || `${res.status}` }
+  } catch (e) {
+    result = { how: "bad", text: String(e) }
+  }
+  pushes.set(bookmark, result)
+  redraw()
 })
 
 // Named for the shape of Stack, so a tab never draws one from an older ah

@@ -1,6 +1,6 @@
 ---
 name: ah-stack
-description: "Show a stack of PRs as a page: each PR's commits, diff stats and summary, newest first, with buttons that open any commit's or PR's diff in skepsis. Use when the user asks for a stack page, or wants to see how a stack of jj bookmarks splits into PRs."
+description: "Show a stack of PRs as a page: each PR's commits, diff stats and summary, newest first, with buttons that open any commit's or PR's diff in skepsis and a Push button the user clicks to push a PR. Use when the user asks for a stack page, or wants to see how a stack of jj bookmarks splits into PRs."
 ---
 
 # Stack pages
@@ -79,6 +79,18 @@ another. The server runs skepsis with `AH_SKEPSIS` from its environment
 (like `node /Users/me/skepsis/cli.ts`: an absolute path, since it runs
 without a shell to expand `~`), else `skepsis` on PATH; if a button outlines
 red, its tooltip says why.
+
+## Pushing
+
+A PR with commits still to push has a Push button on the bar that marks
+them, and a PR whose bookmark isn't on the remote yet has one by its Body
+button. Clicking it has the server show a macOS dialog listing the commits
+the push would send; only clicking Push there runs `jj git push --bookmark`
+for that PR, and jj's answer shows on the PR. A push that would rewrite
+commits the remote has is refused, to be pushed by hand. Pushing from the
+page is the user's action: never call the page's push route yourself. When
+the user asks you to push, push from your shell as usual, or point them at
+the button.
 
 ## PR bodies
 
