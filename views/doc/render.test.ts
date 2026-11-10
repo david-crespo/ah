@@ -102,3 +102,56 @@ test("a URL ends before a diff marker after it", () => {
     '<ins class="diff-new"><a href="https://a.com/y">https://a.com/y</a></ins>.',
   )
 })
+
+test("a conflict renders each side as markdown in a labelled panel", () => {
+  const html = md.render(
+    "Intro.\n<<<<<<< HEAD\n**ours**\n=======\ntheirs\n>>>>>>> feature\nAfter.\n",
+  )
+  expect(html).toContain('<p data-line="0:1">Intro.</p>')
+  expect(html).toContain(
+    '<div data-line="1:6" class="conflict"><div class="conflict-title">Merge conflict</div>' +
+      '<section class="conflict-panel" data-kind="side"><div class="conflict-label">HEAD</div>' +
+      '<div class="conflict-body"><p><strong>ours</strong></p>\n</div></section>',
+  )
+  expect(html).toContain('<div class="conflict-label">feature</div>')
+  expect(html).toContain('<p data-line="6:7">After.</p>')
+})
+
+test("a jj conflict's panels say which lines changed", () => {
+  const html = md.render(
+    [
+      "<<<<<<< conflict 1 of 1",
+      "%%%%%%% diff from: base",
+      "\\\\\\\\\\\\\\        to: side #1",
+      "-old line",
+      "+new line",
+      "+++++++ side #2",
+      "other",
+      ">>>>>>> conflict 1 of 1 ends",
+    ].join("\n"),
+  )
+  expect(html).toContain(
+    '<section class="conflict-panel" data-kind="side" data-changed="[&quot;new line&quot;]">',
+  )
+  expect(html).toContain(
+    '<section class="conflict-panel" data-kind="base" data-changed="[&quot;old line&quot;]">',
+  )
+})
+
+test("the editor pane's merge sides get buttons that pick them", () => {
+  const html = md.render("<<<<<<< mine\nA\n=======\nB\n>>>>>>> agent\n")
+  for (const side of ["mine", "agent"])
+    expect(html).toContain(
+      `<section class="conflict-panel" data-kind="side" data-side="${side}"><button class="conflict-label merge-pick" data-side="${side}"></button>`,
+    )
+})
+
+test("a bare GitHub permalink or asset on its own line is an embed's placeholder", () => {
+  const permalink = "https://github.com/o/r/blob/0123456/a.ts#L1-L3"
+  expect(md.render(`${permalink}\n`)).toBe(
+    `<div class="gh-embed" data-src="${permalink}"><a href="${permalink}">${permalink}</a></div>\n`,
+  )
+  const asset = "https://github.com/user-attachments/assets/abc"
+  expect(md.render(`${asset}\n`)).toContain(`class="gh-embed" data-src="${asset}"`)
+  expect(md.render(`see ${permalink}\n`)).not.toContain("gh-embed")
+})

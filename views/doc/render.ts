@@ -1,8 +1,10 @@
-// The GitHub-flavored markdown renderer for <ah-markdown> (preview.ts), which
-// adds its own rules on top, like conflict panels and GitHub embeds.
+// The GitHub-flavored markdown renderer for <ah-markdown> (preview.ts), with
+// ah's rules: frontmatter, conflict panels, the merge's and the diff mode's
+// marks, and placeholders for GitHub embeds, which the preview fills in.
 
 import MarkdownExit from "markdown-exit"
 import { CLOSE, OPEN } from "./diff.ts"
+import { type Conflict, findConflictEnd, parseConflict } from "./conflict.ts"
 import { AGENT, MINE } from "./merge.ts"
 // @ts-expect-error no type declarations
 import footnote from "markdown-it-footnote"
@@ -127,6 +129,95 @@ export function createMarkdown() {
     }
     return true
   })
+  // jj/git conflict markers left in the file: render each side (and the base)
+  // as markdown in a labelled box instead of a wall of marker lines. Top level
+  // only, matching where jj writes them. `alt` lets a marker line interrupt a
+  // paragraph, since jj puts no blank line before it.
+  md.block.ruler.before(
+    "table",
+    "conflict",
+    (state, startLine, endLine, silent) => {
+      // Column 0 only. Inside a list item this runs as a terminator (silent), so
+      // an unindented marker ends the item and the top-level pass renders it.
+      if (state.tShift[startLine] > 0) return false
+      const raw = (i: number) => state.src.slice(state.bMarks[i], state.eMarks[i])
+      if (!raw(startLine).startsWith("<<<<<<<")) return false
+      const lines: string[] = []
+      for (let i = startLine; i < endLine; i++) lines.push(raw(i))
+      const end = findConflictEnd(lines, 0)
+      if (end < 0) return false
+      if (silent) return true
+      const token = state.push("conflict", "div", 0)
+      token.block = true
+      token.map = [startLine, startLine + end + 1]
+      token.meta = parseConflict(lines, 0, end)
+      state.line = startLine + end + 1
+      return true
+    },
+    { alt: ["paragraph", "reference", "blockquote", "list"] },
+  )
+  md.renderer.rules.conflict = (tokens, idx, _opts, _env, self) => {
+    const t = tokens[idx]
+    const conflict: Conflict = t.meta
+    const esc = md.utils.escapeHtml
+    const panels = conflict.panels.map((p) => {
+      const changed = p.changed?.length
+        ? ` data-changed="${esc(JSON.stringify(p.changed))}"`
+        : ""
+      // The editor pane's merge's sides look like its inline markers, with
+      // their label a button that picks the side
+      const merged = p.label === MINE || p.label === AGENT
+      const side = merged ? ` data-side="${p.label}"` : ""
+      const label = merged
+        ? `<button class="conflict-label merge-pick" data-side="${p.label}"></button>`
+        : `<div class="conflict-label">${esc(p.label)}</div>`
+      return (
+        `<section class="conflict-panel" data-kind="${p.kind}"${side}${changed}>` +
+        label +
+        `<div class="conflict-body">${md.render(p.text, { nested: true })}</div></section>`
+      )
+    })
+    return `<div${self.renderAttrs(t)} class="conflict"><div class="conflict-title">${esc(
+      conflict.title,
+    )}</div>${panels.join("")}</div>\n`
+  }
+  // GitHub expands two kinds of bare URL on their own line into embeds: a blob
+  // permalink with a line range becomes a code snippet, and a user-attachments
+  // asset becomes an image or video. Swap such paragraphs for a placeholder
+  // that the preview fills in after render (hydrateEmbeds).
+  md.core.ruler.push("gh_embed", (state) => {
+    const toks = state.tokens
+    for (let i = 0; i + 2 < toks.length; i++) {
+      const [open, inline, close] = [toks[i], toks[i + 1], toks[i + 2]]
+      if (open.type !== "paragraph_open" || close.type !== "paragraph_close") continue
+      const kids = inline.children ?? []
+      if (
+        kids.length !== 3 ||
+        kids[0].type !== "link_open" ||
+        kids[2].type !== "link_close"
+      ) {
+        continue
+      }
+      const href = kids[0].attrGet("href") ?? ""
+      if (kids[1].content !== href) continue
+      if (!permalinkRe.test(href) && !assetRe.test(href)) continue
+      const tok = new state.Token("gh_embed", "div", 0)
+      tok.attrSet("class", "gh-embed")
+      tok.attrSet("data-src", href)
+      tok.map = open.map
+      tok.block = true
+      toks.splice(i, 3, tok)
+    }
+    return true
+  })
+  md.renderer.rules.gh_embed = (tokens, idx, _opts, _env, self) => {
+    const t = tokens[idx]
+    const href = t.attrGet("data-src") ?? ""
+    // Placeholder degrades to the plain link until hydrated
+    return `<div${self.renderAttrs(t)}><a href="${md.utils.escapeHtml(href)}">${md.utils.escapeHtml(
+      href,
+    )}</a></div>\n`
+  }
   return md
 }
 
@@ -157,3 +248,10 @@ const MARKER = new RegExp(`${OPEN}|${CLOSE}`)
 // owner/repo#123, adding "(comment)" when it points at a comment
 const issueRe =
   /^https:\/\/github\.com\/([^/]+\/[^/]+)\/(?:issues|pull|discussions)\/(\d+)(#issuecomment-\d+|#discussioncomment-\d+)?$/
+
+/** A GitHub blob permalink with a line range */
+export const permalinkRe =
+  /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/([^#?]+)(?:\?[^#]*)?#L(\d+)(?:-L(\d+))?$/
+/** A GitHub user-attachments asset */
+export const assetRe =
+  /^https:\/\/(?:github\.com\/user-attachments\/assets\/|private-user-images\.githubusercontent\.com\/)\S+$/
