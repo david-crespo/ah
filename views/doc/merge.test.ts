@@ -202,6 +202,24 @@ describe("mergeDisk edge cases", () => {
     expect(merged("a b c\n", "", "a b c\nnew line\n")).toBe("new line\n")
   })
 
+  test("keeps a number whole, so two edits to one don't make a third", () => {
+    expect(
+      merged(
+        "It costs $1.50 per month.\n",
+        "It costs $1.75 per month.\n",
+        "It costs $2.50 per month.\n",
+      ),
+    ).toBe("It costs ${~~1.75~>2.50~~} per month.\n")
+    expect(merged("Version 1.0\n", "Version 1.5\n", "Version 2.0\n")).toBe(
+      "Version {~~1.5~>2.0~~}\n",
+    )
+    expect(merged("Due 2026-11-09.\n", "Due 2026-11-10.\n", "Due 2026-12-09.\n")).toBe(
+      "Due {~~2026-11-10~>2026-12-09~~}.\n",
+    )
+    // A list item's number still stands apart from its text
+    expect(merged("1. One\n", "1. Uno\n", "2. One\n")).toBe("2. Uno\n")
+  })
+
   test("merges words outside ASCII", () => {
     expect(
       merged(

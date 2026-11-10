@@ -49,13 +49,19 @@ function diff(a: string[], b: string[]): Run[] {
   return runs
 }
 
+/** A word: letters and digits, or a number with what's inside it, `1.50`,
+ * `2026-11-09`, `10:30`. Merged a digit at a time, two edits to one number
+ * would make one neither side wrote. */
+const WORD = String.raw`\p{N}+(?:[.,:/-]\p{N}+)+|[\p{L}\p{N}_'’]+`
+const WORDS = new RegExp(WORD, "gu")
+const TOKENS = new RegExp(
+  String.raw`(?:${WORD})[^\S\n]*|\n|[^\S\n]+|[^\p{L}\p{N}_'’\s][^\S\n]*`,
+  "gu",
+)
+
 /** Words with their trailing spaces, other characters one at a time with
  * theirs, and newlines alone. Joined, they give back the text. */
-export function tokens(text: string): string[] {
-  return (
-    text.match(/[\p{L}\p{N}_'’]+[^\S\n]*|\n|[^\S\n]+|[^\p{L}\p{N}_'’\s][^\S\n]*/gu) ?? []
-  )
-}
+export const tokens = (text: string): string[] => text.match(TOKENS) ?? []
 
 /** A side's edit to the base's tokens: replace [start, end) with `insert` */
 export type Hunk = { ours: boolean; start: number; end: number; insert: string[] }
@@ -115,7 +121,7 @@ function apply(base: string[], { start, end, hunks }: Region, ours: boolean): st
   return out + base.slice(at, end).join("")
 }
 
-export const words = (text: string) => text.match(/[\p{L}\p{N}_'’]+/gu)?.length ?? 0
+export const words = (text: string) => text.match(WORDS)?.length ?? 0
 
 /** Lines with their newlines. Joined, they give back the text. */
 const splitLines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? []
