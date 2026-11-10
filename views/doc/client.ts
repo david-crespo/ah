@@ -14,7 +14,7 @@ import { setUpSelectionComments } from "../thread/selection.ts"
 import { setUpFind } from "./find.ts"
 import { setUpBasePicker } from "./base_picker.ts"
 import "./preview.ts"
-import { type SourcePosition, sourcePosition } from "./source_position.ts"
+import { type SourcePosition, sourcePosition, textBefore } from "./source_position.ts"
 import type { EditorPane } from "./editor.ts"
 import { helix } from "./helix.ts"
 import { TerminalPane } from "./terminal_pane.ts"
@@ -96,13 +96,7 @@ if (editorHost && editorToggle) {
     let before = ""
     const spot = document.createRange()
     if (caret) {
-      const upTo = document.createRange()
-      upTo.setStart(block, 0)
-      upTo.setEnd(caret.node, caret.offset)
-      // Without what a diff shows as removed, which the source doesn't have
-      const shown = upTo.cloneContents()
-      for (const old of shown.querySelectorAll(".diff-old, .diff-removed")) old.remove()
-      before = shown.textContent ?? ""
+      before = textBefore(block, caret.node, caret.offset)
       spot.setStart(caret.node, caret.offset)
       // The character after the caret, since a collapsed range may have no
       // box to measure

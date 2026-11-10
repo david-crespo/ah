@@ -1,5 +1,6 @@
+// @vitest-environment happy-dom
 import { expect, test } from "vitest"
-import { sourcePosition } from "./source_position.ts"
+import { sourcePosition, textBefore } from "./source_position.ts"
 
 const lines = (text: string) => text.split("\n")
 
@@ -62,4 +63,20 @@ test("a tag or a link's syntax in code is text like any other", () => {
   expect(sourcePosition(src, 0, 3, '<div class="x">te')).toEqual({ line: 1, column: 17 })
   const span = lines("Write `a[i](x)` for that")
   expect(sourcePosition(span, 0, 1, "Write a[i](x) ")).toEqual({ line: 0, column: 16 })
+})
+
+test("the text before a ⌘-click leaves out what a diff shows as removed", () => {
+  const block = document.createElement("li")
+  block.innerHTML =
+    'The pane saves <del class="diff-old">after</del><ins class="diff-new">once</ins> you ' +
+    '<span class="diff-removed">gone</span>stop typing'
+  const last = block.lastChild as Text
+  const before = textBefore(block, last, "stop ".length)
+  expect(before).toBe("The pane saves once you stop ")
+  expect(
+    sourcePosition(lines("- The pane saves once you stop typing"), 0, 1, before),
+  ).toEqual({
+    line: 0,
+    column: 31,
+  })
 })

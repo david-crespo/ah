@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 // Where in the source a spot in the rendered preview comes from, so ⌘-click
 // can put helix's cursor there (client.ts). A block's data-line gives its
 // lines; within them, the rendered text before the spot is found in the
@@ -86,4 +88,15 @@ export function sourcePosition(
     }
   }
   return { line: start, column: 0 }
+}
+
+/** A block's rendered text up to a spot in it, for sourcePosition: without
+ * what a diff shows as removed, which the source doesn't have */
+export function textBefore(block: Element, node: Node, offset: number): string {
+  const upTo = document.createRange()
+  upTo.setStart(block, 0)
+  upTo.setEnd(node, offset)
+  const shown = upTo.cloneContents()
+  for (const old of shown.querySelectorAll(".diff-old, .diff-removed")) old.remove()
+  return shown.textContent ?? ""
 }

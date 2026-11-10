@@ -31,6 +31,51 @@ function describe(request: Request, kinds: RequestKinds): { label?: string; body
   )
 }
 
+/** The passage a selection comment quoted (selection.ts), found again in
+ * `content`'s text: where its prefix and suffix are too, when it's there more
+ * than once */
+export function findPassage(
+  content: HTMLElement,
+  args: Record<string, string>,
+): Range | null {
+  const needle = args.selection
+  const nodes: Text[] = []
+  // Not the conversation or the comment box, which a page whose content is
+  // its whole body has inside it
+  const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, (node) =>
+    node.parentElement?.closest("#conversation, #popover")
+      ? NodeFilter.FILTER_REJECT
+      : NodeFilter.FILTER_ACCEPT,
+  )
+  while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+  const text = nodes.map((node) => node.data).join("")
+  let offset = text.indexOf(needle)
+  if (offset >= 0 && text.indexOf(needle, offset + 1) >= 0) {
+    while (offset >= 0) {
+      if (
+        (!args.prefix || text.slice(0, offset).endsWith(args.prefix)) &&
+        (!args.suffix || text.slice(offset + needle.length).startsWith(args.suffix))
+      )
+        break
+      offset = text.indexOf(needle, offset + 1)
+    }
+  }
+  if (offset < 0) return null
+  const range = document.createRange()
+  let cursor = 0
+  for (const node of nodes) {
+    if (offset >= cursor && offset < cursor + node.length) {
+      range.setStart(node, offset - cursor)
+    }
+    if (offset + needle.length > cursor && offset + needle.length <= cursor + node.length) {
+      range.setEnd(node, offset + needle.length - cursor)
+      break
+    }
+    cursor += node.length
+  }
+  return range
+}
+
 /** A gap between messages longer than this gets a time divider */
 const DIVIDER_GAP = 30 * 60 * 1000
 
@@ -410,46 +455,10 @@ export class Conversation {
   }
 
   private findAnchor({ args }: Request) {
-    const needle = args.selection
-    const nodes: Text[] = []
-    // Not the conversation or the comment box, which a page whose content is
-    // its whole body has inside it
-    const walker = document.createTreeWalker(this.content, NodeFilter.SHOW_TEXT, (node) =>
-      node.parentElement?.closest("#conversation, #popover")
-        ? NodeFilter.FILTER_REJECT
-        : NodeFilter.FILTER_ACCEPT,
-    )
-    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
-    const text = nodes.map((node) => node.data).join("")
-    let offset = text.indexOf(needle)
-    if (offset >= 0 && text.indexOf(needle, offset + 1) >= 0) {
-      while (offset >= 0) {
-        if (
-          (!args.prefix || text.slice(0, offset).endsWith(args.prefix)) &&
-          (!args.suffix || text.slice(offset + needle.length).startsWith(args.suffix))
-        )
-          break
-        offset = text.indexOf(needle, offset + 1)
-      }
-    }
-    if (offset < 0) {
+    const range = findPassage(this.content, args)
+    if (!range) {
       this.reportError("This passage has changed and could not be located.")
       return
-    }
-    const range = document.createRange()
-    let cursor = 0
-    for (const node of nodes) {
-      if (offset >= cursor && offset < cursor + node.length) {
-        range.setStart(node, offset - cursor)
-      }
-      if (
-        offset + needle.length > cursor &&
-        offset + needle.length <= cursor + node.length
-      ) {
-        range.setEnd(node, offset + needle.length - cursor)
-        break
-      }
-      cursor += node.length
     }
     this.setOpen(false)
     CSS.highlights.set("conversation-anchor", new Highlight(range))
