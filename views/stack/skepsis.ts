@@ -1,4 +1,4 @@
-// A stack page's diff buttons (stack.ts) open the diff in skepsis, a diff
+// A stack page's diff buttons (client.ts) open the diff in skepsis, a diff
 // review whose comments go to the agent the page is bound to. AH_SKEPSIS is
 // the command that runs it, split on spaces, like
 // `node /Users/me/skepsis/cli.ts`; without it, skepsis on PATH. Each diff

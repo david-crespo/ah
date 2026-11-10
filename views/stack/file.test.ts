@@ -1,6 +1,6 @@
 import { expect, test } from "vitest"
-import { parseStackFile } from "./stack_data.ts"
-import { stackJson, stackPage } from "./stack_file.ts"
+import { parseStackFile } from "./data.ts"
+import { stackJson, stackPage } from "./file.ts"
 
 test("a new stack's page loads the client, and its stack.json parses", () => {
   const page = stackPage("A <b> stack")

@@ -1,10 +1,10 @@
 // A stack's files, which `ah tool stack` writes from the templates here: the
-// page, only a frame that loads stack.ts and stack.css, and the stack.json
-// next to it that the agent fills in (stack_data.ts). One directory per
+// page, only a frame that loads stack.js and stack.css, and the stack.json
+// next to it that the agent fills in (data.ts). One directory per
 // stack, since a page reloads on any change in its directory.
 
 import { escapeHtml } from "../escape.ts"
-import type { StackFile } from "./stack_data.ts"
+import type { StackFile } from "./data.ts"
 
 export function stackPage(title: string): string {
   return `<!doctype html>

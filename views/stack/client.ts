@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 
-// A stack's page, served as /stack.js on the pages port; the page (stack_file.ts)
-// loads it and /stack.css. It draws the page's stack (stack_data.ts, served
+// A stack's page, served as /stack.js on the pages port; the page (file.ts)
+// loads it and /stack.css. It draws the page's stack (data.ts, served
 // at _ah/stack) newest first, like jj log: each PR's title, its bookmark and
 // how it merges, its summary and files collapsed under it, and a line per
 // commit that opens to its description and files. A graph down the left
@@ -10,15 +10,15 @@
 // in skepsis (skepsis.ts). Until a PR is on GitHub, its Body button opens its
 // body in a doc page, starting the file if there isn't one. Once it is, GitHub
 // has the body, so the button gives way to a link to the PR, with GitHub's
-// title and where the PR stands there (stack_github.ts, served at
+// title and where the PR stands there (github.ts, served at
 // _ah/stack-github, which comes after the stack since gh is slow). The stack
 // is read again, without a reload, when the server says its data changed:
 // on every jj operation, and when stack.json or a body is saved. Which
 // sections are open is kept across reloads and redraws, and after a reload
 // the last stack is drawn at once while the new one loads.
 
-import type { FileStat, Pr, Stack } from "./stack_data.ts"
-import type { GithubPr, GithubPrs } from "./stack_github.ts"
+import type { FileStat, Pr, Stack } from "./data.ts"
+import type { GithubPr, GithubPrs } from "./github.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")

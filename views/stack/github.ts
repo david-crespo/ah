@@ -1,4 +1,4 @@
-// A stack's PRs as GitHub has them, which stack.ts shows beside what jj has:
+// A stack's PRs as GitHub has them, which client.ts shows beside what jj has:
 // each bookmark's newest PR, from one GraphQL query through gh. Kept for a
 // few seconds, since the page asks on every jj operation and gh takes a
 // second or so.
@@ -7,7 +7,7 @@ import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
 import { run } from "../../platform/proc.ts"
-import { parseStackFile, STACK_FILE } from "./stack_data.ts"
+import { parseStackFile, STACK_FILE } from "./data.ts"
 
 export interface GithubPr {
   number: number

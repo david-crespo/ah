@@ -5,7 +5,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { expect, test, vi } from "vitest"
 import type { Pages } from "../../subjects/files/files.ts"
 import { LiveReload } from "./files.ts"
-import { STACK_FILE } from "./stack_data.ts"
+import { STACK_FILE } from "../stack/data.ts"
 
 test("a stack's page is told its data changed, and to reload for anything else", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ah-live-")))

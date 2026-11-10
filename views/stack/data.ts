@@ -1,4 +1,4 @@
-// A stack page's data, which stack.ts draws: the PRs an agent lists in
+// A stack page's data, which client.ts draws: the PRs an agent lists in
 // stack.json next to the page, filled in from jj. The agent writes only what
 // jj doesn't know (titles, notes, how each PR merges, summaries). The rest
 // comes from the graph: a PR is its bookmark's commits that trunk and the PRs

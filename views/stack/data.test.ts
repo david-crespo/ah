@@ -17,7 +17,7 @@ import {
   parseStackFile,
   readStack,
   STACK_FILE,
-} from "./stack_data.ts"
+} from "./data.ts"
 
 test("parseGitDiff counts each file's lines and reads its status", () => {
   const diff = [

@@ -41,8 +41,8 @@ import {
   workspaceTrackers,
 } from "../core/tracker_api.ts"
 import { taskListPage } from "./page/task_list_file.ts"
-import { STACK_FILE } from "./page/stack_data.ts"
-import { stackJson, stackPage } from "./page/stack_file.ts"
+import { STACK_FILE } from "./stack/data.ts"
+import { stackJson, stackPage } from "./stack/file.ts"
 
 /** Where the file's thread takes the agent's events, or requests from
  * outside its page */

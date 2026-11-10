@@ -195,7 +195,7 @@ async function serve(port: number) {
 
   const chatCss = await readFile(assetPath("views/thread/chat.css"), "utf8")
   const taskListCss = await readFile(assetPath("views/page/task_list.css"), "utf8")
-  const stackCss = await readFile(assetPath("views/page/stack.css"), "utf8")
+  const stackCss = await readFile(assetPath("views/stack/stack.css"), "utf8")
 
   // The core: the agents, and where pages find the ones they're bound to
   const core = Core.load()

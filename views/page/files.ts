@@ -6,11 +6,11 @@ import { type FSWatcher, watch } from "node:fs"
 import { dirname } from "node:path"
 import type { FileType, Live, Pages } from "../../subjects/files/files.ts"
 import { pageKinds } from "./requests.ts"
-import { STACK_FILE, stackOpsDir } from "./stack_data.ts"
+import { STACK_FILE, stackOpsDir } from "../stack/data.ts"
 
 /** Tells the file's pages to reload when anything in its directory changes:
  * the file itself, or a script, stylesheet or data file next to it. A
- * stack's page draws its data itself (stack.ts), so it's only told that the
+ * stack's page draws its data itself (views/stack/), so it's only told that the
  * data changed: its stack.json, a PR's body, or the repo's commits, when a
  * jj operation lands. */
 export class LiveReload implements Live {

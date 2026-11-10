@@ -44,9 +44,9 @@ import { fileRoutes } from "../../subjects/files/routes.ts"
 import { pathOf } from "../../subjects/id.ts"
 import { rootFinder } from "../../core/workspace.ts"
 import { pageFiles, type LiveReload } from "./files.ts"
-import { diffArgs, openSkepsis } from "./skepsis.ts"
-import { ensureBody, readStack, STACK_FILE } from "./stack_data.ts"
-import { readGithub } from "./stack_github.ts"
+import { diffArgs, openSkepsis } from "../stack/skepsis.ts"
+import { ensureBody, readStack, STACK_FILE } from "../stack/data.ts"
+import { readGithub } from "../stack/github.ts"
 import { PUBLIC_SCRIPTS, retiredScript, retiredStub } from "./upgrade.ts"
 import { escapeHtml } from "../escape.ts"
 import { contentTypes } from "../mime.ts"
@@ -191,7 +191,7 @@ export class PageBackend {
       return new Response(null, { status: 204 })
     }
     // A stack's page: its PRs from jj and from GitHub, and its diff
-    // buttons, which open skepsis (stack.ts)
+    // buttons, which open skepsis (views/stack/)
     if (sub === "_ah/stack") {
       return await readStack(path).then(
         (stack) => Response.json(stack, { headers: noStore }),

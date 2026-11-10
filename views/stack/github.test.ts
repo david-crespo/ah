@@ -3,8 +3,8 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, test, vi } from "vitest"
-import { STACK_FILE } from "./stack_data.ts"
-import { githubRepo, readGithub, summarizeChecks } from "./stack_github.ts"
+import { STACK_FILE } from "./data.ts"
+import { githubRepo, readGithub, summarizeChecks } from "./github.ts"
 
 // gh, faked: each call's arguments, and what it answers; jj runs for real
 const gh = vi.hoisted(() => ({
