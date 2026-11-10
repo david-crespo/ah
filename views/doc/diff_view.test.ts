@@ -196,5 +196,9 @@ describe("moves", () => {
     // Blocks that only moved aren't also added or removed
     if (moves.length && moves.every((m) => m.from === m.to))
       expect(content.querySelector(".diff-added, .diff-removed")).toBeNull()
+    // A list moves whole, or its items move within lists
+    for (const li of content.querySelectorAll("li"))
+      expect(li.parentElement!.tagName).toMatch(/^[UO]L$/)
+    expect(content.querySelector("ul:empty, ol:empty")).toBeNull()
   })
 })

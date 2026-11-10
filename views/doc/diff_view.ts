@@ -139,11 +139,13 @@ function markMoved(
   content: HTMLElement,
   [start, end]: [number, number],
 ): HTMLElement | undefined {
+  // A move is of whole leaf blocks, so a block is in it when it starts in it:
+  // a list's lines go on over the blank line after it
   const inside = (el: HTMLElement) =>
     [el, ...el.querySelectorAll<HTMLElement>("[data-line]")].every((b) => {
       if (!b.dataset.line) return true
-      const [s, e] = lines(b)
-      return s >= start && e <= end
+      const [s] = lines(b)
+      return s >= start && s < end
     })
   const tops = new Set<HTMLElement>()
   for (let el of innermostBlocks(content, [[start, end]]).map(outer)) {
