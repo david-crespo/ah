@@ -8,7 +8,7 @@ import { spawn } from "node:child_process"
 import { mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { isRecord } from "./guards.ts"
-import { ahStateDir } from "./paths.ts"
+import { ahStateDir, rotateLog } from "./paths.ts"
 import { run } from "./proc.ts"
 import type { RexHealth } from "./rex.ts"
 
@@ -98,6 +98,7 @@ export async function ensureServer(
   const running = await status(port)
   if (running) return running.pid
   mkdirSync(join(files.log, ".."), { recursive: true })
+  rotateLog(files.log)
   const log = openSync(files.log, "a")
   const child = spawn(
     process.execPath,

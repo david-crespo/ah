@@ -26,6 +26,7 @@
 import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { isOneOf, isRecord, isString, str } from "../platform/guards.ts"
+import { rotateLog } from "../platform/paths.ts"
 import type { AgentDirectory } from "../subjects/files/files.ts"
 import {
   addressAlive,
@@ -176,6 +177,7 @@ export class Core implements AgentDirectory {
     this.#file = file
     this.#log = join(dirname(file), "registry-events.jsonl")
     mkdirSync(dirname(file), { recursive: true })
+    rotateLog(this.#log)
     this.#firstRex = new Promise((resolve) => (this.#gotRex = resolve))
   }
 

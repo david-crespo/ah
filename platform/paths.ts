@@ -2,7 +2,7 @@
 // constants so tests can point XDG_STATE_HOME somewhere else.
 
 import { homedir } from "node:os"
-import { readdirSync } from "node:fs"
+import { readdirSync, renameSync, statSync } from "node:fs"
 import { isAbsolute, join, relative, sep } from "node:path"
 
 export const stateHome = () =>
@@ -12,6 +12,16 @@ export const cacheHome = () => process.env.XDG_CACHE_HOME || join(homedir(), ".c
 
 /** ah's own state, under the XDG state dir */
 export const ahStateDir = (...parts: string[]) => join(stateHome(), "ah", ...parts)
+
+/** Move a log that's grown past `maxBytes` to <log>.old, over the one before,
+ * so it starts again. For the logs that are only for debugging. */
+export function rotateLog(log: string, maxBytes = 20 * 1024 * 1024) {
+  try {
+    if (statSync(log).size > maxBytes) renameSync(log, `${log}.old`)
+  } catch {
+    // not there yet
+  }
+}
 
 /** Claude Code's per-process files, <pid>.json, each there only while that
  * process runs. Under the config dir the process runs with
