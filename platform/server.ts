@@ -116,12 +116,16 @@ export async function ensureServer(
   process.exit(1)
 }
 
+/** Whether a command line is `ah server serve`: ah from PATH, ah.ts from
+ * source, or dist/ah.js from the package */
+export const isServeCommand = (command: string) =>
+  /\bah(\.[jt]s)? server serve\b/.test(command)
+
 /** Whether the process is a running `ah server serve`, so a stale pid file can't
  * make us kill some unrelated process that reused the pid */
 async function isAhServe(pid: number): Promise<boolean> {
   const { success, stdout } = await run("ps", ["-p", String(pid), "-o", "command="])
-  // ah from PATH, ah.ts from source, or dist/ah.js from the package
-  return success && /\bah(\.[jt]s)? serve\b/.test(stdout)
+  return success && isServeCommand(stdout)
 }
 
 function kill(pid: number, signal: NodeJS.Signals) {
@@ -132,8 +136,6 @@ function kill(pid: number, signal: NodeJS.Signals) {
   }
 }
 
-/** Stop the server: ask it for its pid, else read the pid file. Returns what
- * happened, for printing. */
 /** Wait for the dashboard's pages and the files' to follow the server, as
  * pages open before a restart reconnect. Returns a status line. */
 export async function waitForPages(
@@ -161,15 +163,13 @@ export async function waitForPages(
   return summary()
 }
 
+/** Stop the server: ask it for its pid, else read the pid file. Returns what
+ * happened, for printing. */
 export async function stopServer(port: number, files = defaultFiles()): Promise<string> {
   const answering = await status(port)
   const fromFile = readPidFile(files)
   const pid = answering?.pid ?? (fromFile?.port === port ? fromFile.pid : undefined)
-  if (pid === undefined) {
-    return answering
-      ? `a server from before ah server stop is on port ${port}; stop it by hand (lsof -i :${port})`
-      : "not running"
-  }
+  if (pid === undefined) return "not running"
   if (!answering && !(await isAhServe(pid))) {
     rmSync(files.pid)
     return "not running (removed a stale pid file)"
