@@ -53,6 +53,9 @@ export interface Pr extends StackPr {
   /** Its bookmark doesn't exist yet, so it has no base and no commits */
   missing: boolean
   base: string
+  /** Revsets for its diff, from its base to its bookmark, quoted as needed;
+   * null while it's missing */
+  diff: { from: string; to: string } | null
   /** Set when the base is inside an earlier PR's commits, not at its tip */
   forksFrom: { n: number; change: string } | null
   /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
@@ -174,6 +177,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
           ...pr,
           missing: true,
           base: "",
+          diff: null,
           forksFrom: null,
           pushed: null,
           files: [],
@@ -203,12 +207,14 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
       ])
       const [change, bookmarks = ""] = baseLine.split("\n")[0].split("\t")
       const names = bookmarks.split(" ").filter(Boolean)
+      const baseName =
+        file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0]
       const result: Pr = {
         ...pr,
         missing: false,
         forksFrom: null,
-        base:
-          file.prs.find((q) => names.includes(q.bookmark))?.bookmark ?? names[0] ?? change,
+        base: baseName ?? change,
+        diff: { from: baseName ? JSON.stringify(baseName) : change, to: tip },
         pushed: pushed.split("\n")[0] || null,
         files: parseGitDiff(diff),
         commits: commits

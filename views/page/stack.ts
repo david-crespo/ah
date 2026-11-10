@@ -157,7 +157,7 @@ function prCard(pr: Pr, side: boolean, gh: GithubPr | undefined, base: string): 
   return `<div class="row${side ? " side" : ""}"><section class="pr">
     <div class="pr-head">
       <h2><span class="n">${pr.n}.</span> ${esc(gh?.title ?? pr.title)}</h2>
-      ${pr.missing ? "" : stat(pr.files, { from: pr.base, to: pr.bookmark })}
+      ${pr.diff ? stat(pr.files, pr.diff) : ""}
     </div>
     <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${pr.forksFrom ? note(`forks from ${pr.forksFrom.change.slice(0, 4)}, inside PR ${pr.forksFrom.n}, not its tip`, "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>

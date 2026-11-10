@@ -117,16 +117,33 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     const summary = stack.prs.map((p) => ({
       n: p.n,
       base: p.base,
+      diff: p.diff,
       pushed: p.pushed,
       commits: p.commits.map((c) => c.description.split("\n")[0]),
       files: p.files.map((f) => `${f.status} ${f.path} +${f.add}`),
     }))
+    const base = stack.prs[2].base
     expect(summary).toEqual([
-      { n: 3, base: "one", pushed: null, commits: ["Add d"], files: ["A d.txt +1"] },
-      { n: 2, base: "one", pushed: null, commits: ["Add c"], files: ["A c.txt +1"] },
+      {
+        n: 3,
+        base: "one",
+        diff: { from: '"one"', to: '"three"' },
+        pushed: null,
+        commits: ["Add d"],
+        files: ["A d.txt +1"],
+      },
+      {
+        n: 2,
+        base: "one",
+        diff: { from: '"one"', to: '"two"' },
+        pushed: null,
+        commits: ["Add c"],
+        files: ["A c.txt +1"],
+      },
       {
         n: 1,
         base: expect.stringMatching(/^[k-z]{8}$/),
+        diff: { from: base, to: '"one"' },
         pushed,
         commits: ["Add b, edited", "Add a"],
         files: ["A a.txt +1", "A b.txt +1"],
@@ -152,7 +169,13 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     const four = { ...file, prs: [...file.prs, pr(4, "four")] }
     writeFileSync(join(notes, STACK_FILE), JSON.stringify(four))
     const withFour = await readStack(join(notes, "index.html"))
-    expect(withFour.prs[0]).toMatchObject({ n: 4, missing: true, commits: [], files: [] })
+    expect(withFour.prs[0]).toMatchObject({
+      n: 4,
+      missing: true,
+      diff: null,
+      commits: [],
+      files: [],
+    })
     expect(withFour.prs.slice(1)).toEqual(edited.prs)
   } finally {
     rmSync(dir, { recursive: true })
