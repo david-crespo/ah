@@ -27,6 +27,10 @@ describe("diffMarkdown", () => {
       ["One.\n\n\nTwo.\n", "One.\n\nTwo.\n"],
       ["- a\n\n- b\n- c\n", "- a\n- b\n- c\n"],
       ["# A\nOne.\n", "# A\n\n\nOne.\n"],
+      // Before a block that takes no inline marks
+      ["One.\n```\ncode\n```\n", "One.\n\n```\ncode\n```\n"],
+      ["One.\n\n\n```\ncode\n```\n", "One.\n\n```\ncode\n```\n"],
+      ["One.\n\n| a |\n|---|\n| 1 |\n", "One.\n\n\n| a |\n|---|\n| 1 |\n"],
     ])
       expect(diff(prev, next)).toEqual({
         text: next,

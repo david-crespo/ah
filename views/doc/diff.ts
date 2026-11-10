@@ -248,11 +248,14 @@ export function diffMarkdown(
   }
   // Blank lines added or removed between blocks don't show, but in code
   // they do, and a soft break's key is a space, so a paragraph split in two
-  // still shows
+  // still shows. A side with none has nothing to be in code.
   const blank = (side: Side, k: string[], s: number, e: number) =>
     k.slice(s, e).every((key) => key === "\n") &&
-    !side.blocks.some(
-      (b) => b.opaque && b.start <= side.lineOf[s] && side.lineOf[s] < b.end,
+    !(
+      s < e &&
+      side.blocks.some(
+        (b) => b.opaque && b.start <= side.lineOf[s] && side.lineOf[s] < b.end,
+      )
     )
   for (let i = runs.length - 1; i >= 0; i--) {
     const r = runs[i]
