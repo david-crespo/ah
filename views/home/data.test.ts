@@ -12,6 +12,7 @@ import {
   projectStatus,
   readHome,
 } from "./data.ts"
+import { isPostponed } from "./postponed.ts"
 
 const SAMPLE = `# Workstreams
 
@@ -107,9 +108,40 @@ test("a project needs you while something waits on it, else runs while an agent 
   const waiting = [
     { id: "1", project: "Docs", text: "", written: "", links: [] },
   ] satisfies HomeFile["waiting"]
-  expect(projectStatus("Docs", waiting, rows)).toBe("needs you")
-  expect(projectStatus("ah (doc editor, stack)", waiting, rows)).toBe("running")
-  expect(projectStatus("Concierge", waiting, rows)).toBe("idle")
+  const now = new Date()
+  expect(projectStatus("Docs", waiting, rows, now)).toBe("needs you")
+  expect(projectStatus("ah (doc editor, stack)", waiting, rows, now)).toBe("running")
+  expect(projectStatus("Concierge", waiting, rows, now)).toBe("idle")
+})
+
+test("an item is postponed until its `until`, and one that doesn't parse isn't", () => {
+  const until = "2026-11-11T09:00:00-06:00"
+  const at = (iso: string) => new Date(iso)
+  expect(isPostponed({ until }, at("2026-11-10T17:00:00-06:00"))).toBe(true)
+  expect(isPostponed({ until }, at("2026-11-11T08:59:59-06:00"))).toBe(true)
+  expect(isPostponed({ until }, at("2026-11-11T09:00:00-06:00"))).toBe(false)
+  expect(isPostponed({ until }, at("2026-11-12T09:00:00-06:00"))).toBe(false)
+  expect(isPostponed({ until: "tomorrow" }, at("2026-11-10T17:00:00-06:00"))).toBe(false)
+  expect(isPostponed({}, at("2026-11-10T17:00:00-06:00"))).toBe(false)
+  expect(
+    parseHomeFile(
+      JSON.stringify({ waiting: [{ id: "1", project: "P", text: "t", until }] }),
+    ).waiting[0].until,
+  ).toBe(until)
+})
+
+test("a postponed item doesn't make its project need you until its time comes", () => {
+  const until = "2026-11-11T09:00:00-06:00"
+  const waiting = [
+    { id: "1", project: "Docs", text: "", written: "", links: [], until },
+  ] satisfies HomeFile["waiting"]
+  const status = (iso: string) => projectStatus("Docs", waiting, [], new Date(iso))
+  expect(status("2026-11-10T17:00:00-06:00")).toBe("idle")
+  expect(status("2026-11-11T09:00:01-06:00")).toBe("needs you")
+  const both = [...waiting, { ...waiting[0], id: "2", until: undefined }]
+  expect(projectStatus("Docs", both, [], new Date("2026-11-10T17:00:00-06:00"))).toBe(
+    "needs you",
+  )
 })
 
 test("home.json is read leniently: entries missing what they need are left out", () => {

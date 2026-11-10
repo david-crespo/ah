@@ -3,7 +3,7 @@
 // projects it points to (workstreams.md), by `## Group` heading and
 // `**Name.**` paragraph; and the live agents, each joined to a project. What
 // can be looked up is never written: a project's status and the agents are
-// computed on every read.
+// computed on every read, as is which waiting items are postponed.
 
 import { readFile } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
@@ -11,6 +11,7 @@ import type { AgentId } from "../../model.ts"
 import { type AgentView, isCurrent } from "../../core/agent_view.ts"
 import { isRecord, isString } from "../../platform/guards.ts"
 import { sameProject } from "./names.ts"
+import { isPostponed } from "./postponed.ts"
 
 export const HOME_FILE = "home.json"
 const WORKSTREAMS = "../workstreams.md"
@@ -55,6 +56,9 @@ export interface Waiting {
   link?: string
   file?: string
   links: Link[]
+  /** ISO time it's postponed to: until then it's not in the list and
+   * doesn't make its project need the user */
+  until?: string
 }
 
 export interface Finished {
@@ -152,6 +156,7 @@ export function parseHomeFile(text: string): HomeFile {
             href: optional(l.href),
             file: optional(l.file),
           })),
+        until: optional(w.until),
       })),
     finished: records(file.finished)
       .filter((f) => isString(f.project) && isString(f.text))
@@ -233,10 +238,16 @@ export function joinAgents(
   return rows.sort((a, b) => Number(b.busy) - Number(a.busy))
 }
 
-/** Needs you while a waiting item is the project's, else running while one
- * of its agents is busy */
-export function projectStatus(name: string, waiting: Waiting[], rows: AgentRow[]): Status {
-  if (waiting.some((w) => sameProject(w.project, name))) return "needs you"
+/** Needs you while a waiting item not postponed at `now` is the project's,
+ * else running while one of its agents is busy */
+export function projectStatus(
+  name: string,
+  waiting: Waiting[],
+  rows: AgentRow[],
+  now: Date,
+): Status {
+  if (waiting.some((w) => sameProject(w.project, name) && !isPostponed(w, now)))
+    return "needs you"
   if (rows.some((r) => r.busy && r.project !== null && sameProject(r.project, name)))
     return "running"
   return "idle"
@@ -300,14 +311,15 @@ export async function readHome(
     return []
   })
   const rows = joinAgents(file, agents, self)
+  const now = new Date()
   return {
     file,
     projects: workstreams.map((p) => ({
       ...p,
-      status: projectStatus(p.name, file.waiting, rows),
+      status: projectStatus(p.name, file.waiting, rows, now),
     })),
     agents: rows,
-    readAt: new Date().toISOString(),
+    readAt: now.toISOString(),
     errors,
   }
 }

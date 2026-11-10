@@ -7,8 +7,12 @@
 // every project in workstreams.md with its computed status, its first
 // paragraph opening to the rest. A project with a stack page has a Stack
 // button by its name wherever it's shown, and a waiting item can link to a
-// file; both ask the server to open it in a window. The tab is kept in the URL hash, so a
-// reload stays on it, and which projects are open is kept across redraws and
+// file; both ask the server to open it in a window. A waiting item whose
+// `until` is still to come is postponed: it's left out of the list, its
+// numbers and its count, and shown in a Postponed section under it that
+// starts closed. It comes back by itself at the first read after its time.
+// The tab is kept in the URL hash, so a reload stays on it, and which
+// projects are open, and whether Postponed is, is kept across redraws and
 // reloads. The data is read again when the server says a file changed, and
 // every 5 seconds while the page is in view, since agents start and stop
 // without any file changing; an unchanged answer draws nothing, so an open
@@ -17,6 +21,7 @@
 import type { AgentRow, Home, Status, Waiting } from "./data.ts"
 import { escapeHtml } from "../escape.ts"
 import { sameProject } from "./names.ts"
+import { isPostponed } from "./postponed.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -59,6 +64,14 @@ const when = (iso: string) => {
   return isToday(d)
     ? time(d)
     : `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+/** HH:MM today, "tomorrow HH:MM", else MM-DD */
+const until = (iso: string) => {
+  const d = new Date(iso)
+  const tomorrow = new Date()
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (isToday(d)) return time(d)
+  return d.toDateString() === tomorrow.toDateString() ? `tomorrow ${time(d)}` : when(iso)
 }
 /** How long ago, in round numbers */
 const age = (ms: number) => {
@@ -117,17 +130,25 @@ const agentRow = (a: AgentRow, stack: StackButton) => {
   </li>`
 }
 
-const waitingRow = (w: Waiting, i: number, stack: StackButton) => {
+/** A waiting item, numbered `n`, or a postponed one, unnumbered with its
+ * `until` in place of its age and never stale */
+const waitingRow = (w: Waiting, n: number | null, stack: StackButton) => {
   const at = new Date(w.written)
   const valid = !isNaN(+at)
-  const stale = valid && Date.now() - +at > STALE
+  const stale = n !== null && valid && Date.now() - +at > STALE
   const text = escapeHtml(w.text)
+  const meta =
+    n === null
+      ? `<span class="meta" title="${escapeHtml(new Date(w.until!).toLocaleString())}">until ${until(w.until!)}</span>`
+      : valid
+        ? `<span class="meta" title="${escapeHtml(at.toLocaleString())}">${age(Date.now() - +at)}</span>`
+        : ""
   return `<li class="row${stale ? " stale" : ""}">
-    <span class="n">${i + 1}</span>
+    <span class="n">${n ?? ""}</span>
     <div>
       <div class="top">
         <span><span class="proj">${escapeHtml(w.project)}</span>${stack(w.project)}</span>
-        ${valid ? `<span class="meta" title="${escapeHtml(at.toLocaleString())}">${age(Date.now() - +at)}</span>` : ""}
+        ${meta}
       </div>
       <div>${w.link ? link(w.link, text) : w.file ? fileLink(w.file, text) : text}</div>
       ${w.note ? `<div class="note">${escapeHtml(w.note)}</div>` : ""}
@@ -154,7 +175,11 @@ function html(home: Home, error: string): string {
   const { file, projects } = home
   const agents = home.agents.filter((a) => !a.self)
   const finished = file.finished.toSorted((a, b) => +new Date(b.at) - +new Date(a.at))
-  const selected = hashTab() ?? (file.waiting.length ? "waiting" : "progress")
+  // As of the read, as the projects' statuses are
+  const later = (w: Waiting) => isPostponed(w, new Date(home.readAt))
+  const waiting = file.waiting.filter((w) => !later(w))
+  const postponed = file.waiting.filter(later)
+  const selected = hashTab() ?? (waiting.length ? "waiting" : "progress")
   const tab = (id: Tab, label: string, count: number, you = false) =>
     `<button type="button" role="tab" data-tab="${id}" aria-selected="${id === selected}">${label}<span class="count${you && count ? " you" : ""}">${count}</span></button>`
   const stack: StackButton = (project) =>
@@ -189,12 +214,22 @@ function html(home: Home, error: string): string {
     ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
     <div class="tabs" role="tablist">
       ${tab("progress", "In progress", agents.length)}
-      ${tab("waiting", "Waiting on you", file.waiting.length, true)}
+      ${tab("waiting", "Waiting on you", waiting.length, true)}
       ${tab("finished", "Finished", finished.length)}
       ${tab("projects", "All projects", projects.length)}
     </div>
     ${panel("progress", `<ul class="card">${agents.map((a) => agentRow(a, stack)).join("") || empty("Nothing is running.")}</ul>`)}
-    ${panel("waiting", `<ol class="card waiting">${file.waiting.map((w, i) => waitingRow(w, i, stack)).join("") || empty("Nothing is waiting on you.")}</ol>`)}
+    ${panel(
+      "waiting",
+      `<ol class="card waiting">${waiting.map((w, i) => waitingRow(w, i + 1, stack)).join("") || empty("Nothing is waiting on you.")}</ol>${
+        postponed.length
+          ? `<details class="postponed" data-key="postponed"${open.has("postponed") ? " open" : ""}>
+        <summary>Postponed <span class="count">${postponed.length}</span></summary>
+        <ol class="card waiting">${postponed.map((w) => waitingRow(w, null, stack)).join("")}</ol>
+      </details>`
+          : ""
+      }`,
+    )}
     ${panel(
       "finished",
       `<ul class="card finished">${

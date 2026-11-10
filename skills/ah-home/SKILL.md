@@ -100,6 +100,13 @@ opened.
   last checked the item. The page shows its age, and dims an item older than
   six hours with "not rechecked since". When an item changes, rewrite it with
   a new `written`; when it's done, remove it and add a `finished` entry.
+- To postpone an item, as when the user says they won't get to it until
+  tomorrow, give it `until`, an ISO time. Until then it's left out of the
+  list and its count, doesn't make its project "needs you", and isn't dimmed
+  as stale; it shows in a Postponed section under the list, closed at first,
+  with "until tomorrow 09:00" or "until 11-14" in place of its age. At that
+  time it's back in the list by itself, so you needn't edit it again. An
+  `until` that doesn't parse is ignored.
 - A waiting item's text links to `link`, a URL, or `file`, and each of its
   `links` has a `label` and an `href` or a `file`. A file is a markdown file,
   which opens in a doc page, or an HTML page, which opens in its page, in a
@@ -116,7 +123,8 @@ file that isn't JSON shows an error on the page, which keeps what it last drew.
 
 ## What's computed
 
-- A project's status is "needs you" while a waiting item has its name, else
+- A project's status is "needs you" while a waiting item that isn't
+  postponed has its name, else
   "running" while one of its agents is working, else "idle".
 - The In progress tab is every live agent ah knows of, except the one the
   page is bound to (you), working ones first.

@@ -219,6 +219,20 @@ main .waiting .n {
 main .waiting .row.stale > div {
   opacity: 0.6;
 }
+/* Waiting items put off until later, under the list and closed at first */
+main .postponed {
+  margin-top: 14px;
+}
+main .postponed > summary {
+  width: fit-content;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+main .postponed > .card {
+  margin-top: 8px;
+}
 
 main .finished .row {
   display: grid;
