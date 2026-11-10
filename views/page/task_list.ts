@@ -217,10 +217,13 @@ class CommentBox {
       }
       if (e.key === "Escape") this.close()
     })
+    // A click outside closes it only while it's empty: with a comment
+    // started, the user may be reading another item or selecting a quote
     document.addEventListener("mousedown", (e) => {
       const target = e.target as Node
       if (
         this.#item &&
+        !this.#text.value &&
         !this.el.contains(target) &&
         !this.#item.commentButton.contains(target)
       )
