@@ -84,6 +84,17 @@ test("a Claude agent's address is the one its latest process reported", async ()
   expect(readFileSync(join(dir, "registry-events.jsonl"), "utf8")).not.toContain("t2")
 })
 
+test("the event log keeps only the start of a prompt", async () => {
+  await report(start("claude", "s1"))
+  await report({
+    ...start("claude", "s1"),
+    event: "UserPromptSubmit",
+    prompt: "x".repeat(5000),
+  })
+  const lines = readFileSync(join(dir, "registry-events.jsonl"), "utf8").trim().split("\n")
+  expect(JSON.parse(lines.at(-1)!).prompt).toBe("x".repeat(300))
+})
+
 test("a Codex agent is reached at whatever session it's in now", async () => {
   await report(start("codex", "th1"))
   core.bind("block:1", { harness: "codex", thread: "th1", pid: 42 })

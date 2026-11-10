@@ -520,7 +520,10 @@ export class Core implements AgentDirectory {
   }
 
   #apply(event: RegistryEvent, address: Address | null): string | null {
-    this.#write("event", event)
+    // Enough of a prompt to tell which it was: in full, they'd grow the log
+    // by megabytes a week
+    const prompt = event.kind === "hook" ? event.prompt?.slice(0, 300) : undefined
+    this.#write("event", prompt === undefined ? event : { ...event, prompt })
     const { agent, blocks, summarize } = apply(this.registry, event)
     // Before listeners hear of it, so a page bound to the agent can reach it
     if (agent && address) this.#addresses.set(agent, address)
