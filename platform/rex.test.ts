@@ -211,6 +211,33 @@ test("a load that can't read a session it listed fails, rather than leave it out
   await expect(follower.load()).rejects.toThrow("session:t")
 })
 
+test("a view read in flight when its session is destroyed doesn't bring it back", async () => {
+  const views = new Map<string, unknown>([["session:s", view]])
+  const rex = fakeRex(views)
+  let answer = () => {}
+  let slow = false
+  const follower = new Follower(
+    async (method, args) => {
+      const answered = rex(method, args)
+      if (slow && method === "session.view") await new Promise<void>((r) => (answer = r))
+      return answered
+    },
+    () => {},
+  )
+  await follower.load()
+  slow = true
+  const created = { type: "window_created", payload: {} }
+  follower.onEvent({
+    type: "session_event",
+    payload: { session_id: "session:s", event: created },
+  })
+  follower.onEvent({ type: "session_destroyed", payload: { session_id: "session:s" } })
+  views.delete("session:s")
+  answer()
+  await new Promise((r) => setTimeout(r, 10))
+  expect(follower.state().sessions).toEqual([])
+})
+
 /** An empty rex binary at `path`, making its directories */
 function binary(path: string) {
   mkdirSync(join(path, ".."), { recursive: true })

@@ -122,12 +122,13 @@ function refind(tried: string, e: unknown): boolean {
   return true
 }
 
-/** Run `rex`, noting how it went */
+/** Run `rex`, noting how it went. One that hangs is killed, so a read it
+ * holds up is tried again. */
 async function runRex(args: string[]): Promise<Output> {
   const binary = health.binary
   let out: Output
   try {
-    out = await run(binary, args)
+    out = await run(binary, args, { timeout: 10_000 })
   } catch (e) {
     if (refind(binary, e)) return runRex(args)
     health.lastCall = { at: Date.now(), error: e instanceof Error ? e.message : String(e) }
@@ -398,8 +399,11 @@ export class Follower {
       return
     }
     this.#reading.set(session, false)
+    const known = this.sessions.has(session)
     try {
       const view = parseView(await this.#call("session.view", { session_id: session }))
+      // Destroyed while the read was out
+      if (known && !this.sessions.has(session)) return
       if (view) {
         const before = this.sessions.get(session)
         this.sessions.set(session, view)
