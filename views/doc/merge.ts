@@ -139,7 +139,8 @@ const splitLines = (text: string) => text.match(/[^\n]*\n|[^\n]+$/g) ?? []
  * when one side's are among the other's. A conflict within a line is marked
  * as CriticMarkup's substitution, `{~~unsaved~>disk~~}`, around the words
  * that conflict when every version is at most two words, and else around the
- * whole sentences. */
+ * whole sentences. On a line that has that marker's syntax in it, it's marked
+ * around the line. */
 export function mergeDisk(
   base: string,
   unsaved: string,
@@ -171,6 +172,12 @@ export function mergeDisk(
   }
 
   const lineStart = (i: number) => atLineStart(o, i)
+  /** The whole lines that tokens [start, end) of the base are on */
+  const lines = (start: number, end: number) => {
+    while (!lineStart(start)) start--
+    while (end < o.length && o[end - 1] !== "\n") end++
+    return [start, end]
+  }
   /** The base's version of a region and each side's */
   const versions = (r: Region) => ({
     orig: o.slice(r.start, r.end).join(""),
@@ -198,24 +205,30 @@ export function mergeDisk(
     return null
   }
 
+  /** Whether a version of a region's lines has the inline marker's syntax,
+   * which would end a marker there early or start it late */
+  const marked = (r: Region) => {
+    const [start, end] = lines(r.start, r.end)
+    const hunks = all.filter((h) => start <= h.start && h.end <= end)
+    return Object.values(versions({ start, end, hunks })).some((t) => SYNTAX.test(t))
+  }
+
   // By words, conflicts across lines widen to whole lines, and ones bigger
   // than a couple of words to whole sentences
   const widen = new Map<Region, "line" | "sentence">()
   for (const r of regions) {
     if (by === "lines" || merged(r) !== null) continue
-    const all = Object.values(versions(r))
-    if (all.some((t) => t.includes("\n"))) widen.set(r, "line")
-    else if (r.start < r.end && all.some((t) => words(t) > 2)) widen.set(r, "sentence")
+    const texts = Object.values(versions(r))
+    if (texts.some((t) => t.includes("\n")) || marked(r)) widen.set(r, "line")
+    else if (r.start < r.end && texts.some((t) => words(t) > 2)) widen.set(r, "sentence")
   }
   const boundary = (i: number) => atBoundary(o, i)
   if (widen.size) {
     const out: Region[] = []
     for (const r of regions) {
       const to = widen.get(r)
-      if (to === "line") {
-        while (!lineStart(r.start)) r.start--
-        while (r.end < o.length && o[r.end - 1] !== "\n") r.end++
-      } else if (to === "sentence") {
+      if (to === "line") [r.start, r.end] = lines(r.start, r.end)
+      else if (to === "sentence") {
         while (!boundary(r.start)) r.start--
         while (!boundary(r.end)) r.end++
       }
@@ -291,28 +304,39 @@ function inlineMarkers(ours: string, theirs: string) {
 export const MINE = "mine"
 export const AGENT = "agent"
 
-/** Whole lines of each side between git's markers */
+/** Whole lines of each side between git's markers, of seven characters or
+ * the next length that no line of either side starts with, like jj's: a
+ * heading's underline, or the markers of a conflict still unresolved */
 function lineMarkers(ours: string, theirs: string) {
-  const lines = (s: string) => (s && !s.endsWith("\n") ? s + "\n" : s)
-  return `<<<<<<< ${MINE}\n${lines(ours)}=======\n${lines(theirs)}>>>>>>> ${AGENT}\n`
+  const sides = [ours, theirs].map((s) => (s && !s.endsWith("\n") ? s + "\n" : s))
+  const taken = sides
+    .join("")
+    .match(/^([<=>|+%-])\1{6,}/gm)
+    ?.map((run) => run.length)
+  let n = 7
+  while (taken?.includes(n)) n++
+  const mark = (ch: string, label = "") => ch.repeat(n) + label + "\n"
+  return mark("<", ` ${MINE}`) + sides[0] + mark("=") + sides[1] + mark(">", ` ${AGENT}`)
 }
 
+const SYNTAX = /\{~~|~>|~~\}/
 const INLINE = /\{~~([\s\S]*?)~>([\s\S]*?)~~\}/y
-const LINES = new RegExp(
-  String.raw`<<<<<<< ${MINE}\n([\s\S]*?)^=======\n([\s\S]*?)^>>>>>>> ${AGENT}(?:\n|$)`,
-  "my",
-)
+const LINES = (n: number) =>
+  new RegExp(
+    String.raw`<{${n}} ${MINE}\n([\s\S]*?)^={${n}}\n([\s\S]*?)^>{${n}} ${AGENT}(?:\n|$)`,
+    "my",
+  )
 
 /** `text` with the conflict a merge marked at `at` resolved to one side's
  * version, or null if none starts there */
 export function pick(text: string, at: number, side: typeof MINE | typeof AGENT) {
-  for (const re of [INLINE, LINES]) {
-    re.lastIndex = at
-    const m = re.exec(text)
-    if (m)
-      return text.slice(0, at) + m[side === MINE ? 1 : 2] + text.slice(at + m[0].length)
-  }
-  return null
+  // Line markers end at the length they start with
+  let n = 0
+  while (text[at + n] === "<") n++
+  const re = n < 7 ? INLINE : LINES(n)
+  re.lastIndex = at
+  const m = re.exec(text)
+  return m && text.slice(0, at) + m[side === MINE ? 1 : 2] + text.slice(at + m[0].length)
 }
 
 type Change = { from: number; to: number; insert: string }

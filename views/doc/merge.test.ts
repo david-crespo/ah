@@ -448,3 +448,37 @@ describe("pick", () => {
     expect(text).toBe(unsaved)
   })
 })
+
+describe("a conflict over text that has marker syntax", () => {
+  /** The merge's text, checked to have one conflict that picks back to each side */
+  const sides = (base: string, unsaved: string, disk: string, by?: "lines") => {
+    const { text, conflicts } = mergeDisk(base, unsaved, disk, by)
+    expect(conflicts).toBe(1)
+    const at = text.search(/\{~~|^<{7}/m)
+    expect(pick(text, at, MINE)).toBe(unsaved)
+    expect(pick(text, at, AGENT)).toBe(disk)
+    return text
+  }
+
+  test("is marked by lines when a sentence has the inline marker's arrow", () => {
+    const unsaved = 'gem "x", "~> 1.5" here now today ok\n'
+    const disk = 'gem "x", "~> 2.0" here then later on\n'
+    expect(sides('gem "x", "~> 1.0" here\n', unsaved, disk)).toBe(
+      `<<<<<<< mine\n${unsaved}=======\n${disk}>>>>>>> agent\n`,
+    )
+  })
+
+  test("is marked by lines when its line has a conflict still unresolved", () => {
+    const base = "One {~~two~>2~~} three four.\n"
+    const text = sides(base, base.replace("four", "4"), base.replace("four", "quatre"))
+    expect(text).toMatch(/^<<<<<<< mine\n/)
+  })
+
+  test("has markers of a length no line between them starts with", () => {
+    const text = sides("Title\n-------\n", "Title\n=======\n", "Title\n---\n", "lines")
+    expect(text).toBe("Title\n<<<<<<<< mine\n=======\n========\n---\n>>>>>>>> agent\n")
+    // Around one still unresolved
+    const old = "<<<<<<< mine\nfour\n=======\n4\n>>>>>>> agent\n"
+    expect(sides(old, old.replace("four", "quatre"), "vier\n")).toMatch(/^<{8} mine\n<{7} /)
+  })
+})
