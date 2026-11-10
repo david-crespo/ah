@@ -68,6 +68,32 @@ export class PtyBackend implements EditorBackend {
       // no sense there, like splitting the Rex pane
       AH_PANE: "1",
     }
+    let pty: IPty | undefined
+    // Listening from the start, so a resize while the command is set up is
+    // the size the editor starts at
+    ws.on("message", (data, isBinary) => {
+      if (isBinary) return
+      const msg = parsePtyMessage(String(data))
+      if (msg?.type === "resize") {
+        cols = Math.max(20, msg.cols)
+        rows = Math.max(5, msg.rows)
+      }
+      // Not started yet, or exited while the socket's close is in flight
+      if (!pty || !this.#ptys.has(pty)) return
+      if (msg?.type === "input") pty.write(msg.data)
+      else if (msg?.type === "resize") {
+        // The pty's fd is closed a moment before its exit is reported, and
+        // a resize then throws EBADF
+        try {
+          pty.resize(cols, rows)
+        } catch {}
+      } else if (msg?.type === "redraw") {
+        // A same-size resize raises no SIGWINCH, so send one: helix clears
+        // and repaints everything on any resize event
+        console.error(`ah: redraw requested by the page (${cols}x${rows})`)
+        pty.kill("SIGWINCH")
+      }
+    })
     let command: string
     let args: string[]
     try {
@@ -79,7 +105,6 @@ export class PtyBackend implements EditorBackend {
     // The page or the file may have gone while the command was set up, and
     // nothing would hang up an editor started now
     if (ws.readyState !== ws.OPEN || this.#closed) return ws.close()
-    let pty: IPty
     try {
       pty = spawn(command, args, {
         cols,
@@ -106,20 +131,6 @@ export class PtyBackend implements EditorBackend {
       // The page restarts an editor that quit, not one hung up with the file
       const reason = this.#closed ? "file closed" : "editor exited"
       if (ws.readyState === ws.OPEN) ws.close(1000, reason)
-    })
-    ws.on("message", (data, isBinary) => {
-      if (isBinary) return
-      const msg = parsePtyMessage(String(data))
-      if (msg?.type === "input") pty.write(msg.data)
-      else if (msg?.type === "resize") {
-        ;({ cols, rows } = msg)
-        pty.resize(Math.max(20, cols), Math.max(5, rows))
-      } else if (msg?.type === "redraw") {
-        // A same-size resize raises no SIGWINCH, so send one: helix clears
-        // and repaints everything on any resize event
-        console.error(`ah: redraw requested by the page (${cols}x${rows})`)
-        pty.kill("SIGWINCH")
-      }
     })
     const hangup = () => {
       if (this.#ptys.has(pty)) pty.kill("SIGHUP")
