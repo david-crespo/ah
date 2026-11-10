@@ -47,6 +47,15 @@ test("local media: images and video next to the file, outside dot directories", 
   }
 })
 
+test("local media: an SVG opened on its own can't run script", async () => {
+  const draft = join(dir, "draft.md")
+  await writeFile(join(dir, "x.svg"), '<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+  const svg = await localMedia(draft, "x.svg")
+  expect(svg.headers.get("content-type")).toEqual("image/svg+xml")
+  expect(svg.headers.get("content-security-policy")).toEqual("sandbox")
+  expect(svg.headers.get("x-content-type-options")).toEqual("nosniff")
+})
+
 test("pick: one side of a conflict, if the file is what the page showed", async () => {
   const file = join(dir, "draft.md")
   const text = "One {~~two~>2~~} three.\n"

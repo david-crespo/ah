@@ -203,5 +203,14 @@ export async function localMedia(filePath: string, p: string): Promise<Response>
   const type = mediaType(real)
   if (!type) return notFound
   const body = Readable.toWeb(createReadStream(real)) as ReadableStream<Uint8Array>
-  return new Response(body, { headers: { "content-type": type } })
+  // A link to an SVG opens it as a page on this origin, where its script
+  // could post to the API. Sandboxed, it can't run any, and in an <img> it
+  // never could.
+  return new Response(body, {
+    headers: {
+      "content-type": type,
+      "content-security-policy": "sandbox",
+      "x-content-type-options": "nosniff",
+    },
+  })
 }
