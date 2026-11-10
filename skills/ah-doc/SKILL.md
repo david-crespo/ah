@@ -58,8 +58,8 @@ for every `ah` command. opencode has no sandbox.
    starts if it's the one the file is bound to. Those left `waiting`
    by a previous session that never started them, or `interrupted` (it
    stopped mid-work), are not re-sent. Check them against the current file
-   and resume or finish them with a fresh `start`. Completed requests must
-   not be processed again.
+   and resume or finish them. Completed requests must not be processed
+   again.
 
 3. Tell the user the page is up (one line, no walkthrough of the gestures;
    they know the tool), then end the turn. Comments wake the session on
@@ -70,11 +70,10 @@ for every `ah` command. opencode has no sandbox.
 Each request after the header starts `Request <id>: ` and says what it asks;
 the id is what `ah message respond` takes.
 
-- Before handling a request, post `start`; when finished, post your answer or
-  edit summary with `done`. See **Replies and status** below. Edit notices
-  alone do not start work or need replies. For quick work (a short
-  answer, a one-line edit), skip `start`: `done` starts the work itself if
-  it isn't started. The spinner is for work that takes a while.
+- When finished with a request, post your answer or edit summary with
+  `done`. For work that takes a while, post `start` first, which shows a
+  spinner. See **Replies and status** below. Edit notices alone do not
+  start work or need replies.
 - A request that's only the user's text is a message from the page's
   conversation, with no selection. Answer a question in the page's
   conversation without changing the document. Edit only when the message
@@ -138,14 +137,13 @@ the id is what `ah message respond` takes.
 ## Replies and status
 
 ```
-ah message respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
+ah message respond <file> <phase> [request ids...] [--text <text> | --text-file <path>]
 ```
 
 Phases: `start`, `progress`, `reply`, `done`, `needs-reply`, `error`. The
 page shows replies as toasts and keeps them in expandable history. What you post
 is never posted back to the session. A batch may cover several requests;
-start before editing or answering, and finish only the requests that were
-actually handled.
+finish only the requests that were actually handled.
 
 ```
 ah message respond <file> start r1
@@ -165,13 +163,10 @@ explanation when work cannot continue. A `reply` with text can be posted
 during work without ending it, or with no request ids for a standalone
 message.
 
-`--work` identifies one attempt at the requests and defaults to one derived
-from the first request id, which is enough unless two attempts at the same
-request might overlap. The spinner starts only on `start`; `done`,
-`needs-reply`, or `error` clears that work. Long silent runs show "No recent
-update" after two minutes, so post progress during longer work. Restarted
-work needs a fresh `start`. There is no token-level streaming or automatic
-mirroring of TUI messages.
+The spinner starts on `start` or `progress`; `done`, `needs-reply`, or
+`error` clears it. Long silent runs show "No recent update" after two
+minutes, so post progress during longer work. There is no token-level
+streaming or automatic mirroring of TUI messages.
 
 If a completion fails, retry it rather than repeating edits. After a session
 restart, inspect the file and request state before resuming an interrupted
@@ -226,8 +221,8 @@ PR" is a request to change the source, not the draft).
 on their own, after a restart or any other stop, and which session a
 file's comments go to outlasts the server. `ah message respond` and
 `pending` work on any file, shown or not. The conversation history
-survives in the log. Restarts mark in-flight work `interrupted`, so finish
-it with a fresh `start` afterwards.
+survives in the log. Restarts mark in-flight work `interrupted`; `start`
+shows its spinner again, and `done` finishes it.
 
 ## Wrapping up
 

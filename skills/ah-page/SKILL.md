@@ -134,7 +134,7 @@ request ids. If a call fails, retry it rather than redoing the work.
 When picking up a page opened earlier, or after a restart,
 `ah message pending <file>` lists the requests not done, one JSON line each
 with its `status`. Requests left `waiting` or `interrupted` aren't sent
-again: check each against the page and finish it with a fresh `start`.
+again: check each against the page and resume or finish it.
 
 ## Restarting and wrapping up
 

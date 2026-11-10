@@ -15,7 +15,6 @@ import {
 } from "../subjects/thread/events.ts"
 
 const threadUrl = (path: string, port: number) => fileUrl(path, port, "thread")
-const snapshot = (url: string) => callServer<ThreadSnapshot>(url)
 
 const pending = new Command("pending")
   .summary("List a file's requests that aren't done")
@@ -27,7 +26,7 @@ const pending = new Command("pending")
   .action(async (file, { port }) => {
     const path = absolute(file)
     await ensureStarted(port)
-    const { entries, requests } = await snapshot(threadUrl(path, port))
+    const { entries, requests } = await callServer<ThreadSnapshot>(threadUrl(path, port))
     const byId = new Map(entries.map((e) => [e.id, e]))
     for (const state of requests) {
       if (state.status === "done") continue
@@ -45,36 +44,20 @@ const respond = new Command("respond")
   .argument("<file>")
   .addArgument(new Argument("<phase>").choices(PHASES))
   .argument("[requests...]", "Request ids the work covers; none for a standalone reply")
-  .option(
-    "--work <id>",
-    "Id for this attempt at the requests; defaults to one derived from the first request",
-  )
   .option("--text <text>", "Reply, summary, or question, in markdown")
   // The `ah *` sandbox exclusion only covers a one-line command, without
   // redirects, so a long reply goes through a file rather than stdin
   .option("--text-file <path>", "Read the text from a file")
   .addOption(portOption())
-  .action(async (file, phase, requests, { work, text: inlineText, textFile, port }) => {
+  .action(async (file, phase, requests, { text: inlineText, textFile, port }) => {
     const path = absolute(file)
     const text = replyText(inlineText, textFile && readFileSync(textFile, "utf8"))
     if (text === null)
       die(
         "ah message respond: the text is empty; leave out --text and --text-file for none",
       )
-    const url = threadUrl(path, port)
     await ensureStarted(port)
-    const workId = requests.length ? (work ?? `w-${requests[0]}`) : work
-    const post = (body: object) => callServer(url, { body })
-    // Quick work can skip `start`: anything that ends or updates work starts
-    // it first if this attempt hasn't
-    if (requests.length && phase !== "start" && phase !== "reply") {
-      const { requests: states } = await snapshot(url)
-      const started = requests.every((id) =>
-        states.some((s) => s.id === id && s.status === "working" && s.workId === workId),
-      )
-      if (!started) await post({ phase: "start", requests, workId })
-    }
-    await post({ phase, requests, workId, text })
+    await callServer(threadUrl(path, port), { body: { phase, requests, text } })
     console.log([phase, ...requests].join(" "))
   })
 

@@ -240,7 +240,6 @@ export interface Activity {
   id: string
   requests: RequestId[]
   phase: (typeof PHASES)[number]
-  workId?: string
   text?: string
   at: string
 }
@@ -257,10 +256,9 @@ export type RequestStatus =
   | "error"
   | "interrupted"
 
-/** A request's status, with the work it's part of and when it last changed */
+/** A request's status, and when it last changed */
 export interface RequestState {
   id: RequestId
   status: RequestStatus
-  workId?: string
   updatedAt: string
 }

@@ -108,15 +108,12 @@ test("without a session, a request is kept for later and activity still lands", 
   )
   expect(agentConnected).toEqual(false)
   await thread.activity(
-    parseActivity({ phase: "start", requests: [request.id], workId: "w1" }),
-  )
-  await thread.activity(
-    parseActivity({ phase: "done", requests: [request.id], workId: "w1", text: "ok" }),
+    parseActivity({ phase: "done", requests: [request.id], text: "ok" }),
   )
   expect(thread.state().requests).toMatchObject([{ id: request.id, status: "done" }])
   // The log outlives the server
   const reopened = await markdownThread(file, doc)
-  expect(reopened.state().entries.length).toEqual(3)
+  expect(reopened.state().entries.length).toEqual(2)
 })
 
 test("a request isn't posted to a session that's gone", async () => {
@@ -162,9 +159,7 @@ test("requests no agent took go to the next one, unless handled by then", async 
     await thread.refresh()
     expect(sent.length).toEqual(2)
     // The second was caught up on with `pending` and started
-    await thread.activity(
-      parseActivity({ phase: "start", requests: [second.request.id], workId: "w1" }),
-    )
+    await thread.activity(parseActivity({ phase: "start", requests: [second.request.id] }))
     address = { harness: "claude", socket: agent.socket }
     await thread.refresh()
     expect(sent.at(-1)?.agentConnected).toEqual(true)

@@ -13,7 +13,7 @@ export { PHASES }
 /** What a page posts: the request without what the log adds */
 export type RequestInput = Pick<Request, "kind" | "text" | "args" | "replyTo">
 /** What the agent posts about the requests it's handling */
-export type ActivityInput = Pick<Activity, "phase" | "requests" | "workId" | "text">
+export type ActivityInput = Pick<Activity, "phase" | "requests" | "text">
 
 /** The phases that end a request, which become its status */
 const ENDINGS = ["done", "needs-reply", "error"] as const
@@ -124,7 +124,6 @@ export function parseActivity(value: unknown): ActivityInput {
   return {
     phase,
     requests,
-    workId: identifier(body, "workId", requests.length > 0),
     text: string(body, "text", ["reply", "needs-reply", "error"].includes(phase)),
   }
 }
@@ -186,9 +185,9 @@ export class ThreadLog {
     for (const id of entry.requests) {
       const state = this.requests.get(id)
       if (!state) continue
-      if (entry.phase === "start") {
+      // Progress without a start starts the work
+      if (entry.phase === "start" || entry.phase === "progress") {
         state.status = "working"
-        state.workId = entry.workId
       } else if (isOneOf(ENDINGS, entry.phase)) {
         state.status = entry.phase
       }
@@ -225,11 +224,8 @@ export class ThreadLog {
       if (state.status === "done") {
         throw new InputError(`Request already finished: ${id}`, 409)
       }
-      if (
-        input.phase !== "start" &&
-        (state.workId !== input.workId || state.status !== "working")
-      ) {
-        throw new InputError(`Start this work before updating request: ${id}`, 409)
+      if (input.phase === "reply" && state.status !== "working") {
+        throw new InputError(`Start this work before replying on request: ${id}`, 409)
       }
     }
     return this.append({ type: "activity", ...input })

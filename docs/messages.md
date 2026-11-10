@@ -75,7 +75,7 @@ Outside of Rex, `--agent` sends directly to that agent without requiring `--file
 To reply to a thread, the agent runs:
 
 ```
-ah message respond <file> <phase> [request ids...] [--text <text> | --text-file <path>] [--work <id>]
+ah message respond <file> <phase> [request ids...] [--text <text> | --text-file <path>]
 ```
 
 `<file>` identifies the thread, and the server broadcasts the reply to every open page for that file. `<phase>` controls how the reply shows up in the UI:
@@ -89,9 +89,9 @@ ah message respond <file> <phase> [request ids...] [--text <text> | --text-file 
 | `needs-reply` | waiting on your answer; the page shows a question mark                         | required |
 | `error`       | can't go on                                                                    | required |
 
-A request's status comes from its latest phase: `waiting` until `start`, then `working`, and finally `done`, `needs-reply`, or `error`. A request still at `needs-reply` also ends when a request answering it (`replyTo`) ends: with the same phase, or `done` if the answer is itself `needs-reply`, so only the newest question stays open. Once a request is `done`, it won't accept any more phases. If the server restarts while a request is still `working`, the server marks it as `interrupted`.
+A request's status comes from its latest phase: `waiting` until `start` or `progress`, then `working`, and finally `done`, `needs-reply`, or `error`. A request still at `needs-reply` also ends when a request answering it (`replyTo`) ends: with the same phase, or `done` if the answer is itself `needs-reply`, so only the newest question stays open. Once a request is `done`, it won't accept any more phases. If the server restarts while a request is still `working`, the server marks it as `interrupted`.
 
-Each run of work on one or more requests has a work ID, which defaults to `w-<first request id>` or can be set with `--work`. Any phase after `start` must pass the same work ID that started it. For `progress`, `done`, `needs-reply`, and `error`, the CLI sends `start` first if needed, so quick tasks can jump straight to `done`. A `reply` tied to a request needs work already started; a standalone `reply` doesn't.
+Work doesn't need a `start`: quick tasks can go straight to `done`, and `progress` starts the work if nothing did. A `reply` tied to a request needs work already started; a standalone `reply` doesn't.
 
 `ah message pending <file>` prints unfinished requests as one JSON object per line, including `status`. A new session can run it to pick up an existing thread.
 
@@ -102,7 +102,7 @@ Each thread is stored as an append-only JSON Lines file in `~/.local/state/ah/<d
 ```json
 {"type":"request","kind":"comment","text":"accurate?","args":{"selection":"a session ID"},"id":"22e00d40-…","at":"2026-10-26T18:44:10.101Z"}
 {"type":"delivered","requests":["22e00d40-…"],"at":"2026-10-26T18:44:10.104Z"}
-{"type":"activity","phase":"done","requests":["22e00d40-…"],"workId":"w-22e00d40-…","text":"Close. …","id":"…","at":"2026-10-26T18:44:40.552Z"}
+{"type":"activity","phase":"done","requests":["22e00d40-…"],"text":"Close. …","id":"…","at":"2026-10-26T18:44:40.552Z"}
 ```
 
 `delivered` records track which requests have actually been sent to an agent, so held requests aren't lost if the server restarts.
@@ -200,19 +200,13 @@ These endpoints run on `http://127.0.0.1:7420` for the CLI and other local tools
 | `GET /view/<kind>/files`                      | List files currently shown, including their IDs and URLs.                                                                                                                                                                                        |
 | `POST /view/<kind>/files/request?path=<file>` | Submit the same request JSON as a page, by file path. Returns `request` and `agentConnected`.                                                                                                                                                    |
 | `GET /view/<kind>/files/thread?path=<file>`   | Read the thread's requests and history.                                                                                                                                                                                                          |
-| `POST /view/<kind>/files/thread?path=<file>`  | Record agent activity: `phase`, `requests`, `workId`, and optional `text`, as described under [Replies from the agent](#replies-from-the-agent).                                                                                                 |
+| `POST /view/<kind>/files/thread?path=<file>`  | Record agent activity: `phase`, `requests`, and optional `text`, as described under [Replies from the agent](#replies-from-the-agent).                                                                                                           |
 | `POST /core/send`                             | Send a plain message using `block` (the sender's `REX_BLOCK`), `agent` (an explicit agent ID, or null), and `text`. With no explicit agent, uses the pane's selection or the tab's only agent.                                                   |
 
-If you post activity for a request directly over HTTP, supply a `workId` and send `start` before posting updates or completing it. First, POST `start` to the file's thread endpoint:
+To finish a request directly over HTTP, POST to the file's thread endpoint:
 
 ```json
-{ "phase": "start", "requests": ["<request-id>"], "workId": "w1" }
-```
-
-Then finish the work using the same `workId`:
-
-```json
-{ "phase": "done", "requests": ["<request-id>"], "workId": "w1", "text": "Hello!" }
+{ "phase": "done", "requests": ["<request-id>"], "text": "Hello!" }
 ```
 
 Request kinds and fields are defined in [subjects/thread/kinds.ts](../subjects/thread/kinds.ts) and [views/page/requests.ts](../views/page/requests.ts), and activity validation is in [subjects/thread/events.ts](../subjects/thread/events.ts).
