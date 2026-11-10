@@ -135,6 +135,8 @@ export class ThreadLog {
   requests = new Map<string, RequestState>()
   /** The requests a post has carried to an agent */
   private delivered = new Set<string>()
+  /** The request each answer answers */
+  private replyTo = new Map<string, string>()
   private path: string
   /** The subject's path */
   subject: string
@@ -178,6 +180,7 @@ export class ThreadLog {
     this.entries.push(entry)
     if (entry.type === "request") {
       this.requests.set(entry.id, { id: entry.id, status: "waiting", updatedAt: entry.at })
+      if (entry.replyTo) this.replyTo.set(entry.id, entry.replyTo)
       return
     }
     for (const id of entry.requests) {
@@ -190,6 +193,20 @@ export class ThreadLog {
         state.status = entry.phase
       }
       state.updatedAt = entry.at
+    }
+    if (!isOneOf(ENDINGS, entry.phase)) return
+    // An answer that ends closes the open questions it answers, up the chain:
+    // with its ending, or done when it asks again, since the open question is
+    // then the answer
+    const ending = entry.phase === "needs-reply" ? "done" : entry.phase
+    for (const id of entry.requests) {
+      let answered = this.replyTo.get(id)
+      for (; answered && answered !== id; answered = this.replyTo.get(answered)) {
+        const state = this.requests.get(answered)
+        if (state?.status !== "needs-reply") break
+        state.status = ending
+        state.updatedAt = entry.at
+      }
     }
   }
 

@@ -89,7 +89,7 @@ ah message respond <file> <phase> [request ids...] [--text <text> | --text-file 
 | `needs-reply` | waiting on your answer; the page shows a question mark                         | required |
 | `error`       | can't go on                                                                    | required |
 
-A request's status comes from its latest phase: `waiting` until `start`, then `working`, and finally `done`, `needs-reply`, or `error`. Once a request is `done`, it won't accept any more phases. If the server restarts while a request is still `working`, the server marks it as `interrupted`.
+A request's status comes from its latest phase: `waiting` until `start`, then `working`, and finally `done`, `needs-reply`, or `error`. A request still at `needs-reply` also ends when a request answering it (`replyTo`) ends: with the same phase, or `done` if the answer is itself `needs-reply`, so only the newest question stays open. Once a request is `done`, it won't accept any more phases. If the server restarts while a request is still `working`, the server marks it as `interrupted`.
 
 Each run of work on one or more requests has a work ID, which defaults to `w-<first request id>` or can be set with `--work`. Any phase after `start` must pass the same work ID that started it. For `progress`, `done`, `needs-reply`, and `error`, the CLI sends `start` first if needed, so quick tasks can jump straight to `done`. A `reply` tied to a request needs work already started; a standalone `reply` doesn't.
 

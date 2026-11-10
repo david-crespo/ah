@@ -28,8 +28,17 @@ async function withLog(fn: (log: ThreadLog, path: string) => Promise<void>) {
   }
 }
 const user = () => parseRequest({ kind: "chat", text: "Why this wording?" }, threadKinds)
+const answer = (replyTo: string) =>
+  parseRequest({ kind: "chat", text: "Yes, that one", replyTo }, threadKinds)
 const activity = (phase: string, requests: string[], workId = "w1") =>
   parseActivity({ phase, requests, workId, text: "An answer" })
+const statuses = (log: ThreadLog) =>
+  [...log.requests.values()].map((state) => state.status).join()
+/** Ends requests the way the CLI does: start, then the ending */
+async function finish(log: ThreadLog, phase: string, requests: string[], workId: string) {
+  await log.activity(activity("start", requests, workId))
+  await log.activity(activity(phase, requests, workId))
+}
 
 test("appends persist and reload as waiting requests", () =>
   withLog(async (log, path) => {
@@ -80,6 +89,77 @@ test("restart retains history and questions but does not restore a working spinn
     await loaded.activity(activity("start", [r1, r2], "resumed"))
     await loaded.activity(activity("done", [r1, r2], "resumed"))
     assert([...loaded.requests.values()].every((state) => state.status === "done"))
+  }))
+
+test("an answer that ends closes the question it answers, live and on reload", () =>
+  withLog(async (log, path) => {
+    const question = (await log.request(user())).id
+    await finish(log, "needs-reply", [question], "w1")
+    const reply = (await log.request(answer(question))).id
+    await finish(log, "done", [reply], "w2")
+    assert(statuses(log) === "done,done", statuses(log))
+    // A log written before this rule, stuck with the question open, loads fixed
+    assert(statuses(await ThreadLog.open(path, "/draft.md")) === "done,done")
+
+    // The agent already took the question back up: the answer leaves it be
+    const other = (await log.request(user())).id
+    await finish(log, "needs-reply", [other], "w3")
+    const second = (await log.request(answer(other))).id
+    await log.activity(activity("start", [other, second], "w4"))
+    await log.activity(activity("error", [second], "w4"))
+    assert(log.requests.get(other)?.status === "working")
+  }))
+
+test("asking again moves the open question to the answer", () =>
+  withLog(async (log, path) => {
+    const question = (await log.request(user())).id
+    await finish(log, "needs-reply", [question], "w1")
+    const first = (await log.request(answer(question))).id
+    await finish(log, "needs-reply", [first], "w2")
+    assert(statuses(log) === "done,needs-reply", statuses(log))
+    // Asking again on both ids at once comes out the same, whatever their order
+    const again = (await log.request(answer(first))).id
+    await finish(log, "needs-reply", [again, first], "w3")
+    assert(statuses(log) === "done,done,needs-reply", statuses(log))
+    const last = (await log.request(answer(again))).id
+    await finish(log, "done", [last], "w4")
+    assert(statuses(log) === "done,done,done,done", statuses(log))
+    assert(statuses(await ThreadLog.open(path, "/draft.md")) === statuses(log))
+  }))
+
+test("an answer's ending reaches every open question up the chain", () =>
+  withLog(async (log) => {
+    const question = (await log.request(user())).id
+    await finish(log, "needs-reply", [question], "w1")
+    const first = (await log.request(answer(question))).id
+    // The agent asks about the answer while working on the question again,
+    // then asks about the question too
+    await log.activity(activity("start", [question, first], "w2"))
+    await log.activity(activity("needs-reply", [first], "w2"))
+    await log.activity(activity("needs-reply", [question], "w2"))
+    const second = (await log.request(answer(first))).id
+    await finish(log, "error", [second], "w3")
+    assert(statuses(log) === "error,error,error", statuses(log))
+  }))
+
+test("a reply to a missing request or a cycle of replies loads without looping", () =>
+  withLog(async (_, path) => {
+    const at = new Date().toISOString()
+    const lines = [
+      { type: "request", id: "lost", kind: "chat", args: {}, replyTo: "missing" },
+      { type: "request", id: "self", kind: "chat", args: {}, replyTo: "self" },
+      { type: "request", id: "a", kind: "chat", args: {}, replyTo: "b" },
+      { type: "request", id: "b", kind: "chat", args: {}, replyTo: "a" },
+      { type: "activity", phase: "start", requests: ["lost", "self", "a", "b"] },
+      { type: "activity", phase: "needs-reply", requests: ["b"] },
+      { type: "activity", phase: "needs-reply", requests: ["self", "a"] },
+      { type: "activity", phase: "done", requests: ["lost"] },
+    ]
+    const log = lines.map((line, i) => ({ id: `e${i}`, seq: i + 1, at, ...line }))
+    await writeFile(path, log.map((line) => JSON.stringify(line)).join("\n"))
+    const loaded = await ThreadLog.open(path, "/draft.md")
+    // No request closes itself by answering, through any loop
+    assert(statuses(loaded) === "done,needs-reply,needs-reply,done", statuses(loaded))
   }))
 
 test("validates payloads and does not persist unknown activity targets", () =>
