@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 // ah, the agent host: a local server for watching agent sessions and the
-// views of files they show the user. The CLI has one group per noun in the
-// model (`ah -h`). The code is in four layers, each using only the ones
-// under it, and all of them the model's types (model.ts):
+// views of files they show the user. The CLI's groups (`ah -h`) are the
+// tools agents show the user (tool), the windows they're in (window), the
+// messages between pages and agents (message), workspaces, doctor, the
+// server, hooks, and debug. The code is in four layers, each using only the
+// ones under it, and all of them the model's types (model.ts):
 //
 // - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
 //   and the doc and page subject types that serve a file's views, and the
