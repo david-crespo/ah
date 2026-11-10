@@ -23,7 +23,8 @@
 import { str } from "../platform/guards.ts"
 import { processCwds, processTable } from "../platform/proc.ts"
 import { opencodeService, processRunning } from "../platform/session.ts"
-import { abbreviatePath, type HookEventName, type RegistryEvent } from "./registry.ts"
+import type { HookEventName } from "../model.ts"
+import { abbreviatePath, type RegistryEvent } from "./registry.ts"
 import type { Core } from "./core.ts"
 
 export type OpencodeUpdate =

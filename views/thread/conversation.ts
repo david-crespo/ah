@@ -482,7 +482,6 @@ export class Conversation {
     }
     this.setOpen(!this.open)
   }
-  /** Open, the compose box takes focus */
   /** Label the dividers and the time since the last message from now, which
    * moves on while the page sits open */
   private labelTimes() {
@@ -494,6 +493,7 @@ export class Conversation {
     this.since.title = last.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
   }
 
+  /** Open, the compose box takes focus */
   private setOpen(value: boolean, refocus = true) {
     this.open = value
     if (value) {

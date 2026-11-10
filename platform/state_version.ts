@@ -8,7 +8,6 @@
 import {
   existsSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   renameSync,
   rmSync,
@@ -16,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs"
 import { join } from "node:path"
-import { ahStateDir, cacheHome } from "./paths.ts"
+import { ahStateDir, cacheHome, readdirOrEmpty } from "./paths.ts"
 
 export interface Migration {
   /** The version it brings the state to */
@@ -49,7 +48,7 @@ export function upgradeState(migrations = MIGRATIONS): string[] {
   const latest = migrations.at(-1)?.to ?? 0
   const found = readVersion()
   // No file: before versioning, unless there's no state yet
-  const version = found ?? (readdir(ahStateDir()).length ? 0 : latest)
+  const version = found ?? (readdirOrEmpty(ahStateDir()).length ? 0 : latest)
   if (version > latest)
     throw new Error(
       `ah: the state in ${ahStateDir()} is version ${version}, newer than this ah's ${latest}. Check out a newer commit of ah; going back isn't supported.`,
@@ -71,20 +70,12 @@ function readVersion(): number | null {
   }
 }
 
-const readdir = (dir: string) => {
-  try {
-    return readdirSync(dir)
-  } catch {
-    return []
-  }
-}
-
 const isDir = (path: string) => statSync(path).isDirectory()
 
 /** Move what's in `from` into `to` and remove `from`, merging directories
  * both have. Where both have a file of the same name, the newer one stays. */
 export function moveInto(from: string, to: string) {
-  const names = readdir(from)
+  const names = readdirOrEmpty(from)
   if (names.length) mkdirSync(to, { recursive: true })
   for (const name of names) {
     const [src, dest] = [join(from, name), join(to, name)]

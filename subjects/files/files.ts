@@ -95,11 +95,9 @@ export class Pages {
     return this.#clients.size
   }
 
-  /** `greeting` is sent on connect */
-  connect(ws: WebSocket, greeting: string[], location: Location = "page") {
+  connect(ws: WebSocket, location: Location = "page") {
     this.#clients.set(ws, location)
     this.#counted()
-    for (const message of greeting) ws.send(message)
     ws.on("close", () => this.#drop(ws))
     ws.on("error", () => this.#drop(ws))
   }
@@ -257,7 +255,7 @@ export class Files<L extends Live> {
     location: Location,
     greeting: (live: L, thread: Thread) => string[],
   ) {
-    this.pages(path).connect(ws, [], location)
+    this.pages(path).connect(ws, location)
     try {
       const [live, thread] = await Promise.all([this.live(path), this.thread(path)])
       if (ws.readyState === ws.OPEN)

@@ -1,5 +1,5 @@
-/* A task list's look (task_list.ts has the items). Served at /task_list.css,
-   and /tracker.css for older ones, on the pages port; the page links it. The palette follows chat.css. */
+/* A task list's look (task_list.ts has the items). Served at /task_list.css
+   on the pages port; the page links it. The palette follows chat.css. */
 
 :root {
   color-scheme: light dark;

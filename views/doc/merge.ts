@@ -1,5 +1,5 @@
-// Text merging for the editors in the editor pane: the server merges for the
-// terminal editors (routes.ts), and the CodeMirror pane merges in the page
+// Text merging for the editors in the editor pane: `ah tool doc merge` merges
+// for the terminal editors, and the CodeMirror pane merges in the page
 // (codemirror_pane.ts). Plain strings in and out, so it runs in both places
 // and is tested without a browser.
 //
@@ -351,7 +351,8 @@ type Change = { from: number; to: number; insert: string }
 /** The changes that turn `before` into `after`, a run of whole lines each, in
  * order and as offsets into `before`, the way CodeMirror takes them. A
  * reload or merge applied this way leaves a cursor outside them where it
- * was. */
+ * was. Only the CodeMirror pane uses it, which nothing ships; it's here
+ * rather than there so its tests run without CodeMirror's packages. */
 export function lineChanges(before: string, after: string): Change[] {
   const lines = before.split("\n")
   const next = after.split("\n")

@@ -5,10 +5,11 @@
 import { Command } from "@commander-js/extra-typings"
 import type { RexState } from "../model.ts"
 import { readRex } from "../platform/rex.ts"
+import { readClaudeProcesses } from "../platform/session.ts"
 import { emptyRegistry, loadRegistry } from "../core/registry.ts"
 import { tabLabel } from "../core/tabtitle/setter.ts"
 import { rootFinder } from "../core/workspace.ts"
-import { isCurrent, listAgents, readClaudeProcesses } from "../core/agent_view.ts"
+import { isCurrent, listAgents } from "../core/agent_view.ts"
 import { resolve } from "../views/dashboard/workspace.ts"
 
 const tabs = new Command("tabs")
@@ -53,7 +54,7 @@ const agents = new Command("agents")
     const rex: RexState | null = await readRex().catch(() => null)
     const list = listAgents(
       loadRegistry() ?? emptyRegistry(),
-      await readClaudeProcesses(),
+      readClaudeProcesses(),
       rex,
     ).filter((s) => all || isCurrent(s))
     if (json) return console.log(JSON.stringify(list, null, 2))

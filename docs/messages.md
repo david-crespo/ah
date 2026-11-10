@@ -100,9 +100,9 @@ Each run of work on one or more requests has a work ID, which defaults to `w-<fi
 Each thread is stored as an append-only JSON Lines file in `~/.local/state/ah/<doc|page>/`, named after the file's absolute path with slashes replaced by dashes and ending in `.comments.jsonl` (`subjects/thread/events.ts`). It holds the conversation history that pages show. A new agent session can read it to catch up, but doesn't receive that history automatically. There are three record types:
 
 ```json
-{"type":"request","kind":"comment","text":"accurate?","args":{"selection":"a session ID"},"id":"22e00d40-…","seq":176,"at":"2026-10-26T18:44:10.101Z"}
+{"type":"request","kind":"comment","text":"accurate?","args":{"selection":"a session ID"},"id":"22e00d40-…","at":"2026-10-26T18:44:10.101Z"}
 {"type":"delivered","requests":["22e00d40-…"],"at":"2026-10-26T18:44:10.104Z"}
-{"type":"activity","phase":"done","requests":["22e00d40-…"],"workId":"w-22e00d40-…","text":"Close. …","id":"…","seq":177,"at":"2026-10-26T18:44:40.552Z"}
+{"type":"activity","phase":"done","requests":["22e00d40-…"],"workId":"w-22e00d40-…","text":"Close. …","id":"…","at":"2026-10-26T18:44:40.552Z"}
 ```
 
 `delivered` records track which requests have actually been sent to an agent, so held requests aren't lost if the server restarts.

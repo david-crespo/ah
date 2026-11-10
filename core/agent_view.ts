@@ -2,22 +2,12 @@
 // sources: ah's hook-fed registry (registry.ts), which covers every harness
 // with hooks and knows each agent's pane, and Claude's own registry,
 // <config dir>/sessions/<pid>.json, which exists only while the process runs
-// and has its inbox socket.
+// and has its inbox socket (platform/session.ts reads it).
 
-import { readdir, readFile } from "node:fs/promises"
-import { basename, join } from "node:path"
-import { claudeConfigDirs, claudeSessionsDir } from "../platform/paths.ts"
+import { basename } from "node:path"
+import type { ClaudeProcess } from "../platform/session.ts"
 import type { AgentId, AgentRecord, BlockId, RexState, TabId } from "../model.ts"
 import { blockOf, type Registry } from "./registry.ts"
-
-export interface ClaudeProcess {
-  pid: number
-  sessionId: string
-  cwd: string
-  /** "busy" or "idle" */
-  status: string
-  socket: string | null
-}
 
 export interface AgentView extends Pick<
   AgentRecord,
@@ -34,37 +24,6 @@ export interface AgentView extends Pick<
 
 /** In a block that still exists, or running */
 export const isCurrent = (a: AgentView) => a.tab !== null || a.process !== null
-
-/** The Claude processes running under any config dir */
-export async function readClaudeProcesses(): Promise<ClaudeProcess[]> {
-  const files = await Promise.all(
-    claudeConfigDirs()
-      .map(claudeSessionsDir)
-      .map(async (dir) =>
-        (await readdir(dir).catch(() => [] as string[]))
-          .filter((f) => /^\d+\.json$/.test(f))
-          .map((f) => join(dir, f)),
-      ),
-  )
-  const read = await Promise.all(
-    files.flat().map(async (f): Promise<ClaudeProcess | null> => {
-      try {
-        const raw = JSON.parse(await readFile(f, "utf8"))
-        if (typeof raw.sessionId !== "string") return null
-        return {
-          pid: raw.pid,
-          sessionId: raw.sessionId,
-          cwd: raw.cwd,
-          status: raw.status ?? "",
-          socket: raw.messagingSocketPath ?? null,
-        }
-      } catch {
-        return null
-      }
-    }),
-  )
-  return read.filter((p) => p !== null)
-}
 
 /** Every agent in the registry, plus running Claude sessions it doesn't have */
 export function listAgents(

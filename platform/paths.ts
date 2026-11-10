@@ -13,6 +13,15 @@ export const cacheHome = () => process.env.XDG_CACHE_HOME || join(homedir(), ".c
 /** ah's own state, under the XDG state dir */
 export const ahStateDir = (...parts: string[]) => join(stateHome(), "ah", ...parts)
 
+/** A directory's entries, or none if it can't be read */
+export function readdirOrEmpty(dir: string): string[] {
+  try {
+    return readdirSync(dir)
+  } catch {
+    return []
+  }
+}
+
 /** Move a log that's grown past `maxBytes` to <log>.old, over the one before,
  * so it starts again. For the logs that are only for debugging. */
 export function rotateLog(log: string, maxBytes = 20 * 1024 * 1024) {

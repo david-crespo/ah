@@ -34,11 +34,6 @@
   ; Not the thread, which helix would print as the command's result
   void)
 
-; Whether s starts with prefix.
-(define (prefixed? s prefix)
-  (and (>= (string-length s) (string-length prefix))
-       (equal? (substring s 0 (string-length prefix)) prefix)))
-
 ; Run `ah message send` with these arguments, and say in the status line
 ; whether an agent took the comment (`sent`) or it waits for one (`held`).
 ; Either means it went through, whatever ah says on stderr, like that it
@@ -47,8 +42,8 @@
   (run-ah (append (list "message" "send") args)
           (lambda (out err)
             (cond
-              [(prefixed? out "sent") (set-status! "Sent to agent")]
-              [(prefixed? out "held") (set-status! "Held until an agent is here")]
+              [(starts-with? out "sent") (set-status! "Sent to agent")]
+              [(starts-with? out "held") (set-status! "Held until an agent is here")]
               [(not (equal? err "")) (set-error! err)]
               [else (set-error! (string-append "ah printed: " out))]))))
 
@@ -58,19 +53,9 @@
           (lambda (out err)
             (done (map string->jsexpr (filter (lambda (l) (not (equal? l ""))) (split-many out "\n")))))))
 
-; An agent as ah's terminal picker shows it: its part of the tab's title,
-; then its harness. A JSON null parses to void, which is truthy, so a
-; missing summary is told by its type.
-(define (agent-line agent)
-  (let ([summary (hash-ref agent 'summary)])
-    (string-append (hash-ref agent 'label)
-                   (if (string? summary) (string-append " | " summary) "")
-                   " ("
-                   (hash-ref agent 'harness)
-                   (if (hash-ref agent 'busy) ", working" "")
-                   ")")))
-
-; The same line as spans for the comment box's list, the harness dim.
+; An agent as ah's terminal picker shows it, as spans for the comment box's
+; list: its part of the tab's title, then its harness, dim. A JSON null
+; parses to void, which is truthy, so a missing summary is told by its type.
 (define (agent-spans agent)
   (let ([summary (hash-ref agent 'summary)])
     (list (cons (string-append (hash-ref agent 'label) (if (string? summary) (string-append " | " summary) ""))
@@ -78,14 +63,13 @@
           (cons (string-append " (" (hash-ref agent 'harness) (if (hash-ref agent 'busy) ", working" "") ")")
                 "comment"))))
 
+; The same as one line.
+(define (agent-line agent)
+  (apply string-append (map car (agent-spans agent))))
+
 ; The current file's name without its directory, or "" for a scratch buffer.
 (define (current-file-name)
-  (let ([path (or (helix.static.cx->current-file) "")])
-    (let loop ([i (- (string-length path) 1)])
-      (cond
-        [(< i 0) path]
-        [(equal? (string-ref path i) #\/) (substring path (+ i 1) (string-length path))]
-        [else (loop (- i 1))]))))
+  (file-name (or (helix.static.cx->current-file) "")))
 
 ; Open the comment box on lines first to last (0-based) of the current file,
 ; for a comment on lines (`12` or `12-20`, or #f for the whole file) with

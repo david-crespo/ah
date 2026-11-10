@@ -1,8 +1,9 @@
 // Which jj workspace a directory or a tab is in. A workspace is known by
 // its root, the directory holding `.jj`.
 
-import { readFileSync, realpathSync, statSync } from "node:fs"
-import { dirname, join, resolve } from "node:path"
+import { realpathSync, statSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { repoDir } from "../platform/jj.ts"
 import type { Tab, WorkspaceRoot } from "../model.ts"
 
 export type RootOf = (dir: string) => WorkspaceRoot | null
@@ -42,16 +43,13 @@ export function openable(path: string, cwd: string): boolean {
   return dirs.some((dir) => dir && path.startsWith(dir + "/"))
 }
 
-/** The default workspace of the repo `root` is a workspace of. A secondary
- * workspace's `.jj/repo` is a file holding the path of the default one's
- * `.jj/repo` dir, relative to `.jj`. */
+/** The default workspace of the repo `root` is a workspace of, the one
+ * holding the repo dir */
 function defaultWorkspace(root: string): string | null {
-  const dotJj = join(root, ".jj")
   try {
-    const pointer = readFileSync(join(dotJj, "repo"), "utf8").trim()
-    return dirname(dirname(realpathSync(resolve(dotJj, pointer))))
+    return dirname(dirname(realpathSync(repoDir(root))))
   } catch {
-    // a directory (this is the default workspace) or no repo at all
+    // no repo at all
     return null
   }
 }

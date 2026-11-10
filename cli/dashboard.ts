@@ -2,7 +2,7 @@
 // whether a page is open, and opening one. Setting what it shows, the
 // workspace's current tracker, is tracker.ts.
 
-import { Command, Option } from "@commander-js/extra-typings"
+import { Command } from "@commander-js/extra-typings"
 import { callServer, ensureStarted, portOption, serverUrl } from "./shared.ts"
 import { status } from "../platform/server.ts"
 import { focusHere } from "../platform/focus.ts"
@@ -53,11 +53,6 @@ dashboard
   .summary("Open the dashboard window")
   .description(
     "Open the dashboard window, or if it's already open, keep that one. The window comes to the front when run from a shell, or from an agent whose Rex pane has focus with Rex the frontmost app; otherwise it opens or stays without taking focus.",
-  )
-  .addOption(
-    new Option("--in <place>", "window: a window of its own, with its own Dock tile")
-      .choices(["window"])
-      .default("window"),
   )
   .option(
     "--no-other-display",

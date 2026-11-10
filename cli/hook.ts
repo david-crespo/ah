@@ -31,8 +31,8 @@ import { isOneOf, str } from "../platform/guards.ts"
 import { ensureServer } from "../platform/server.ts"
 import { currentAgent, currentAddress } from "../platform/session.ts"
 import { underCodexDaemon } from "../core/tuis.ts"
-import { type Address, HARNESSES, type Harness } from "../model.ts"
-import { abbreviatePath, HOOK_EVENTS, type RegistryEvent } from "../core/registry.ts"
+import { type Address, HARNESSES, type Harness, HOOK_EVENTS } from "../model.ts"
+import { abbreviatePath, type RegistryEvent } from "../core/registry.ts"
 import { sanitizeTitle } from "../core/summary.ts"
 
 /** The block a process was started in, from its env */
@@ -94,7 +94,7 @@ async function send(port: number, event: Report): Promise<EventReply | null> {
       console.error(`ah: event refused: ${res.status} ${await res.text()}`)
       return null
     }
-    return res.status === 204 ? null : ((await res.json()) as EventReply)
+    return (await res.json()) as EventReply
   } catch (e) {
     console.error(`ah: couldn't post the event: ${e}`)
     return null

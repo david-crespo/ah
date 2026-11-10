@@ -44,7 +44,6 @@ test("appends persist and reload as waiting requests", () =>
   withLog(async (log, path) => {
     await log.request(user())
     const r2 = await log.request(user())
-    assert(log.entries.map((entry) => entry.seq).join() === "1,2")
     const loaded = await ThreadLog.open(path, "/draft.md")
     assert(loaded.entries.length === 2 && loaded.requests.get(r2.id)?.status === "waiting")
   }))
@@ -155,7 +154,7 @@ test("a reply to a missing request or a cycle of replies loads without looping",
       { type: "activity", phase: "needs-reply", requests: ["self", "a"] },
       { type: "activity", phase: "done", requests: ["lost"] },
     ]
-    const log = lines.map((line, i) => ({ id: `e${i}`, seq: i + 1, at, ...line }))
+    const log = lines.map((line, i) => ({ id: `e${i}`, at, ...line }))
     await writeFile(path, log.map((line) => JSON.stringify(line)).join("\n"))
     const loaded = await ThreadLog.open(path, "/draft.md")
     // No request closes itself by answering, through any loop

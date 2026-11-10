@@ -34,6 +34,7 @@ import {
   type BlockId,
   HARNESSES,
   type Harness,
+  type HookEventName,
   type Home,
   type TrackerStatus,
   type WorkspaceRecord,
@@ -70,7 +71,7 @@ export const emptyRegistry = (): Registry => ({
 })
 
 /** An agent's id, from its home */
-export function idOf(home: Home | null, harness: Harness, session: string): AgentId {
+function idOf(home: Home | null, harness: Harness, session: string): AgentId {
   switch (home?.kind) {
     case "block":
       return home.block
@@ -103,14 +104,6 @@ export function agentId(r: Registry, ref: AgentRef): AgentId | null {
   if (ref.process) return ref.process
   return ref.session ? idOf(null, ref.harness, ref.session) : null
 }
-
-export const HOOK_EVENTS = [
-  "SessionStart",
-  "UserPromptSubmit",
-  "Stop",
-  "SessionEnd",
-] as const
-export type HookEventName = (typeof HOOK_EVENTS)[number]
 
 export type RegistryEvent =
   | {

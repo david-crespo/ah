@@ -1,5 +1,5 @@
-// What every group's commands share: the port, starting the server, the agent
-// session they run in, reading the server's responses, and erroring out.
+// What every group's commands share: the port, starting the server, reading
+// the server's responses, and erroring out.
 
 import { InvalidArgumentError, Option } from "@commander-js/extra-typings"
 import { DEFAULT_PORT, ensureServer } from "../platform/server.ts"
@@ -40,7 +40,7 @@ export async function callServer<T>(
 
 /** A response body from ah's own server, as the type its route sends. The
  * CLI and the server ship together, so it isn't checked. */
-export async function serverJson<T>(res: Response): Promise<T> {
+async function serverJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T
 }
 
@@ -57,7 +57,7 @@ export function die(message: string): never {
   process.exit(1)
 }
 
-export function parseInteger(value: string): number {
+function parseInteger(value: string): number {
   const n = Number(value)
   if (!Number.isInteger(n)) throw new InvalidArgumentError("Not an integer.")
   return n

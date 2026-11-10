@@ -23,8 +23,7 @@
 //   merge the file on disk into the unsaved text: a three-way merge against
 //   the last save, word by word, marking only the text both changed
 //   (merge.ts). The CodeMirror pane runs it in the page, and terminal editors
-//   call the server's merge route (routes.ts), Helix from
-//   editors/helix/auto-merge.scm.
+//   run `ah tool doc merge`, Helix from editors/helix/auto-merge.scm.
 //
 // A page-side editor has the file's text already: the doc socket pushes it on
 // every change (doc.ts), and the preview element holds it (preview.ts).

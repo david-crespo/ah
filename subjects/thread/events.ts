@@ -259,7 +259,6 @@ export class ThreadLog {
     const entry = {
       ...input,
       id: crypto.randomUUID(),
-      seq: this.entries.length + 1,
       at: new Date().toISOString(),
     }
     await appendFile(this.path, JSON.stringify(entry) + "\n")

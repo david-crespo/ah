@@ -21,12 +21,19 @@ import { appendFileSync, existsSync, mkdirSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { isOneOf, isRecord, isString, str } from "../platform/guards.ts"
 import { rotateLog } from "../platform/paths.ts"
-import { claudeSocket, parseAddress, parseAgentRef, postTo } from "../platform/session.ts"
+import {
+  claudeSocket,
+  parseAddress,
+  parseAgentRef,
+  postTo,
+  readClaudeProcesses,
+} from "../platform/session.ts"
 import {
   type Address,
   type AgentRef,
   fileSubject,
   HARNESSES,
+  HOOK_EVENTS,
   type NearbyAgent,
   type RexState,
   type WorkspaceRoot,
@@ -43,7 +50,6 @@ import {
   applySummary,
   blockOf,
   emptyRegistry,
-  HOOK_EVENTS,
   loadRegistry,
   prune,
   type Registry,
@@ -52,11 +58,11 @@ import {
   saveRegistry,
   type SummaryJob,
 } from "./registry.ts"
-import { isCurrent, listAgents, readClaudeProcesses } from "./agent_view.ts"
+import { isCurrent, listAgents } from "./agent_view.ts"
 import { buildSummaryPayload, cleanSummary, generateSummary } from "./summary.ts"
 
 /** A posted event, checked, or null if it isn't one */
-export function parseEvent(o: unknown): RegistryEvent | null {
+function parseEvent(o: unknown): RegistryEvent | null {
   if (!isRecord(o)) return null
   const block = str(o.block)
   const label = str(o.label)
@@ -496,7 +502,7 @@ export class Core {
     }
     if (rest !== "") return new Response("not found", { status: 404 })
     const all = new URL(req.url).searchParams.has("all")
-    const processes = await readClaudeProcesses()
+    const processes = readClaudeProcesses()
     const agents = listAgents(this.registry, processes, this.#rex)
     return Response.json(all ? agents : agents.filter(isCurrent))
   }

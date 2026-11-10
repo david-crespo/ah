@@ -376,7 +376,6 @@ const statusOf = (el: HTMLElement): Status => {
 }
 
 export class AhItem extends HTMLElement implements Commentable {
-  static observedAttributes = ["status"]
   #built = false
   #status = statusButton("ah-item-status", this, () => ({ item: this.id }))
   #progress = document.createElement("span")
@@ -480,10 +479,6 @@ export class AhItem extends HTMLElement implements Commentable {
     restoreDraft(this)
   }
 
-  attributeChangedCallback() {
-    if (this.#built) this.#render()
-  }
-
   /** Update the buttons from the thread */
   update() {
     if (this.#built) this.#render()
@@ -526,7 +521,6 @@ for (const link of document.querySelectorAll<HTMLAnchorElement>("a[href]")) {
 /** One step of an item: a status icon, its letter, what it does, and a
  * comment button like the item's */
 export class AhStep extends HTMLElement implements Commentable {
-  static observedAttributes = ["status"]
   #built = false
   #letter = ""
   #text = ""
@@ -579,10 +573,6 @@ export class AhStep extends HTMLElement implements Commentable {
       this.replaceChildren(this.#status.el, letter, text)
     }
     this.#render()
-  }
-
-  attributeChangedCallback() {
-    if (this.#built) this.#render()
   }
 
   /** Update the status icon from the thread */

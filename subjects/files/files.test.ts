@@ -184,8 +184,8 @@ test("a page's location comes from its socket's query", () => {
 test("pages know where each connected one is, and stop counting a closed one", () => {
   const pages = new Pages()
   const [a, b] = [socket(), socket()]
-  pages.connect(a, [], "window")
-  pages.connect(b, [], "dashboard")
+  pages.connect(a, "window")
+  pages.connect(b, "dashboard")
   expect(pages.locations).toEqual(["window", "dashboard"])
   expect(pages.presence.count).toEqual(2)
   a.close()

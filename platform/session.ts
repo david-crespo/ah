@@ -16,12 +16,12 @@
 //   background service that every TUI is a client of; posting to the
 //   service's /api/session/<id>/prompt steers a busy session mid-turn.
 
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { createConnection } from "node:net"
 import { basename, join } from "node:path"
 import { type Address, type AgentRef, HARNESSES } from "../model.ts"
 import { isOneOf, isRecord, str } from "./guards.ts"
-import { claudeConfigDirs, claudeSessionsDir, stateHome } from "./paths.ts"
+import { claudeConfigDirs, claudeSessionsDir, readdirOrEmpty, stateHome } from "./paths.ts"
 import { ancestors, command, processTable, run } from "./proc.ts"
 
 /** The harnesses ah can post into; the registry's `Harness` also has pi */
@@ -201,8 +201,10 @@ export function addressAlive(address: Address | null): boolean {
     case "claude": {
       const pid = basename(address.socket).match(/^(\d+)\.sock$/)?.[1]
       return pid
-        ? claudeConfigDirs().some((d) => exists(join(claudeSessionsDir(d), `${pid}.json`)))
-        : exists(address.socket)
+        ? claudeConfigDirs().some((d) =>
+            existsSync(join(claudeSessionsDir(d), `${pid}.json`)),
+          )
+        : existsSync(address.socket)
     }
     case "codex":
       return address.pid === null || processRunning(address.pid)
@@ -211,44 +213,53 @@ export function addressAlive(address: Address | null): boolean {
   }
 }
 
-/** The inbox socket of the running Claude process in `session`, from its
- * <config dir>/sessions/<pid>.json, for an agent the server has no address
- * for, like every agent right after it starts */
-export function claudeSocket(session: string): string | null {
-  for (const dir of claudeConfigDirs().map(claudeSessionsDir)) {
-    let names: string[]
-    try {
-      names = readdirSync(dir)
-    } catch {
-      continue
-    }
-    for (const name of names) {
-      // Not one a process that died left behind
-      const pid = name.match(/^(\d+)\.json$/)?.[1]
-      if (!pid || !processRunning(Number(pid))) continue
-      try {
-        const raw: unknown = JSON.parse(readFileSync(join(dir, name), "utf8"))
-        if (
-          isRecord(raw) &&
-          raw.sessionId === session &&
-          typeof raw.messagingSocketPath === "string"
-        )
-          return raw.messagingSocketPath
-      } catch {
-        // mid-write, or gone
-      }
-    }
-  }
-  return null
+/** A Claude process, from its <config dir>/sessions/<pid>.json */
+export interface ClaudeProcess {
+  pid: number
+  sessionId: string
+  cwd: string
+  /** "busy" or "idle" */
+  status: string
+  socket: string | null
 }
 
-function exists(path: string): boolean {
-  try {
-    statSync(path)
-    return true
-  } catch {
-    return false
-  }
+/** The Claude processes under any config dir. A process that died may have
+ * left its file behind. */
+export function readClaudeProcesses(): ClaudeProcess[] {
+  return claudeConfigDirs()
+    .map(claudeSessionsDir)
+    .flatMap((dir) =>
+      readdirOrEmpty(dir).flatMap((name): ClaudeProcess[] => {
+        const pid = name.match(/^(\d+)\.json$/)?.[1]
+        if (!pid) return []
+        try {
+          const raw: unknown = JSON.parse(readFileSync(join(dir, name), "utf8"))
+          if (!isRecord(raw) || typeof raw.sessionId !== "string") return []
+          return [
+            {
+              pid: Number(pid),
+              sessionId: raw.sessionId,
+              cwd: str(raw.cwd) ?? "",
+              status: str(raw.status) ?? "",
+              socket: str(raw.messagingSocketPath),
+            },
+          ]
+        } catch {
+          // mid-write, or gone
+          return []
+        }
+      }),
+    )
+}
+
+/** The inbox socket of the running Claude process in `session`, for an
+ * agent the server has no address for, like every agent right after it
+ * starts */
+export function claudeSocket(session: string): string | null {
+  const running = readClaudeProcesses().find(
+    (p) => p.sessionId === session && p.socket && processRunning(p.pid),
+  )
+  return running?.socket ?? null
 }
 
 /** Whether a process with this pid exists. A reused pid passes too. */
@@ -310,7 +321,7 @@ async function postToClaude(
 
 /** opencode sessions outlive their TUIs in the service, so the service
  * running is as close as it gets to one being alive */
-export function opencodeRunning(): boolean {
+function opencodeRunning(): boolean {
   const service = opencodeService()
   return service !== null && processRunning(service.pid)
 }

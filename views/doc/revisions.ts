@@ -3,13 +3,12 @@
 // snapshotting the working copy: a read shouldn't take its lock, and the
 // bases are commits anyway.
 
-import { execFile } from "node:child_process"
 import { basename, dirname } from "node:path"
-import { promisify } from "node:util"
+import { jj } from "../../platform/jj.ts"
 
 /** What the diff mode diffs from when given no revision: the working copy's
  * parent, so it shows the changes in the working copy */
-export const DEFAULT_BASE = "@-"
+const DEFAULT_BASE = "@-"
 
 const TRUNK = "trunk()"
 
@@ -26,12 +25,6 @@ export type Revision = {
   /** Whether it's on trunk, and whether it's the working copy */
   onTrunk: boolean
   workingCopy: boolean
-}
-
-function jj(path: string, ...args: string[]) {
-  return promisify(execFile)("jj", ["--ignore-working-copy", "--color=never", ...args], {
-    cwd: dirname(path),
-  })
 }
 
 /** A fileset that's just this file, whatever its name */
@@ -52,8 +45,8 @@ async function revisions(path: string, revset: string, limit: number): Promise<R
     "current_working_copy",
   ]
   const template = `${fields.join(' ++ "\\t" ++ ')} ++ "\\n"`
-  const { stdout } = await jj(
-    path,
+  const stdout = await jj(
+    dirname(path),
     "log",
     "--no-graph",
     "-n",
@@ -96,13 +89,17 @@ export async function fileAt(path: string, rev: string) {
   if (found.length !== 1)
     throw new Error(`${rev} is ${found.length ? "more than one commit" : "no commits"}`)
   const [commit] = found
-  const text = await jj(path, "file", "show", "-r", commit.commit, fileset(path)).then(
-    (r) => r.stdout,
-    (e: { stderr?: string }) => {
-      if (e.stderr?.includes("No such path")) return ""
-      throw e
-    },
-  )
+  const text = await jj(
+    dirname(path),
+    "file",
+    "show",
+    "-r",
+    commit.commit,
+    fileset(path),
+  ).catch((e: Error) => {
+    if (e.message.includes("No such path")) return ""
+    throw e
+  })
   // From the parent of X, as the picker's rows pick, the diff is X's change
   // and what came after it
   const [from] = rev.endsWith("-")
@@ -134,5 +131,4 @@ export async function bases(path: string, rev: string) {
 }
 
 /** jj's complaint from a failed call, or the error */
-export const complaint = (e: unknown) =>
-  (e as { stderr?: string }).stderr?.trim() || (e instanceof Error ? e.message : String(e))
+export const complaint = (e: unknown) => (e instanceof Error ? e.message : String(e))

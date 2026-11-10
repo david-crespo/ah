@@ -53,6 +53,16 @@ export const HARNESSES = ["claude", "codex", "opencode", "pi"] as const
 /** A coding agent CLI ah works with */
 export type Harness = (typeof HARNESSES)[number]
 
+/** The harness hook events ah takes, each a command in the harness's hook
+ * settings */
+export const HOOK_EVENTS = [
+  "SessionStart",
+  "UserPromptSubmit",
+  "Stop",
+  "SessionEnd",
+] as const
+export type HookEventName = (typeof HOOK_EVENTS)[number]
+
 /** Where ah posts messages to a harness session. pi has none: ah can't
  * post into it. */
 export type Address =
@@ -236,7 +246,7 @@ export interface Activity {
 }
 
 /** One line of a subject's request log */
-export type ThreadEntry = (Request | Activity) & { seq: number }
+export type ThreadEntry = Request | Activity
 
 /** Where a request stands, worked out from the log */
 export type RequestStatus =

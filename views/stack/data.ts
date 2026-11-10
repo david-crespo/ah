@@ -10,9 +10,8 @@ import { existsSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
-import { opHeadsDir } from "../../platform/jj.ts"
+import { jj, opHeadsDir } from "../../platform/jj.ts"
 import { isRecord } from "../../platform/guards.ts"
-import { run } from "../../platform/proc.ts"
 
 export const STACK_FILE = "stack.json"
 
@@ -165,19 +164,11 @@ export async function readStack(pagePath: string): Promise<Stack> {
 }
 
 async function readCommits(file: StackFile, root: string): Promise<Stack> {
-  const jj = async (...args: string[]) => {
-    const { success, stdout, stderr } = await run(
-      "jj",
-      ["--ignore-working-copy", "--color=never", ...args],
-      { cwd: root },
-    )
-    if (!success) throw new Error(stderr.trim())
-    return stdout
-  }
   // Awaited together: one that fails while the other is awaited would be an
   // unhandled rejection, which ends the server
   const [trunk, existing] = await Promise.all([
     jj(
+      root,
       "log",
       "--no-graph",
       "-r",
@@ -185,7 +176,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
       "-T",
       `remote_bookmarks.filter(|b| b.remote() != "git").map(|b| b.name()).join(" ")`,
     ),
-    jj("bookmark", "list", "-T", `name ++ "\n"`).then((out) => out.split("\n")),
+    jj(root, "bookmark", "list", "-T", `name ++ "\n"`).then((out) => out.split("\n")),
   ])
   const live = file.prs.filter((pr) => existing.includes(pr.bookmark))
   const tips = live.map((pr) => JSON.stringify(pr.bookmark))
@@ -200,6 +191,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   // PRs whose remote bookmark has it, and its bookmarks
   const log = live.length
     ? await jj(
+        root,
         "log",
         "--no-graph",
         "-r",
@@ -248,8 +240,8 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   const measure = async (commits: Commit[], to: string) => {
     const below = `${commits.at(-1)!.commit}-`
     const [baseLine, diff] = await Promise.all([
-      jj("log", "--no-graph", "-r", below, "-T", BASE),
-      jj("diff", "--git", "--context", "0", "--from", below, "--to", to),
+      jj(root, "log", "--no-graph", "-r", below, "-T", BASE),
+      jj(root, "diff", "--git", "--context", "0", "--from", below, "--to", to),
     ])
     const [change, bookmarks = ""] = baseLine.split("\n")[0].split("\t")
     const base = name(change, bookmarks)
@@ -272,6 +264,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     const onRemote = `remote_bookmarks.filter(|b| b.remote() != "git" && b.name() == ${tip}).len() > 0`
     const [pushed, measured] = await Promise.all([
       jj(
+        root,
         "log",
         "--no-graph",
         "-r",

@@ -64,8 +64,8 @@ window.addEventListener("message", (e) => {
     conversation?.toggleFromShortcut()
 })
 
-// One socket for reloads and the conversation. After a restart the server
-// has forgotten the file until an agent opens it again, so keep retrying.
+// One socket for reloads and the conversation, reconnecting until the file
+// is closed, as across a server restart
 let closed = false
 let opened = false
 function connect() {

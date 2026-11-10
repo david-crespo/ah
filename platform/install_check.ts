@@ -6,24 +6,22 @@
 // only listed. Claude Code takes skills as links; Codex, opencode and pi need
 // copies, since their scanners skip links.
 
-import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync } from "node:fs"
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs"
 import { homedir } from "node:os"
 import { join, resolve } from "node:path"
+import { HOOK_EVENTS } from "../model.ts"
 import { assetPath } from "./assets.ts"
 import { isRecord, isString } from "./guards.ts"
-import { claudeConfigDirs, plainlyUnder } from "./paths.ts"
+import { claudeConfigDirs, plainlyUnder, readdirOrEmpty } from "./paths.ts"
 
 /** Skills ah shipped under other names, by the old name */
-export const RENAMED_SKILLS: Record<string, string> = {
+const RENAMED_SKILLS: Record<string, string> = {
   html: "ah-page",
   markdown: "ah-doc",
   panes: "ah-panes",
   skepsis: "ah-skepsis",
   tracker: "ah-tracker",
 }
-
-/** The Claude Code events ah's hook has to run on (docs/setup.md) */
-const HOOK_EVENTS = ["SessionStart", "UserPromptSubmit", "Stop", "SessionEnd"]
 
 /** ah's hook for Claude Code: with no --harness, or with claude's */
 const runsAh = (command: string) =>
@@ -53,16 +51,8 @@ export interface Problem {
   optional?: true
 }
 
-const readdir = (dir: string) => {
-  try {
-    return readdirSync(dir)
-  } catch {
-    return []
-  }
-}
-
 /** The skills directories of the harnesses on this machine */
-export function harnessSkillDirs(): string[] {
+function harnessSkillDirs(): string[] {
   const home = homedir()
   return [
     ...claudeConfigDirs().map((d) => join(d, "skills")),
@@ -93,7 +83,9 @@ export function installProblems(
   skills = assetPath("skills"),
   claudeDirs = claudeConfigDirs(),
 ): Problem[] {
-  const shipped = readdir(skills).filter((s) => existsSync(join(skills, s, "SKILL.md")))
+  const shipped = readdirOrEmpty(skills).filter((s) =>
+    existsSync(join(skills, s, "SKILL.md")),
+  )
   const problems: Problem[] = []
   const withAh = new Set<string>()
   for (const dir of dirs) {
@@ -101,7 +93,7 @@ export function installProblems(
     let copies = false
     /** Skills a fix above already adds */
     const added = new Set<string>()
-    for (const name of readdir(dir)) {
+    for (const name of readdirOrEmpty(dir)) {
       const path = join(dir, name)
       const renamed = RENAMED_SKILLS[name]
       if (lstatSync(path).isSymbolicLink()) {

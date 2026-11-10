@@ -14,12 +14,13 @@
 // server itself is fine.
 
 import { spawn } from "node:child_process"
-import { existsSync, readdirSync } from "node:fs"
+import { existsSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { createInterface } from "node:readline"
 import type { RexState, Tab } from "../model.ts"
 import { isRecord, isString, isStringOrNull } from "./guards.ts"
+import { readdirOrEmpty } from "./paths.ts"
 import { type Output, run } from "./proc.ts"
 
 export interface RexHealth {
@@ -84,14 +85,6 @@ function setConnected(connected: boolean) {
 
 const isNotFound = (e: unknown) => isRecord(e) && e.code === "ENOENT"
 
-const readdir = (dir: string) => {
-  try {
-    return readdirSync(dir)
-  } catch {
-    return []
-  }
-}
-
 /**
  * Where Rex keeps its CLI now: in the newest server version it has installed,
  * else in the app bundle's helper. For a server that outlived a Rex update,
@@ -105,13 +98,13 @@ export function findRex(home = homedir(), apps = "/Applications"): string | null
   )
   const helpers = (app: string) => join(apps, app, "Contents/Helpers")
   const candidates = [
-    ...readdir(versions)
+    ...readdirOrEmpty(versions)
       .filter((v) => /^\d+$/.test(v))
       .sort((a, b) => Number(b) - Number(a))
-      .flatMap((v) => readdir(join(versions, v)).map((b) => join(versions, v, b))),
-    ...readdir(apps)
+      .flatMap((v) => readdirOrEmpty(join(versions, v)).map((b) => join(versions, v, b))),
+    ...readdirOrEmpty(apps)
       .filter((a) => /^Rex.*\.app$/.test(a))
-      .flatMap((a) => readdir(helpers(a)).map((h) => join(helpers(a), h))),
+      .flatMap((a) => readdirOrEmpty(helpers(a)).map((h) => join(helpers(a), h))),
   ]
   return (
     candidates.map((bundle) => join(bundle, "Contents/MacOS/rex")).find(existsSync) ?? null
@@ -226,7 +219,7 @@ export function detachedBlocks(list: unknown): string[] {
 
 /** What the app shows as a tab's title: its label, or when it has none (the
  * view then makes one up from the id), its focused block's title */
-export function tabName(w: RexWindow, blocks: Map<string, BlockInfo>): string {
+function tabName(w: RexWindow, blocks: Map<string, BlockInfo>): string {
   if (w.label && w.label !== `Window ${w.id.slice(-8)}`) return w.label
   return (w.focused && blocks.get(w.focused)?.title) || ""
 }

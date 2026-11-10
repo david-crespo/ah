@@ -3,6 +3,7 @@
 // Other escape sequences are dropped. Box-drawing characters get wrapped so
 // the page can draw them like Ghostty does (see box.ts).
 
+import { escapeHtml } from "../escape.ts"
 import { wrapBoxes } from "./box.ts"
 
 interface Style {
@@ -22,9 +23,6 @@ const plain = (): Style => ({
   italic: false,
   underline: false,
 })
-
-const escapeHtml = (s: string) =>
-  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 
 function css(style: Style): string {
   const out = []

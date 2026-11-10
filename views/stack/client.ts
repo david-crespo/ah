@@ -21,6 +21,7 @@
 
 import type { Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
+import { escapeHtml } from "../escape.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -29,13 +30,8 @@ const threadUrl = (() => {
 
 const main = document.querySelector("main")!
 
-const esc = (s: string) =>
-  s.replace(
-    /[&<>"]/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!,
-  )
 /** Escaped, with `code` in backticks */
-const prose = (s: string) => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>")
+const prose = (s: string) => escapeHtml(s).replace(/`([^`]+)`/g, "<code>$1</code>")
 /** Hard-wrapped text as paragraphs: lines unwrapped, blank lines kept */
 const paras = (s: string, cls: string) =>
   s
@@ -49,13 +45,13 @@ const counts = (add: number, del: number) =>
 
 /** The diff stat, as a button that opens `diff` in skepsis */
 const stat = (files: FileStat[], diff: { rev: string } | { from: string; to: string }) =>
-  `<button type="button" class="short mono" data-diff="${esc(JSON.stringify(diff))}" title="Open in skepsis">${counts(sum(files, "add"), sum(files, "del"))}</button>`
+  `<button type="button" class="short mono" data-diff="${escapeHtml(JSON.stringify(diff))}" title="Open in skepsis">${counts(sum(files, "add"), sum(files, "del"))}</button>`
 
 const fileList = (files: FileStat[]) =>
   `<ul class="files mono">${files
     .map(
       (f) =>
-        `<li><span>${f.status}</span><span class="path">${esc(f.path)}</span><span class="n">${counts(f.add, f.del)}</span></li>`,
+        `<li><span>${f.status}</span><span class="path">${escapeHtml(f.path)}</span><span class="n">${counts(f.add, f.del)}</span></li>`,
     )
     .join("")}</ul>`
 
@@ -76,7 +72,8 @@ const write = (storage: Storage, key: string, value: unknown) => {
 
 const openKey = `ah-stack-open:${location.pathname}`
 const open = new Set(read<string[]>(sessionStorage, openKey) ?? [])
-const openAttr = (key: string) => `data-key="${esc(key)}"${open.has(key) ? " open" : ""}`
+const openAttr = (key: string) =>
+  `data-key="${escapeHtml(key)}"${open.has(key) ? " open" : ""}`
 document.addEventListener(
   "toggle",
   (e) => {
@@ -112,20 +109,20 @@ const REVIEWS: Record<string, [string, string, string]> = {
 
 /** A note on the meta line, `cls` good, bad or warn */
 const note = (text: string, cls: string, title = "") =>
-  `<span class="gh-note ${cls}"${title ? ` title="${esc(title)}"` : ""}>${esc(text)}</span>`
+  `<span class="gh-note ${cls}"${title ? ` title="${escapeHtml(title)}"` : ""}>${escapeHtml(text)}</span>`
 
 /** The PR's link and where it stands on GitHub, with what doesn't match
  * here: its head, saying which side moved, and its base, which should be the
  * PR below it or trunk */
 function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   const state = gh.state === "OPEN" && gh.isDraft ? "draft" : gh.state.toLowerCase()
-  const link = `<a class="gh-pr ${state}" href="${esc(gh.url)}" target="_blank" rel="noreferrer">#${gh.number} ${STATES[state as keyof typeof STATES]}</a>`
+  const link = `<a class="gh-pr ${state}" href="${escapeHtml(gh.url)}" target="_blank" rel="noreferrer">#${gh.number} ${STATES[state as keyof typeof STATES]}</a>`
   if (gh.state !== "OPEN") return link
   const notes: string[] = []
   if (gh.checks) {
     const title = CHECKS[gh.checks]
     notes.push(
-      `<a class="gh-checks ${gh.checks}" href="${esc(gh.url)}/checks" target="_blank" rel="noreferrer" title="${title}" aria-label="${title}"></a>`,
+      `<a class="gh-checks ${gh.checks}" href="${escapeHtml(gh.url)}/checks" target="_blank" rel="noreferrer" title="${title}" aria-label="${title}"></a>`,
     )
   }
   const tip = pr.commits[0]?.commit
@@ -159,8 +156,8 @@ function commitList(commits: Commit[], unpushed = 0): string {
     const body = rest.join("\n").trim()
     return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
       <summary>
-        <span class="mono cid" title="${c.change} @ ${c.commit}">${esc(c.short)}</span>
-        <span class="title">${esc(title || "(no description)")}</span>
+        <span class="mono cid" title="${c.change} @ ${c.commit}">${escapeHtml(c.short)}</span>
+        <span class="title">${escapeHtml(title || "(no description)")}</span>
         ${stat(c.files, { rev: c.change })}
       </summary>
       <div class="detail">
@@ -183,10 +180,10 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   const unpushed = pr.pushed ? pr.unpushed : 0
   return `<section class="pr">
     <div class="pr-head">
-      <h2><span class="n">${pr.n}.</span> ${esc(gh?.title ?? pr.title)}</h2>
+      <h2><span class="n">${pr.n}.</span> ${escapeHtml(gh?.title ?? pr.title)}</h2>
       ${pr.diff ? stat(pr.files, pr.diff) : ""}
     </div>
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${esc(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${esc(pr.bookmark)}</span>${pr.merge ? ` · ${esc(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     <details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
       <summary>Summary and ${pr.files.length} file${pr.files.length === 1 ? "" : "s"}</summary>
       ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
@@ -203,7 +200,7 @@ function sharedCard(group: Shared): string {
   const bookmark = group.head !== group.commits[0].change
   return `<section class="pr shared">
     <div class="pr-head">
-      <h2>${bookmark ? `<span class="mono">${esc(group.head)}</span>` : "No bookmark"}</h2>
+      <h2>${bookmark ? `<span class="mono">${escapeHtml(group.head)}</span>` : "No bookmark"}</h2>
       ${group.diff ? stat(group.files, group.diff) : ""}
     </div>
     <div class="pr-meta">${note(`shared by PRs ${prs.slice(0, -1).join(", ")} and ${prs.at(-1)}`, "warn")}</div>
@@ -255,9 +252,9 @@ function draw(stack: Stack, error = "") {
       : stack.trunk
   }
   const html = `
-    <h1>${esc(stack.title)}</h1>
-    ${error ? `<p class="error">${esc(error)}</p>` : ""}
-    ${githubError ? `<p class="error">GitHub: ${esc(githubError)}</p>` : ""}
+    <h1>${escapeHtml(stack.title)}</h1>
+    ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
+    ${githubError ? `<p class="error">GitHub: ${escapeHtml(githubError)}</p>` : ""}
     <div class="notes">${stack.notes.map((n) => `<p>${prose(n)}</p>`).join("")}</div>
     ${
       rows.length
@@ -268,7 +265,7 @@ function draw(stack: Stack, error = "") {
             })
             .join(
               "",
-            )}<div class="trunk mono">${esc(rows.findLast((r) => r.commits.length)?.base ?? "")}</div></div>`
+            )}<div class="trunk mono">${escapeHtml(rows.findLast((r) => r.commits.length)?.base ?? "")}</div></div>`
         : `<p class="empty">No PRs in stack.json yet</p>`
     }`
   if (html === drawn) return

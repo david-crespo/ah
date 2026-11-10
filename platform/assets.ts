@@ -15,7 +15,7 @@ function findRoot(dir: string): string {
   return dir
 }
 
-export const packageRoot = findRoot(import.meta.dirname)
+const packageRoot = findRoot(import.meta.dirname)
 
 /** `path` relative to the package root, e.g. "views/dashboard/page.html" */
 export const assetPath = (path: string) => join(packageRoot, path)
