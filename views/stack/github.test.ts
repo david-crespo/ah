@@ -86,6 +86,30 @@ test("readGithub asks gh once for the whole stack, and skips forks' PRs", async 
   }
 })
 
+test("readGithub finds the repo from a workspace whose working copy is stale", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-github-")))
+  const other = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-github-")))
+  try {
+    const jj = (cwd: string, ...args: string[]) =>
+      execFileSync("jj", args, { cwd, stdio: "pipe" })
+    jj(dir, "git", "init")
+    jj(dir, "git", "remote", "add", "origin", "https://github.com/o/r")
+    // Rewriting this workspace's commit from another one leaves it stale
+    jj(dir, "workspace", "add", join(other, "ws"))
+    writeFileSync(join(other, "ws", "file"), "added from the other workspace")
+    jj(join(other, "ws"), "squash", "--into", "default@")
+    const prs = [{ n: 1, title: "One", bookmark: "one" }]
+    writeFileSync(join(dir, STACK_FILE), JSON.stringify({ title: "Stack", prs }))
+    gh.calls = []
+    gh.answer = () => JSON.stringify({ data: { repository: { h0: { nodes: [] } } } })
+    expect(await readGithub(join(dir, "index.html"))).toEqual({})
+    expect(gh.calls[0]).toEqual(expect.arrayContaining(["owner=o", "name=r"]))
+  } finally {
+    rmSync(dir, { recursive: true })
+    rmSync(other, { recursive: true })
+  }
+})
+
 test("readGithub has no PRs, and no error, for a repo with no GitHub remote", async () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-github-")))
   try {

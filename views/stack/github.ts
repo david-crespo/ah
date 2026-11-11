@@ -6,6 +6,7 @@
 import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
+import { jj } from "../../platform/jj.ts"
 import { type Output, run } from "../../platform/proc.ts"
 import { parseStackFile, STACK_FILE } from "./data.ts"
 
@@ -86,8 +87,7 @@ export async function fetchPrs(pagePath: string, gh = ghRun): Promise<GithubPrs>
   const root = rootFinder()(dir)
   if (!root) throw new Error(`${dir} isn't in a jj workspace`)
   // By name, since a jj workspace other than the first has no .git for gh
-  const remotes = await run("jj", ["git", "remote", "list"], { cwd: root })
-  const repo = githubRepo(remotes.stdout)
+  const repo = githubRepo(await jj(root, "git", "remote", "list"))
   // Nothing to show, as for PRs that aren't on GitHub yet
   if (!repo || !file.prs.length) return {}
   const [owner, name] = repo.split("/")
