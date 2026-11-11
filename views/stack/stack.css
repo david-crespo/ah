@@ -242,9 +242,6 @@ main .gh-note.bad {
 main .gh-note.warn {
   color: var(--warn);
 }
-main .summary {
-  margin: 8px 0;
-}
 main .add {
   color: var(--add);
 }

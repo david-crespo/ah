@@ -1,6 +1,6 @@
 // A stack page's data, which client.ts draws: the PRs an agent lists in
 // stack.json next to the page, filled in from jj. The agent writes only what
-// jj doesn't know (titles, notes, how each PR merges, summaries). The rest
+// jj doesn't know (titles, notes, how each PR merges). The rest
 // comes from the graph. Commits above trunk are grouped by which PRs'
 // bookmarks have them. A PR's own are the ones its bookmark's commit is
 // grouped with: no PR below it has them. Any other group is commits below a
@@ -22,7 +22,6 @@ export interface StackPr {
   bookmark: string
   /** How it merges, like "merges alone, first" */
   merge?: string
-  summary?: string
 }
 
 export interface StackFile {
@@ -109,8 +108,8 @@ export function parseStackFile(text: string): StackFile {
     throw new Error(`notes in ${STACK_FILE} must be a list of strings`)
   if (!file.prs.every(isPr))
     throw new Error(`each PR in ${STACK_FILE} needs n, title and bookmark`)
-  if (!file.prs.every((pr) => optional(pr.summary) && optional(pr.merge)))
-    throw new Error(`a PR's summary and merge in ${STACK_FILE} must be strings`)
+  if (!file.prs.every((pr) => optional(pr.merge)))
+    throw new Error(`a PR's merge in ${STACK_FILE} must be a string`)
   return file as unknown as StackFile
 }
 

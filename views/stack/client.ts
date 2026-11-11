@@ -3,7 +3,7 @@
 // A stack's page, served as /stack.js on the pages port; the page (file.ts)
 // loads it and /stack.css. It draws the page's stack (data.ts, served
 // at _ah/stack) newest first, like jj log: each PR's title, its bookmark and
-// how it merges, its summary and files collapsed under it, and a line per
+// how it merges, its files collapsed under it, and a line per
 // commit that opens to its description and files. Once a PR is pushed, a line
 // under its newest commits marks the ones still to push, with a Push button
 // on it; a PR whose bookmark isn't on the remote yet has its Push button by
@@ -276,21 +276,15 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   // Its bookmark is new on the remote, so the button goes by Body
   const fresh = !pr.pushed && pr.commits.length > 0
   const files = pr.files.length
-  const more = files
-    ? `Summary and ${files} file${files === 1 ? "" : "s"}`
-    : pr.summary
-      ? "Summary"
-      : ""
   return `<section class="pr">
     ${head}
     <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     ${runResult(pr)}
     ${
-      more
+      files
         ? `<details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
-      <summary>${more}</summary>
-      ${pr.summary ? paras(pr.summary, "summary") : '<p class="summary empty">No summary yet</p>'}
-      ${files ? fileList(pr.files) : ""}
+      <summary>${files} file${files === 1 ? "" : "s"}</summary>
+      ${fileList(pr.files)}
     </details>`
         : ""
     }

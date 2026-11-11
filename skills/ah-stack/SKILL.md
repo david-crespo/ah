@@ -1,14 +1,14 @@
 ---
 name: ah-stack
-description: "Show a stack of PRs as a page: each PR's commits, diff stats and summary, newest first, with buttons that open any commit's or PR's diff in skepsis and a Push button the user clicks to push a PR. Use when the user asks for a stack page, or wants to see how a stack of jj bookmarks splits into PRs."
+description: "Show a stack of PRs as a page: each PR's commits and diff stats, newest first, with buttons that open any commit's or PR's diff in skepsis and a Push button the user clicks to push a PR. Use when the user asks for a stack page, or wants to see how a stack of jj bookmarks splits into PRs."
 ---
 
 # Stack pages
 
 A stack page shows a stack of PRs the way the user reviews one: newest first,
-like `jj log`, each PR with its bookmark, a summary, its files,
-and a line per commit that opens to the commit's description and files. ah
-draws it from jj, and you write only what jj doesn't know.
+like `jj log`, each PR with its bookmark, its files, and a line per commit
+that opens to the commit's description and files. ah draws it from jj, and
+you write only what jj doesn't know.
 
 Run every `ah` command as the whole Bash command, as the ah-page skill says (in
 Claude Code: no pipes, `&&`, redirects or `$`), or it runs in the sandbox and
@@ -35,8 +35,7 @@ it in a window, and binds it to this session. Run the same command without
     {
       "n": 1,
       "title": "Track system releases",
-      "bookmark": "vdocs-release-data",
-      "summary": "What the PR does.\n\nWhere a reviewer should start."
+      "bookmark": "vdocs-release-data"
     }
   ]
 }
@@ -45,9 +44,9 @@ it in a window, and binds it to this session. Run the same command without
 - `n` is the PR's place in the stack, and the page shows it as `1.`, so don't
   number titles or bookmarks. Keep the numbers in stack order. When a PR is
   inserted or moved and no PR above that place has been pushed, renumber the
-  ones above it, and update the numbers that `merge`, `notes` and summaries
-  refer to. Once a PR above has been pushed, people know it by its number, so
-  leave the numbers alone and give the new PR the next free one.
+  ones above it, and update the numbers that `merge` and `notes` refer to.
+  Once a PR above has been pushed, people know it by its number, so leave the
+  numbers alone and give the new PR the next free one.
 - Don't list commits or bases. ah takes each PR's commits from the graph: the
   bookmark's ancestors down to the nearest other PR's bookmark, a fork, or
   trunk. Commits below a fork that no PR's bookmark is on get a card of their
@@ -57,10 +56,9 @@ it in a window, and binds it to this session. Run the same command without
   bookmark. Leave it out unless it says something the graph and GitHub
   don't, such as a PR on a side branch that has to merge before one on the
   main line. Never use it to restate the stack's order or what's pushed.
-- `notes` is a list of plain-text strings, each one paragraph. `summary` is
-  plain text with blank lines between paragraphs. Both take backticks for
-  code. Write the summary for a reviewer: what the PR does, then where to
-  start reading.
+- `notes` is a list of plain-text strings, each one paragraph, with backticks
+  for code. Use them for what only the page knows, such as a PR that's been
+  tabled. What a PR does goes in its body.
 - A PR can be listed before its bookmark exists; the page shows it with "no
   bookmark yet" until it does. Keep a PR listed after it merges, even once a
   fetch deletes its bookmark: GitHub still knows it by its branch, so the
@@ -78,7 +76,7 @@ A commit's summary is its description's body, under the title line. The page
 unwraps hard-wrapped lines and keeps paragraphs. Write each one when you make
 the commit (`jj describe`), and after restructuring the stack (squashing,
 splitting, moving changes between commits), reread each changed commit's
-diff and update its body and its PR's `summary` to match.
+diff and update its body to match.
 
 ## The diff buttons
 
