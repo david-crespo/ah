@@ -1,11 +1,12 @@
 // Pushing a stack PR's bookmark from its page, served at the page's _ah/push.
 // The page's Push button only asks: the server works out from jj what the
-// push would send, shows it in a dialog (platform/dialog.ts) and runs
-// `jj git push` only once the person clicks Push there. A push that would
+// push would send, shows it in a sheet on the page's window (platform/ask.ts)
+// and runs `jj git push` only once the person clicks Push there. A page with
+// no window of ah's, like a browser tab, can't push. A push that would
 // rewrite what the remote has is refused, to be pushed by hand. One push at a
-// time per repo, counting the time its dialog is up.
+// time per repo, counting the time its sheet is up.
 //
-// The push and the reads either side of the dialog snapshot the working copy,
+// The push and the reads either side of the sheet snapshot the working copy,
 // as a push from a terminal would: a bookmark on @ is pushed as its files
 // are, and a push that rewrites @ (making it immutable, say) moves the working
 // copy along rather than leaving it stale. The reads between don't need to.
@@ -13,7 +14,7 @@
 import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
-import type { Confirm } from "../../platform/dialog.ts"
+import type { Confirm, Question } from "../../platform/ask.ts"
 import { type JjRun, repoDir } from "../../platform/jj.ts"
 import { parseStackFile, STACK_FILE } from "./data.ts"
 
@@ -22,7 +23,7 @@ import { parseStackFile, STACK_FILE } from "./data.ts"
 export interface Plan {
   remote: string
   tip: string
-  commits: string[]
+  commits: { id: string; text: string }[]
   isNew: boolean
 }
 
@@ -35,21 +36,22 @@ class Refused extends Error {
   }
 }
 
-/** Repos with a push waiting on its dialog or running, by repo dir */
+/** Repos with a push waiting on its sheet or running, by repo dir */
 const pushing = new Set<string>()
 
-/** The dialog's commit lines, at most 8 */
+/** The sheet's commit rows, at most 8 */
 const SHOWN = 8
 
-/** The dialog's text for pushing `bookmark` as `plan` says */
-export function pushQuestion(bookmark: string, plan: Plan): string {
-  const lines = plan.commits.slice(0, SHOWN)
-  const more = plan.commits.length - lines.length
-  if (more) lines.push(`and ${more} more`)
-  const fresh = plan.isNew
-    ? `\n${bookmark} isn't on ${plan.remote} yet: this makes it.`
-    : ""
-  return `Push ${bookmark} to ${plan.remote}?${fresh}\n\n${lines.join("\n")}`
+/** The sheet's question for pushing `bookmark` as `plan` says */
+export function pushQuestion(bookmark: string, plan: Plan): Question {
+  const rows = plan.commits.slice(0, SHOWN)
+  return {
+    heading: `Push ${bookmark} to ${plan.remote}?`,
+    notes: plan.isNew ? [`New branch on ${plan.remote}.`] : [],
+    rows,
+    more: plan.commits.length - rows.length,
+    button: "Push",
+  }
 }
 
 /** What pushing `bookmark` in the repo at `root` would send, from jj, or
@@ -86,10 +88,12 @@ export async function planPush(
   // Before its first push, what the remote has of it under other bookmarks
   // isn't sent
   const from = pushed ? there : `remote_bookmarks(remote=exact:${JSON.stringify(remote)})`
-  const commits = await log(
-    `${from}..${local}`,
-    `change_id.short(8) ++ " " ++ if(description, description.first_line(), "(no description)") ++ "\n"`,
-  )
+  const commits = (
+    await log(
+      `${from}..${local}`,
+      `change_id.short(8) ++ " " ++ if(description, description.first_line(), "(no description)") ++ "\n"`,
+    )
+  ).map((line) => ({ id: line.slice(0, 8), text: line.slice(9) }))
   if (!commits.length)
     throw new Refused(409, `${bookmark} has nothing to push to ${remote}`)
   return { remote, tip, commits, isNew: !pushed }
@@ -119,9 +123,11 @@ async function pushRemote(jjRun: JjRun, root: string): Promise<string> {
 }
 
 /** `{ pushed, output }` from a push of the stack PR with `bookmark`, from
- * the stack page at `pagePath`, once the person confirms it in `confirm` */
+ * the stack page at `pagePath`, served at `page`, once the person confirms
+ * it in `confirm` */
 export async function push(
   pagePath: string,
+  page: URL,
   bookmark: unknown,
   confirm: Confirm,
   jjRun: JjRun,
@@ -141,11 +147,16 @@ export async function push(
   pushing.add(repo)
   try {
     const plan = await planPush(jjRun, root, bookmark)
-    if (!(await confirm({ text: pushQuestion(bookmark, plan), button: "Push" })))
-      return Response.json({ pushed: false, output: "cancelled" })
-    // What the dialog showed is what's sent
+    const yes = await confirm(page, pushQuestion(bookmark, plan))
+    if (yes === null)
+      throw new Refused(
+        409,
+        "Pushing needs this page in ah's window: open it with ah tool stack",
+      )
+    if (!yes) return Response.json({ pushed: false, output: "cancelled" })
+    // What the sheet showed is what's sent
     if ((await tipOf(jjRun, root, bookmark)) !== plan.tip)
-      throw new Refused(409, `${bookmark} moved while the dialog was up; push again`)
+      throw new Refused(409, `${bookmark} moved while the sheet was up; push again`)
     const out = await jjRun(
       root,
       "git",

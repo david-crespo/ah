@@ -8,8 +8,9 @@
 // under its newest commits marks the ones still to push, with a Push button
 // on it; a PR whose bookmark isn't on the remote yet has its Push button by
 // its Body button. Push has the server push the bookmark once the user
-// confirms it in a dialog the server shows (push.ts), and jj's answer shows
-// on the PR. Commits below a fork
+// confirms it in a sheet on the page's window (push.ts), and jj's answer
+// shows on the PR. Outside ah's window, as in a browser tab, there's no
+// sheet to confirm in, so the button says so. Commits below a fork
 // that no PR's bookmark is on get a card of their own, shared by the PRs
 // above. A graph down the left joins the commits, like jj log's. Each diff
 // stat is a button that has the server open that diff in skepsis
@@ -168,10 +169,21 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
  * shows on the PR until the page reloads or it's pushed again */
 const pushes = new Map<string, "busy" | { how: "ok" | "bad" | "cancelled"; text: string }>()
 
+/** In ah's own window, whose sheet a push is confirmed in */
+const inWindow = new URLSearchParams(location.search).get("in") === "window"
+
 /** The Push button for `pr`, disabled while its push is out */
 function pushButton(pr: Pr): string {
   const busy = pushes.get(pr.bookmark) === "busy"
-  return `<button type="button" class="push-button" data-push="${escapeHtml(pr.bookmark)}" title="${busy ? "Waiting for you to confirm in ah's dialog, then pushing" : `Push ${escapeHtml(pr.bookmark)}, after a dialog asks you`}"${busy ? " disabled" : ""}>${busy ? "Pushing…" : "Push"}</button>`
+  const [label, title] = !inWindow
+    ? [
+        "Push in ah's window",
+        "Pushing is confirmed in ah's window for this page: open it with ah tool stack",
+      ]
+    : busy
+      ? ["Pushing…", "Waiting for you to confirm in the window's sheet, then pushing"]
+      : ["Push", `Push ${pr.bookmark}, after the window asks you`]
+  return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(pr.bookmark)}" title="${escapeHtml(title)}"${busy || !inWindow ? " disabled" : ""}>${label}</button>`
 }
 
 /** How the PR's last push from this page went, if there was one */
@@ -438,7 +450,7 @@ main.addEventListener("click", (e) => {
   redraw()
 })
 
-// A Push button: the server asks the user in a dialog, and pushes if they
+// A Push button: the server asks the user in a sheet, and pushes if they
 // say so. The stack redraws by itself after, since the push is a jj
 // operation.
 main.addEventListener("click", async (e) => {

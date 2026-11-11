@@ -22,7 +22,9 @@
 //   bounds start at the primary screen's top left with y going down, while
 //   NSScreen frames start at its bottom left with y going up.
 
-import { cpSync, existsSync, readdirSync, rmSync, statSync } from "node:fs"
+import { randomBytes } from "node:crypto"
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs"
+import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
 import { assetPath } from "./assets.ts"
 import { type Focus, activatePid, focusHere, keepFocus } from "./focus.ts"
@@ -87,10 +89,34 @@ async function open(args: string[]) {
 }
 
 const SHOWING = /\/ah-webview --url (\S+)/
+const SOCKET = / --socket (\S+)/
 
 /** The pids of the windows showing `url`, oldest first */
 export function windowsShowing(url: string): number[] {
   return processTable().flatMap((p) => (p.args.match(SHOWING)?.[1] === url ? [p.pid] : []))
+}
+
+/** Where a new window listens for questions (platform/ask.ts): in a
+ * directory only this user can open, under a name short enough for a Unix
+ * socket's path */
+function newSocketPath(): string {
+  const dir = join(tmpdir(), "ah-windows")
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  return join(dir, `${randomBytes(6).toString("hex")}.sock`)
+}
+
+/** The newest window showing `page` (whatever its query, like ?in=window)
+ * that listens for questions, as its pid and socket */
+export function windowOf(page: URL): { pid: number; socket: string } | null {
+  const same = (url: string) => {
+    const shown = URL.parse(url)
+    return shown?.host === page.host && shown.pathname === page.pathname
+  }
+  const found = processTable().findLast((p) => {
+    const url = p.args.match(SHOWING)?.[1]
+    return url && same(url) && SOCKET.test(p.args)
+  })
+  return found ? { pid: found.pid, socket: found.args.match(SOCKET)![1] } : null
 }
 
 /** Bring the newest window showing `url` to the front. Returns whether there
@@ -134,6 +160,8 @@ export async function openWindow(
     options.badge,
     "--color",
     options.color,
+    "--socket",
+    newSocketPath(),
     ...(focus.take ? ["--focus"] : []),
     ...(options.otherDisplay ? ["--other-display"] : []),
   ])

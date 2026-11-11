@@ -93,9 +93,11 @@ red, its tooltip says why.
 
 A PR with commits still to push has a Push button on the bar that marks
 them, and a PR whose bookmark isn't on the remote yet has one by its Body
-button. Clicking it has the server show a macOS dialog listing the commits
-the push would send; only clicking Push there runs `jj git push --bookmark`
-for that PR, and jj's answer shows on the PR. A push that would rewrite
+button. Clicking it has ah's window for the page show a sheet listing the
+commits the push would send; only clicking Push there runs
+`jj git push --bookmark` for that PR, and jj's answer shows on the PR. The
+sheet is native, so a page's script can't click it, and only ah's window can
+show it: in a browser tab the button says to push from the window. A push that would rewrite
 commits the remote has is refused, to be pushed by hand. Pushing from the
 page is the user's action: never call the page's push route yourself. When
 the user asks you to push, push from your shell as usual, or point them at

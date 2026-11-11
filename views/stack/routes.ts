@@ -7,7 +7,7 @@
 import { stat } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
-import { type Confirm, confirmDialog } from "../../platform/dialog.ts"
+import { type Confirm, confirmInWindow } from "../../platform/ask.ts"
 import { type JjRun, jjRun } from "../../platform/jj.ts"
 import type { OpenFile, PageApp } from "../page/app.ts"
 import { noStore } from "../page/routes.ts"
@@ -21,10 +21,10 @@ const failed = (e: Error) => new Response(e.message, { status: 500 })
 const done = () => new Response(null, { status: 204 })
 
 /** `openDoc` opens a PR's body. `confirm` and `run` are for tests, which
- * answer the push dialog and stand in for jj. */
+ * answer the push's sheet and stand in for jj. */
 export function stackApp(
   openDoc: OpenFile,
-  confirm: Confirm = confirmDialog,
+  confirm: Confirm = confirmInWindow,
   run: JjRun = jjRun,
 ): PageApp {
   return {
@@ -48,7 +48,9 @@ export function stackApp(
       }
       if (sub === "_ah/push" && req.method === "POST") {
         const { bookmark }: { bookmark?: unknown } = await req.json().catch(() => ({}))
-        return await push(path, bookmark, confirm, run).catch(failed)
+        // The page's own URL, which its window was opened at
+        const page = new URL("..", req.url)
+        return await push(path, page, bookmark, confirm, run).catch(failed)
       }
       return null
     },

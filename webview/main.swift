@@ -6,6 +6,7 @@
 // after a -g launch. --focus makes its window key.
 //
 //   ah-webview --url URL [--focus] [--other-display] [--badge TEXT] [--color HEX]
+//              [--socket PATH]
 //
 // --other-display fills a display without the pointer, preferring the
 // built-in one. --badge and --color draw the Dock icon. Links off the
@@ -15,6 +16,13 @@
 // Hovering a link shows its address in the bottom left corner, as a
 // browser's status bar does: a script in every frame reports the link under
 // the pointer, and the window draws it over the page.
+//
+// --socket PATH has the app listen there for the server's questions, like
+// whether to push a stack's PR: each connection sends one as a line of JSON,
+// the window shows it in a sheet, and the app answers "yes" or "no" on the
+// same connection. Pages can't reach a Unix socket, and no script message
+// handler answers a question, so only a click in the sheet says yes. Escape,
+// Cancel, 2 minutes without an answer, and the server hanging up say no.
 
 import AppKit
 import WebKit
@@ -25,6 +33,7 @@ struct Options {
   var otherDisplay = false
   var badge: String?
   var color = NSColor.systemIndigo
+  var socket: String?
 }
 
 func parseOptions(_ args: [String]) -> Options? {
@@ -38,6 +47,7 @@ func parseOptions(_ args: [String]) -> Options? {
     case "--other-display": options.otherDisplay = true
     case "--badge": options.badge = rest.popFirst()
     case "--color": if let c = rest.popFirst().flatMap(color(hex:)) { options.color = c }
+    case "--socket": options.socket = rest.popFirst()
     default: break  // LaunchServices may add its own, like -psn_…
     }
   }
@@ -141,6 +151,191 @@ func mainMenu() -> NSMenu {
   return main
 }
 
+/** What the server asks: a heading, notes under it, then rows of an ID and
+ * a line of text, and how many rows didn't fit. `button` says yes. */
+struct Question: Decodable, Sendable {
+  struct Row: Decodable, Sendable {
+    let id: String
+    let text: String
+  }
+  let heading: String
+  let notes: [String]
+  let rows: [Row]
+  let more: Int
+  let button: String
+}
+
+/** A listening Unix socket at `path`, or nil if it can't be made */
+func listenUnix(_ path: String) -> Int32? {
+  var addr = sockaddr_un()
+  addr.sun_family = sa_family_t(AF_UNIX)
+  let bytes = Array(path.utf8)
+  guard bytes.count < MemoryLayout.size(ofValue: addr.sun_path) else { return nil }
+  withUnsafeMutableBytes(of: &addr.sun_path) { $0.copyBytes(from: bytes) }
+  let fd = socket(AF_UNIX, SOCK_STREAM, 0)
+  guard fd >= 0 else { return nil }
+  unlink(path)
+  let bound = withUnsafePointer(to: &addr) {
+    $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+      bind(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
+    }
+  }
+  guard bound == 0, chmod(path, 0o600) == 0, listen(fd, 4) == 0 else {
+    close(fd)
+    return nil
+  }
+  return fd
+}
+
+/** The first line on `fd`, without its newline; nil if it closes first */
+func readLine(_ fd: Int32) -> Data? {
+  var line = Data()
+  var byte: UInt8 = 0
+  while read(fd, &byte, 1) == 1 {
+    if byte == 10 { return line }
+    line.append(byte)
+    if line.count > 1 << 20 { return nil }
+  }
+  return nil
+}
+
+/** Accept connections on `listener` for good, each on a thread of its own:
+ * read its question, hand it to `ask` on the main thread, and when the
+ * connection ends, whether the server hung up or the answer was sent, tell
+ * `hungUp` and close it */
+func serveQuestions(
+  _ listener: Int32,
+  ask: @escaping @MainActor @Sendable (Question, Int32) -> Void,
+  hungUp: @escaping @MainActor @Sendable (Int32) -> Void
+) {
+  Thread.detachNewThread {
+    while true {
+      let fd = accept(listener, nil, nil)
+      if fd < 0 { continue }
+      var on: Int32 = 1
+      setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+      Thread.detachNewThread {
+        if let line = readLine(fd),
+          let question = try? JSONDecoder().decode(Question.self, from: line)
+        {
+          DispatchQueue.main.async { MainActor.assumeIsolated { ask(question, fd) } }
+          // Until the server hangs up, or the answer's shutdown ends it
+          var byte: UInt8 = 0
+          while read(fd, &byte, 1) > 0 {}
+        }
+        DispatchQueue.main.sync { MainActor.assumeIsolated { hungUp(fd) } }
+        close(fd)
+      }
+    }
+  }
+}
+
+@MainActor
+func label(_ text: String, size: CGFloat = 13, weight: NSFont.Weight = .regular) -> NSTextField {
+  let field = NSTextField(labelWithString: text)
+  field.font = .systemFont(ofSize: size, weight: weight)
+  return field
+}
+
+/** A question in a sheet on a window: Cancel and its button, which Return
+ * clicks. Text is shown as plain strings, never as markup. */
+@MainActor
+final class Asking: NSObject {
+  static let width: CGFloat = 520
+  let fd: Int32
+  let sheet: NSWindow
+  weak var parent: NSWindow?
+  var answered = false
+  /** Space after a view in the sheet, where it isn't the usual */
+  var gaps: [NSView: CGFloat] = [:]
+
+  init(_ question: Question, fd: Int32, on parent: NSWindow) {
+    self.fd = fd
+    self.parent = parent
+    sheet = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: Asking.width, height: 100),
+      styleMask: [.titled], backing: .buffered, defer: true)
+    super.init()
+
+    let heading = NSTextField(wrappingLabelWithString: question.heading)
+    heading.font = .systemFont(ofSize: 15, weight: .semibold)
+    // Each as wide as the sheet's inside, so notes wrap there and rows cut
+    var views: [NSView] = [heading]
+    for note in question.notes {
+      let field = NSTextField(wrappingLabelWithString: note)
+      field.font = .systemFont(ofSize: 13)
+      views.append(field)
+    }
+    for (i, row) in question.rows.enumerated() {
+      let id = NSTextField(labelWithString: row.id)
+      id.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+      id.textColor = .secondaryLabelColor
+      id.setContentCompressionResistancePriority(.required, for: .horizontal)
+      let text = label(row.text)
+      text.lineBreakMode = .byTruncatingTail
+      text.toolTip = row.text
+      text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+      let line = NSStackView(views: [id, text])
+      line.spacing = 8
+      line.alignment = .firstBaseline
+      views.append(line)
+      if i == 0, let above = views.dropLast().last { gaps[above] = 14 }
+    }
+    if question.more > 0 {
+      let more = label("and \(question.more) more")
+      more.textColor = .secondaryLabelColor
+      views.append(more)
+    }
+    let cancel = NSButton(title: "Cancel", target: nil, action: nil)
+    cancel.keyEquivalent = "\u{1b}"
+    let yes = NSButton(title: question.button, target: nil, action: nil)
+    yes.keyEquivalent = "\r"
+    let spacer = NSView()
+    spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    let buttons = NSStackView(views: [spacer, cancel, yes])
+    if let above = views.last { gaps[above] = 18 }
+    views.append(buttons)
+
+    let stack = NSStackView(views: views)
+    stack.orientation = .vertical
+    stack.alignment = .leading
+    stack.spacing = 6
+    for (view, gap) in gaps { stack.setCustomSpacing(gap, after: view) }
+    stack.edgeInsets = NSEdgeInsets(top: 20, left: 20, bottom: 16, right: 20)
+    sheet.contentView = stack
+    NSLayoutConstraint.activate(
+      [stack.widthAnchor.constraint(equalToConstant: Asking.width)]
+        + views.map { $0.widthAnchor.constraint(equalToConstant: Asking.width - 40) })
+    cancel.target = self
+    cancel.action = #selector(cancel(_:))
+    yes.target = self
+    yes.action = #selector(confirm(_:))
+  }
+
+  func show() {
+    guard let parent else { return answer(false) }
+    parent.orderFrontRegardless()
+    parent.beginSheet(sheet)
+    Task {
+      try? await Task.sleep(for: .seconds(120))
+      self.answer(false)
+    }
+  }
+
+  @objc func confirm(_ sender: Any?) { answer(true) }
+  @objc func cancel(_ sender: Any?) { answer(false) }
+
+  /** Send `yes` once, close the sheet, and end the connection */
+  func answer(_ yes: Bool) {
+    if answered { return }
+    answered = true
+    let reply = yes ? "yes\n" : "no\n"
+    _ = reply.withCString { write(fd, $0, strlen($0)) }
+    shutdown(fd, SHUT_RDWR)
+    parent?.endSheet(sheet)
+  }
+}
+
 /** Reports the address of the link under the pointer, "" when there is none,
  * to the "hoveredLink" message handler */
 let hoveredLinkScript = """
@@ -172,6 +367,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   /** The hovered link's address, in the bottom left corner */
   var linkStatus: NSView!
   var linkStatusText: NSTextField!
+  /** The question in the window's sheet, by its connection */
+  var asking: [Int32: Asking] = [:]
 
   init(options: Options) {
     self.options = options
@@ -220,6 +417,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       MainActor.assumeIsolated { self?.window.title = webView.title ?? "" }
     }
     webView.load(URLRequest(url: options.url))
+    if let path = options.socket { listenForQuestions(path) }
 
     if options.focus {
       NSApp.activate()
@@ -228,6 +426,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       // In front of other apps' windows, but the keyboard stays where it is
       window.orderFrontRegardless()
     }
+  }
+
+  func listenForQuestions(_ path: String) {
+    guard let listener = listenUnix(path) else {
+      FileHandle.standardError.write("ah-webview: can't listen on \(path)\n".data(using: .utf8)!)
+      return
+    }
+    serveQuestions(
+      listener,
+      ask: { [weak self] question, fd in
+        guard let self else { return }
+        let asking = Asking(question, fd: fd, on: window)
+        // One at a time: a second is a no while the first is up
+        if !self.asking.isEmpty { return asking.answer(false) }
+        self.asking[fd] = asking
+        asking.show()
+      },
+      hungUp: { [weak self] fd in self?.asking.removeValue(forKey: fd)?.answer(false) })
+  }
+
+  func applicationWillTerminate(_ notification: Notification) {
+    if let path = options.socket { unlink(path) }
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -385,7 +605,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
 }
 
 guard let options = parseOptions(Array(CommandLine.arguments.dropFirst())) else {
-  FileHandle.standardError.write("usage: ah-webview --url URL [--focus] [--other-display] [--badge TEXT] [--color HEX]\n".data(using: .utf8)!)
+  FileHandle.standardError.write("usage: ah-webview --url URL [--focus] [--other-display] [--badge TEXT] [--color HEX] [--socket PATH]\n".data(using: .utf8)!)
   exit(2)
 }
 // Held keys repeat, as in a terminal, so holding j in the Helix pane keeps

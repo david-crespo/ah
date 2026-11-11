@@ -458,6 +458,10 @@ main button.push-button:disabled {
   opacity: 0.6;
   cursor: progress;
 }
+/* Outside ah's window, where there's no sheet to confirm in */
+main button.push-button.elsewhere {
+  cursor: default;
+}
 /* What jj said about the PR's last push from here */
 main .push-result {
   margin: 8px 0 0;

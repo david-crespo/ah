@@ -22,7 +22,7 @@ vi.mock("./proc.ts", () => ({
 vi.mock("./focus.ts", () => ({ focusHere: async () => ({ take: true, front: null }) }))
 vi.mock("./assets.ts", () => ({ assetPath: (path: string) => `${fake.root}/${path}` }))
 
-const { showUrl } = await import("./window.ts")
+const { showUrl, windowOf } = await import("./window.ts")
 
 const options = { name: "x", badge: "X", color: "#000000" }
 
@@ -74,4 +74,33 @@ test("a new copy of the app removes the old ones no window runs from", async () 
   } finally {
     rmSync(dir, { recursive: true })
   }
+})
+
+test("a page's window is the newest one at its address that listens for questions", () => {
+  const proc = (pid: number, args: string) => ({ pid, ppid: 0, pgid: 0, args })
+  const app = "/x/ah.app/Contents/MacOS/ah-webview"
+  fake.procs = [
+    proc(
+      1,
+      `${app} --url http://127.0.0.1:7521/view/page/s-1/?in=window --badge S --socket /t/a.sock`,
+    ),
+    proc(
+      2,
+      `${app} --url http://127.0.0.1:7521/view/page/s-1/?in=window --badge S --socket /t/b.sock`,
+    ),
+    // From before windows listened
+    proc(3, `${app} --url http://127.0.0.1:7521/view/page/s-1/?in=window --badge S`),
+    // Another page, and the same page on another server
+    proc(
+      4,
+      `${app} --url http://127.0.0.1:7521/view/page/s-2/?in=window --socket /t/c.sock`,
+    ),
+    proc(
+      5,
+      `${app} --url http://127.0.0.1:7531/view/page/s-1/?in=window --socket /t/d.sock`,
+    ),
+  ]
+  const page = new URL("http://127.0.0.1:7521/view/page/s-1/")
+  expect(windowOf(page)).toEqual({ pid: 2, socket: "/t/b.sock" })
+  expect(windowOf(new URL("http://127.0.0.1:7521/view/page/s-3/"))).toBeNull()
 })

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, expect, test } from "vitest"
-import { dialogArgs, type Question } from "../../platform/dialog.ts"
+import type { Question } from "../../platform/ask.ts"
 import { type JjRun, jjRun } from "../../platform/jj.ts"
 import { STACK_FILE } from "./data.ts"
 import { stackApp } from "./routes.ts"
@@ -72,22 +72,25 @@ beforeAll(() => {
 
 afterAll(() => rmSync(root, { recursive: true }))
 
-/** A stack app whose dialog answers `answer` and records what it asked, and
- * whose jj records each command */
-function app(answer: (q: Question) => Promise<boolean> | boolean) {
-  const asked: string[] = []
+/** A stack app whose window's sheet answers `answer` (null: there's no
+ * window) and records what it asked and of which page, and whose jj records
+ * each command */
+function app(answer: (q: Question) => Promise<boolean | null> | boolean | null) {
+  const asked: Question[] = []
+  const pages: string[] = []
   const ran: string[][] = []
   const run: JjRun = (cwd, ...args) => {
     ran.push(args)
     return jjRun(cwd, ...args)
   }
-  const confirm = async (q: Question) => {
-    asked.push(q.text)
+  const confirm = async (page: URL, q: Question) => {
+    pages.push(page.href)
+    asked.push(q)
     return await answer(q)
   }
   const routes = stackApp(async () => {}, confirm, run)
   const push = async (bookmark: string) => {
-    const req = new Request("http://127.0.0.1/", {
+    const req = new Request("http://127.0.0.1:7521/view/page/stack-1/_ah/push", {
       method: "POST",
       body: JSON.stringify({ bookmark }),
     })
@@ -95,7 +98,7 @@ function app(answer: (q: Question) => Promise<boolean> | boolean) {
     return { status: res.status, text: await res.text() }
   }
   const pushed = () => ran.some((args) => args[0] === "git" && args[1] === "push")
-  return { push, asked, pushed }
+  return { push, asked, pages, pushed }
 }
 
 test("a bookmark that isn't one of the stack's PRs is a 404", async () => {
@@ -120,37 +123,41 @@ test("a bookmark with nothing to push is refused", async () => {
   expect(asked).toEqual([])
 })
 
-test("a new branch's dialog says so, and lists 8 commits and how many more", async () => {
-  const { push, asked } = app(() => false)
+test("a new branch's sheet says so, and lists 8 commits and how many more", async () => {
+  const { push, asked, pages } = app(() => false)
   await push("fresh")
-  const [text] = asked
-  const lines = text.split("\n")
-  expect(lines.slice(0, 3)).toEqual([
-    "Push fresh to origin?",
-    "fresh isn't on origin yet: this makes it.",
-    "",
-  ])
+  const [q] = asked
+  expect(pages).toEqual(["http://127.0.0.1:7521/view/page/stack-1/"])
+  expect(q.heading).toBe("Push fresh to origin?")
+  expect(q.notes).toEqual(["New branch on origin."])
+  expect(q.button).toBe("Push")
   // Newest first, and none of what origin has under other bookmarks
-  expect(lines.slice(3).map((l) => l.replace(/^\w{8} /, ""))).toEqual([
-    ...[10, 9, 8, 7, 6, 5, 4, 3].map((n) => `Fresh ${n}`),
-    "and 2 more",
-  ])
+  expect(q.rows.map((r) => r.text)).toEqual(
+    [10, 9, 8, 7, 6, 5, 4, 3].map((n) => `Fresh ${n}`),
+  )
+  expect(q.rows.every((r) => /^\w{8}$/.test(r.id))).toBe(true)
+  expect(q.more).toBe(2)
 })
 
-test("cancelling leaves jj unrun, and a description goes to osascript only as an argument", async () => {
+test("cancelling leaves jj unrun, and a commit's row is its first line", async () => {
   const { push, asked, pushed } = app(() => false)
   const res = await push("ahead")
   expect(res).toEqual({ status: 200, text: '{"pushed":false,"output":"cancelled"}' })
   expect(pushed()).toBe(false)
-  const [text] = asked
-  // Its first line only, quotes and all
-  expect(text).toMatch(/^Push ahead to origin\?\n\n\w{8} Say "hi" to `them`$/)
-  const args = dialogArgs({ text, button: "Push" })
-  expect(args.slice(-3)).toEqual(["--", text, "Push"])
-  expect(args.slice(0, -3).join("\n")).not.toContain("hi")
+  const [q] = asked
+  expect(q.notes).toEqual([])
+  expect(q.rows.map((r) => r.text)).toEqual(['Say "hi" to `them`'])
 })
 
-test("a second push while one's dialog is up is refused", async () => {
+test("a page with no window of ah's to ask in can't push", async () => {
+  const { push, pushed } = app(() => null)
+  const res = await push("ahead")
+  expect(res.status).toBe(409)
+  expect(res.text).toContain("ah's window")
+  expect(pushed()).toBe(false)
+})
+
+test("a second push while one's sheet is up is refused", async () => {
   const answer = Promise.withResolvers<boolean>()
   const { push, asked } = app(() => answer.promise)
   const first = push("ahead")
@@ -161,7 +168,7 @@ test("a second push while one's dialog is up is refused", async () => {
   expect(asked).toHaveLength(1)
 })
 
-test("Push in the dialog pushes the bookmark to the remote", async () => {
+test("Push in the sheet pushes the bookmark to the remote", async () => {
   const { push } = app(() => true)
   expect(remoteRef("ahead")).not.toBe(localRef("ahead"))
   const res = await push("ahead")
