@@ -47,12 +47,13 @@ test("a run's log goes once GitHub has the PR, unless it failed", () => {
     ["pushed", run("ok", { pr: "https://github.com/o/r/pull/1" })],
     ["no-pr-yet", run("ok")],
     ["pr-failed", run("ok", { prError: "gh: no auth" })],
+    ["stack-failed", run("ok", { stackError: "422" })],
     ["failed", run("bad")],
     ["cancelled", run("cancelled")],
     ["out", "pushing"],
   ])
   const gh = { number: 1 } as GithubPr
-  const github = { pushed: gh, "pr-failed": gh, failed: gh, out: gh }
+  const github = { pushed: gh, "pr-failed": gh, "stack-failed": gh, failed: gh, out: gh }
   expect(settledRuns(runs, github, 11)).toEqual(["pushed", "cancelled"])
   // A load asked before the run ended doesn't show what it did
   expect(settledRuns(runs, github, 9)).toEqual([])

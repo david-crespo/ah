@@ -145,6 +145,17 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   const link = githubLink(gh)
   if (gh.state !== "OPEN") return link
   const notes: string[] = []
+  // From a cache an older ah wrote, it has no stack
+  if (gh.stack) {
+    const { number, size, position } = gh.stack
+    notes.push(
+      note(
+        `stack #${number} · ${position}/${size}`,
+        "",
+        `In GitHub stack #${number}, ${position} of ${size} from the bottom, counting merged PRs`,
+      ),
+    )
+  }
   if (gh.checks) {
     const title = CHECKS[gh.checks]
     notes.push(
@@ -225,9 +236,14 @@ function runResult(pr: Pr): string {
     : result.prError
       ? `<pre class="push-result bad">The PR didn't open, so it's still to create: ${escapeHtml(result.prError)}</pre>`
       : ""
+  const stacked = result.stackError
+    ? `<pre class="push-result bad">${escapeHtml(result.stackError)}</pre>`
+    : result.stack
+      ? `<p class="push-pr">${escapeHtml(result.stack)}</p>`
+      : ""
   return `<div class="push-log">
       <button type="button" class="dismiss" data-dismiss="${escapeHtml(pr.bookmark)}" title="Dismiss" aria-label="Dismiss">×</button>
-      <pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>${opened}
+      <pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>${opened}${stacked}
     </div>`
 }
 
@@ -501,13 +517,12 @@ main.addEventListener("click", async (e) => {
       const {
         pushed = true,
         output,
-        pr,
-        prError,
+        ...rest
       }: { pushed?: boolean; output: string } & Pick<
         RunResult,
-        "pr" | "prError"
+        "pr" | "prError" | "stack" | "stackError"
       > = await res.json()
-      result = { how: pushed ? "ok" : "cancelled", text: output, pr, prError }
+      result = { how: pushed ? "ok" : "cancelled", text: output, ...rest }
     } else result = { how: "bad", text: (await res.text()) || `${res.status}` }
   } catch (e) {
     result = { how: "bad", text: String(e) }

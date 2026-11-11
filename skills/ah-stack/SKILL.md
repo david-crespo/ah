@@ -108,7 +108,14 @@ Its base is the bookmark of the PR it's built on in the graph if that PR is
 open on GitHub, else trunk. The sheet shows the title and base first, and
 says if the description is empty, so write the body before the user
 pushes. If the PR fails to open, the push stands and the page shows why;
-open the PR by hand then. A bookmark already on the remote opens no PR. A push that would rewrite
+open the PR by hand then.
+
+A PR opened into the PR below it also joins that PR's GitHub stack
+(GitHub's stacked PRs), on top, when that PR is its stack's top. If the PR
+below is in no stack, the push makes one of the open PRs under the new one,
+down to the one on trunk, and the new one. The sheet says which, or why it
+joins none, and in a repo without stacks it does neither. If the stack
+fails to change, the PR stands and the page says why. A bookmark already on the remote opens no PR. A push that would rewrite
 commits the remote has is refused, to be pushed by hand. Pushing from the
 page is the user's action: never call the page's push route yourself. When
 the user asks you to push, push from your shell as usual, or point them at
@@ -127,7 +134,8 @@ Comments on it come to you as the ah-doc skill describes.
 
 Once a bookmark has a PR on GitHub, the page shows it from `gh`: a link
 with its state (draft, open, merged, closed), its title from GitHub, and,
-while it's open, its review and checks. It flags a PR whose branch on GitHub
+while it's open, its GitHub stack and place there (`stack #945 · 2/2`), its
+review and checks. It flags a PR whose branch on GitHub
 moved since the last fetch, with a Fetch button that runs `jj git fetch` in
 the repo (it sends nothing, so it isn't confirmed), and one whose base on
 GitHub isn't the PR below it, or trunk for the bottom one. Commits still to push are marked in

@@ -79,7 +79,7 @@ test("readGithub asks gh once for the whole stack, and skips forks' PRs", async 
       expect.arrayContaining(["owner=o", "name=r", "h0=one", "h1=two"]),
     )
     const { commits: _, isCrossRepository: __, ...rest } = pr
-    const want = { ...rest, reviewDecision: "", checks: "pass" }
+    const want = { ...rest, reviewDecision: "", checks: "pass", stack: null }
     expect(github).toEqual({ one: want, two: { ...want, number: 5 } })
   } finally {
     rmSync(dir, { recursive: true })

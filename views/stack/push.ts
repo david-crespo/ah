@@ -13,6 +13,13 @@
 // create PR". A PR that fails to open leaves the push standing, and the page
 // shows why.
 //
+// A PR opened into the PR below it joins that PR's GitHub stack (GitHub's
+// stacked PRs), on top, when that PR is the stack's top. When the PR below
+// is in no stack, a new stack is made of the open PRs under the new one,
+// down to the one on trunk, and the new one, as `gh stack link` would. The
+// sheet says which, or why it joins none, and a repo without stacks gets
+// neither. A stack that fails to change leaves the PR standing.
+//
 // The push and the reads either side of the sheet snapshot the working copy,
 // as a push from a terminal would: a bookmark on @ is pushed as its files
 // are, and a push that rewrites @ (making it immutable, say) moves the working
@@ -29,10 +36,11 @@ import {
   parseStackFile,
   prText,
   readStack,
+  type Shared,
   STACK_FILE,
   type StackPr,
 } from "./data.ts"
-import { fetchPrs, forgetGithub, type GhRun, githubRepo } from "./github.ts"
+import { fetchPrs, forgetGithub, type GhRun, type GithubPrs, githubRepo } from "./github.ts"
 import { prBelow } from "./layout.ts"
 
 /** What a push would send: its commits newest first, as short change ID and
@@ -44,13 +52,27 @@ export interface Plan {
   isNew: boolean
 }
 
-/** The PR a new branch's push opens on GitHub, in `repo` (owner/name) */
+/** The PR a new branch's push opens on GitHub, in `repo` (owner/name), and
+ * the GitHub stack it joins */
 export interface PrPlan {
   repo: string
   base: string
   title: string
   body: string
+  stack: StackPlan | null
 }
+
+/** How a new PR joins a GitHub stack once it's open: on top of `top`, the
+ * PR below it, at the top of stack `add`; or with `create`, the open PRs
+ * under it from the one on trunk up, in a new stack. `skip` says why it
+ * joins none. */
+export type StackPlan =
+  | { add: number; top: number }
+  | { create: number[] }
+  | { skip: string }
+
+/** The API version of GitHub's stacks */
+const STACKS_API = "X-GitHub-Api-Version: 2026-03-10"
 
 /** A push that won't happen, with why, as an HTTP status */
 class Refused extends Error {
@@ -79,6 +101,14 @@ export function pushQuestion(
   if (pr) {
     notes.push(`Then a PR opens into ${pr.base}, titled:`, pr.title)
     if (!pr.body) notes.push("Its description is empty.")
+    const { stack } = pr
+    if (stack && "add" in stack)
+      notes.push(`It goes on GitHub stack #${stack.add}, on top of #${stack.top}.`)
+    else if (stack && "create" in stack)
+      notes.push(
+        `A GitHub stack is made of ${stack.create.map((n) => `#${n}`).join(", ")} and it.`,
+      )
+    else if (stack) notes.push(`It joins no GitHub stack: ${stack.skip}.`)
   }
   return {
     heading: `Push ${bookmark} to ${plan.remote}?`,
@@ -174,6 +204,7 @@ export async function planPr(
   const row = stack.rows.find((r): r is Pr => "n" in r && r.bookmark === pr.bookmark)
   const below = row && prBelow(stack.rows, row)
   let base = stack.trunk
+  let joins: StackPlan | null = null
   if (below) {
     const github = await fetchPrs(pagePath, gh).catch((e: Error) => {
       throw new Refused(
@@ -181,10 +212,84 @@ export async function planPr(
         `couldn't ask GitHub whether ${below.bookmark} is open: ${e.message}`,
       )
     })
-    if (github[below.bookmark]?.state === "OPEN") base = below.bookmark
+    if (github[below.bookmark]?.state === "OPEN") {
+      base = below.bookmark
+      joins = stackPlan(stack.rows, github, below, stack.trunk)
+      if ("create" in joins) joins = await unlessNoStacks(gh, repo, joins)
+    }
   }
   if (!base) throw new Refused(409, `no trunk branch to open ${pr.bookmark}'s PR into`)
-  return { repo, base, ...(await prText(pagePath, pr)) }
+  return { repo, base, ...(await prText(pagePath, pr)), stack: joins }
+}
+
+/** How a PR opened into `below`, which is open on GitHub, joins a stack
+ * there: on top of `below`'s, or in a new one of the open PRs from trunk up
+ * to `below` */
+export function stackPlan(
+  rows: (Pr | Shared)[],
+  github: GithubPrs,
+  below: Pr,
+  trunk: string,
+): StackPlan {
+  const top = github[below.bookmark]
+  if (top.stack)
+    return top.stack.position === top.stack.size
+      ? { add: top.stack.number, top: top.number }
+      : { skip: `#${top.number} isn't the top of stack #${top.stack.number}` }
+  const chain = [top]
+  for (;;) {
+    const base = chain[0].baseRefName
+    if (base === trunk) return { create: chain.map((p) => p.number) }
+    const row = rows.find((r): r is Pr => "n" in r && r.bookmark === base)
+    const pr = row && github[row.bookmark]
+    if (!pr || pr.state !== "OPEN" || chain.includes(pr))
+      return {
+        skip: `#${chain[0].number}'s base, ${base}, is neither ${trunk} nor an open PR here`,
+      }
+    if (pr.stack)
+      return {
+        skip: `#${pr.number} is in stack #${pr.stack.number}, but #${top.number} isn't`,
+      }
+    chain.unshift(pr)
+  }
+}
+
+/** `plan`, or null if the repo doesn't have GitHub's stacks, which answers 404 */
+async function unlessNoStacks(gh: GhRun, repo: string, plan: StackPlan) {
+  const out = await gh("api", "-H", STACKS_API, `repos/${repo}/stacks?per_page=1`)
+  if (out.success) return plan
+  if (/\b404\b|Not Found/.test(out.stderr)) return null
+  return { skip: `couldn't ask GitHub about stacks: ${out.stderr.trim()}` }
+}
+
+/** What happened when the PR at `url` joined a stack as `plan` says:
+ * `{ stack }`, or `{ stackError }` */
+async function joinStack(
+  gh: GhRun,
+  repo: string,
+  url: string,
+  plan: StackPlan,
+): Promise<{ stack: string } | { stackError: string }> {
+  if ("skip" in plan) return { stack: `In no GitHub stack: ${plan.skip}` }
+  const n = Number(url.match(/\/pull\/(\d+)/)?.[1])
+  if (!n) return { stackError: `no PR number in ${url} to put in a stack` }
+  const [path, prs] =
+    "add" in plan
+      ? [`repos/${repo}/stacks/${plan.add}/add`, [n]]
+      : [`repos/${repo}/stacks`, [...plan.create, n]]
+  const fields = prs.flatMap((p) => ["-F", `pull_requests[]=${p}`])
+  const out = await gh("api", "-X", "POST", "-H", STACKS_API, path, ...fields)
+  if (!out.success)
+    return {
+      stackError: `The PR isn't in a GitHub stack: ${out.stderr.trim() || "gh api failed"}`,
+    }
+  const { number } = JSON.parse(out.stdout) as { number: number }
+  return {
+    stack:
+      "add" in plan
+        ? `Added to GitHub stack #${number}`
+        : `Made GitHub stack #${number} of ${prs.map((p) => `#${p}`).join(", ")}`,
+  }
 }
 
 /** `{ url }` of the PR `plan` opens for `bookmark`, or `{ error }` */
@@ -273,12 +378,17 @@ export async function push(
     // Once the PR is open too, so a read the push's jj operation set off
     // before then isn't kept
     const opened = prPlan && (await openPr(gh, bookmark, prPlan))
+    const stacked =
+      opened && "url" in opened && prPlan.stack
+        ? await joinStack(gh, prPlan.repo, opened.url, prPlan.stack)
+        : {}
     forgetGithub(pagePath)
     if (!opened) return Response.json({ pushed: true, output })
     return Response.json({
       pushed: true,
       output,
       ...("url" in opened ? { pr: opened.url } : { prError: opened.error }),
+      ...stacked,
     })
   } catch (e) {
     const status = e instanceof Refused ? e.status : 500

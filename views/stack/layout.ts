@@ -30,19 +30,23 @@ export const isCollapsed = (choice: boolean | undefined, gh: GithubPr | undefine
   choice ?? gh?.state === "MERGED"
 
 /** How a push or fetch from the page ended: jj's answer, and for a push
- * of a new branch, its new PR's URL or why it didn't open. `at` is when. */
+ * of a new branch, its new PR's URL or why it didn't open, and what
+ * happened with its GitHub stack or why that failed. `at` is when. */
 export interface RunResult {
   how: "ok" | "bad" | "cancelled"
   text: string
   pr?: string
   prError?: string
+  stack?: string
+  stackError?: string
   at: number
 }
 
 /** The PRs whose last run's log can go, from GitHub's side as asked for at
  * `asked`: a run that worked, once a load asked after it has the PR, so
  * the card shows where it stands, or one the user cancelled. A failure, or
- * a push whose PR didn't open, stays until the user dismisses it. */
+ * a push whose PR didn't open or join its stack, stays until the user
+ * dismisses it. */
 export function settledRuns(
   runs: Map<string, unknown>,
   github: GithubPrs,
@@ -53,7 +57,7 @@ export function settledRuns(
     .filter(([bookmark, run]) => {
       if (run.at > asked) return false
       if (run.how === "cancelled") return true
-      return run.how === "ok" && !run.prError && bookmark in github
+      return run.how === "ok" && !run.prError && !run.stackError && bookmark in github
     })
     .map(([bookmark]) => bookmark)
 }

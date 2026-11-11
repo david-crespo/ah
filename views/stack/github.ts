@@ -1,7 +1,8 @@
 // A stack's PRs as GitHub has them, which client.ts shows beside what jj has:
-// each bookmark's newest PR, from one GraphQL query through gh. Kept for a
-// few seconds, since the page asks on every jj operation and gh takes a
-// second or so.
+// each bookmark's newest PR, from one GraphQL query through gh, with the
+// GitHub stack it's in, if any (GitHub's stacked PRs). Kept for a few
+// seconds, since the page asks on every jj operation and gh takes a second
+// or so.
 
 import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
@@ -22,6 +23,9 @@ export interface GithubPr {
   reviewDecision: string
   /** The checks on its head, all together; null with none */
   checks: Checks | null
+  /** The GitHub stack it's in, and its place there from the bottom, 1 up,
+   * counting merged PRs, which stay listed; null if it's in none */
+  stack: { number: number; size: number; position: number } | null
 }
 
 export type Checks = "pass" | "fail" | "pending"
@@ -31,7 +35,7 @@ export type GithubPrs = Record<string, GithubPr>
 
 /** A PR's fields, and the checks on its head commit */
 const PR = `number url state isDraft title baseRefName headRefOid reviewDecision
-  isCrossRepository commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
+  isCrossRepository stack { number size } stackEntry { position } commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
     nodes { ... on CheckRun { status conclusion } ... on StatusContext { state } }
   } } } } }`
 
@@ -47,8 +51,10 @@ function prsQuery(count: number): string {
 }`
 }
 
-type PrNode = Omit<GithubPr, "checks" | "reviewDecision"> & {
+type PrNode = Omit<GithubPr, "checks" | "reviewDecision" | "stack"> & {
   reviewDecision: string | null
+  stack?: { number: number; size: number } | null
+  stackEntry?: { position: number } | null
   isCrossRepository: boolean
   commits: {
     nodes: { commit: { statusCheckRollup: { contexts: { nodes: Check[] } } | null } }[]
@@ -107,12 +113,20 @@ export async function fetchPrs(pagePath: string, gh = ghRun): Promise<GithubPrs>
     file.prs.flatMap(({ bookmark }, i) => {
       const pr = heads[`h${i}`].nodes.find((pr) => !pr.isCrossRepository)
       if (!pr) return []
-      const { commits, reviewDecision, isCrossRepository: _, ...rest } = pr
+      const {
+        commits,
+        reviewDecision,
+        stack,
+        stackEntry,
+        isCrossRepository: _,
+        ...rest
+      } = pr
       const checks = commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []
       const github: GithubPr = {
         ...rest,
         reviewDecision: reviewDecision ?? "",
         checks: summarizeChecks(checks),
+        stack: stack ? { ...stack, position: stackEntry?.position ?? 0 } : null,
       }
       return [[bookmark, github]]
     }),
