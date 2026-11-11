@@ -1,6 +1,6 @@
 // A stack's page as a page app (views/page/app.ts): its PRs from jj and from
-// GitHub, its diff buttons, which open skepsis, its Body buttons and its Push
-// buttons (push.ts), all under the page's _ah/; and a watch on its repo's operations, so the page
+// GitHub, its diff buttons, which open skepsis, its Body buttons, its Push
+// buttons (push.ts) and its Fetch buttons (fetch.ts), all under the page's _ah/; and a watch on its repo's operations, so the page
 // reads its stack again after each one, and whenever stack.json or a PR's
 // body is saved.
 
@@ -12,6 +12,7 @@ import { type JjRun, jjRun } from "../../platform/jj.ts"
 import type { OpenFile, PageApp } from "../page/app.ts"
 import { noStore } from "../page/routes.ts"
 import { ensureBody, readStack, STACK_FILE, stackOpsDir } from "./data.ts"
+import { fetchRepo } from "./fetch.ts"
 import { type GhRun, ghRun, readGithub } from "./github.ts"
 import { push } from "./push.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
@@ -53,6 +54,8 @@ export function stackApp(
         const page = new URL("..", req.url)
         return await push(path, page, bookmark, confirm, run, gh).catch(failed)
       }
+      if (sub === "_ah/fetch" && req.method === "POST")
+        return await fetchRepo(path, run).catch(failed)
       return null
     },
     async watch(path) {

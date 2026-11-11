@@ -151,8 +151,13 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
     // Pushed as it was last fetched, so the change is here, and the line in
     // the commit list shows it unless the bookmark only moved back. Otherwise
     // GitHub has something newer, like a rebase after the PR below merged.
+    // Whether it's new commits or a rewrite can't be told until a fetch
+    // brings its head, and then the commit list shows which.
     if (!pr.pushed || !head.startsWith(pr.pushed))
-      notes.push(note("changed on GitHub · fetch", "warn", where))
+      notes.push(
+        note("GitHub's branch moved since the last fetch", "warn", where),
+        fetchButton(pr),
+      )
     else if (!pr.unpushed) notes.push(note("not pushed", "warn", where))
   }
   if (base && gh.baseRefName !== base)
@@ -167,18 +172,20 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   return link + notes.join("")
 }
 
-/** How a push from this page ended: jj's answer, and for a new branch, its
- * new PR's URL or why it didn't open */
-interface PushResult {
+/** How a push or fetch from this page ended: jj's answer, and for a push
+ * of a new branch, its new PR's URL or why it didn't open */
+interface RunResult {
   how: "ok" | "bad" | "cancelled"
   text: string
   pr?: string
   prError?: string
 }
 
-/** Pushes from this page by bookmark: out ("busy"), or how they ended, which
- * shows on the PR until the page reloads or it's pushed again */
-const pushes = new Map<string, "busy" | PushResult>()
+/** Pushes and fetches from this page, by the bookmark of the PR they were
+ * clicked on: out, or how they ended, which shows on the PR until the page
+ * reloads or another is clicked there */
+const runs = new Map<string, "pushing" | "fetching" | RunResult>()
+const running = (bookmark: string) => typeof runs.get(bookmark) === "string"
 
 /** In ah's own window, whose sheet a push is confirmed in */
 const inWindow = new URLSearchParams(location.search).get("in") === "window"
@@ -186,7 +193,7 @@ const inWindow = new URLSearchParams(location.search).get("in") === "window"
 /** The Push button for `pr`, disabled while its push is out; for a bookmark
  * that's `fresh` on the remote, it creates the PR too */
 function pushButton(pr: Pr, fresh = false): string {
-  const busy = pushes.get(pr.bookmark) === "busy"
+  const busy = runs.get(pr.bookmark) === "pushing"
   const [label, title] = !inWindow
     ? [
         "Push in ah's window",
@@ -200,13 +207,20 @@ function pushButton(pr: Pr, fresh = false): string {
             `Push ${pr.bookmark} and open its PR, after the window asks you`,
           ]
         : ["Push", `Push ${pr.bookmark}, after the window asks you`]
-  return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(pr.bookmark)}" title="${escapeHtml(title)}"${busy || !inWindow ? " disabled" : ""}>${label}</button>`
+  return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(pr.bookmark)}" title="${escapeHtml(title)}"${running(pr.bookmark) || !inWindow ? " disabled" : ""}>${label}</button>`
 }
 
-/** How the PR's last push from this page went, if there was one */
-function pushResult(pr: Pr): string {
-  const result = pushes.get(pr.bookmark)
-  if (!result || result === "busy") return ""
+/** The Fetch button by a note that GitHub has `pr`'s branch somewhere the
+ * last fetch didn't bring */
+function fetchButton(pr: Pr): string {
+  const busy = runs.get(pr.bookmark) === "fetching"
+  return `<button type="button" class="push-button" data-fetch="${escapeHtml(pr.bookmark)}" title="jj git fetch, which sends nothing"${running(pr.bookmark) ? " disabled" : ""}>${busy ? "Fetching…" : "Fetch"}</button>`
+}
+
+/** How the PR's last push or fetch from this page went, if there was one */
+function runResult(pr: Pr): string {
+  const result = runs.get(pr.bookmark)
+  if (!result || typeof result === "string") return ""
   const opened = result.pr
     ? `<p class="push-pr">Opened <a href="${escapeHtml(result.pr)}" target="_blank" rel="noopener">${escapeHtml(result.pr)}</a></p>`
     : result.prError
@@ -270,7 +284,7 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   return `<section class="pr">
     ${head}
     <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
-    ${pushResult(pr)}
+    ${runResult(pr)}
     ${
       more
         ? `<details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
@@ -467,36 +481,42 @@ main.addEventListener("click", (e) => {
   redraw()
 })
 
-// A Push button: the server asks the user in a sheet, and pushes if they
-// say so. The stack redraws by itself after, since the push is a jj
-// operation.
+// A Push or Fetch button. For Push, the server asks the user in a sheet,
+// and pushes if they say so. The stack redraws by itself after either, since
+// both are jj operations.
 main.addEventListener("click", async (e) => {
-  const button = (e.target as Element).closest<HTMLButtonElement>("button[data-push]")
-  const bookmark = button?.dataset.push
-  if (!bookmark || !threadUrl || pushes.get(bookmark) === "busy") return
-  pushes.set(bookmark, "busy")
+  const button = (e.target as Element).closest<HTMLButtonElement>(
+    "button[data-push], button[data-fetch]",
+  )
+  const fetching = button?.dataset.fetch !== undefined
+  const bookmark = button?.dataset.push ?? button?.dataset.fetch
+  if (!bookmark || !threadUrl || running(bookmark)) return
+  runs.set(bookmark, fetching ? "fetching" : "pushing")
   redraw()
-  let result: PushResult
+  let result: RunResult
   try {
-    const res = await fetch(new URL("push", threadUrl), {
+    const res = await fetch(new URL(fetching ? "fetch" : "push", threadUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ bookmark }),
     })
     if (res.ok) {
+      // A fetch answers only its output
       const {
-        pushed,
+        pushed = true,
         output,
         pr,
         prError,
-      }: { pushed: boolean; output: string } & Pick<PushResult, "pr" | "prError"> =
-        await res.json()
+      }: { pushed?: boolean; output: string } & Pick<
+        RunResult,
+        "pr" | "prError"
+      > = await res.json()
       result = { how: pushed ? "ok" : "cancelled", text: output, pr, prError }
     } else result = { how: "bad", text: (await res.text()) || `${res.status}` }
   } catch (e) {
     result = { how: "bad", text: String(e) }
   }
-  pushes.set(bookmark, result)
+  runs.set(bookmark, result)
   redraw()
 })
 
