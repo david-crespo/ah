@@ -9,7 +9,9 @@
 // on it; a PR whose bookmark isn't on the remote yet has its Push button by
 // its Body button. Push has the server push the bookmark once the user
 // confirms it in a sheet on the page's window (push.ts), and jj's answer
-// shows on the PR. Outside ah's window, as in a browser tab, there's no
+// shows on the PR. For a bookmark not on the remote yet, the button says
+// "Push and create PR", and the server opens its PR after the push, whose
+// link then shows with jj's answer. Outside ah's window, as in a browser tab, there's no
 // sheet to confirm in, so the button says so. Commits below a fork
 // that no PR's bookmark is on get a card of their own, shared by the PRs
 // above. A graph down the left joins the commits, like jj log's. Each diff
@@ -33,7 +35,7 @@
 import type { Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
 import { escapeHtml } from "../escape.ts"
-import { arrangeRows, doneOnGithub, isCollapsed } from "./layout.ts"
+import { arrangeRows, doneOnGithub, isCollapsed, prBelow } from "./layout.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -165,15 +167,25 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   return link + notes.join("")
 }
 
+/** How a push from this page ended: jj's answer, and for a new branch, its
+ * new PR's URL or why it didn't open */
+interface PushResult {
+  how: "ok" | "bad" | "cancelled"
+  text: string
+  pr?: string
+  prError?: string
+}
+
 /** Pushes from this page by bookmark: out ("busy"), or how they ended, which
  * shows on the PR until the page reloads or it's pushed again */
-const pushes = new Map<string, "busy" | { how: "ok" | "bad" | "cancelled"; text: string }>()
+const pushes = new Map<string, "busy" | PushResult>()
 
 /** In ah's own window, whose sheet a push is confirmed in */
 const inWindow = new URLSearchParams(location.search).get("in") === "window"
 
-/** The Push button for `pr`, disabled while its push is out */
-function pushButton(pr: Pr): string {
+/** The Push button for `pr`, disabled while its push is out; for a bookmark
+ * that's `fresh` on the remote, it creates the PR too */
+function pushButton(pr: Pr, fresh = false): string {
   const busy = pushes.get(pr.bookmark) === "busy"
   const [label, title] = !inWindow
     ? [
@@ -182,7 +194,12 @@ function pushButton(pr: Pr): string {
       ]
     : busy
       ? ["Pushing…", "Waiting for you to confirm in the window's sheet, then pushing"]
-      : ["Push", `Push ${pr.bookmark}, after the window asks you`]
+      : fresh
+        ? [
+            "Push and create PR",
+            `Push ${pr.bookmark} and open its PR, after the window asks you`,
+          ]
+        : ["Push", `Push ${pr.bookmark}, after the window asks you`]
   return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(pr.bookmark)}" title="${escapeHtml(title)}"${busy || !inWindow ? " disabled" : ""}>${label}</button>`
 }
 
@@ -190,7 +207,12 @@ function pushButton(pr: Pr): string {
 function pushResult(pr: Pr): string {
   const result = pushes.get(pr.bookmark)
   if (!result || result === "busy") return ""
-  return `<pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>`
+  const opened = result.pr
+    ? `<p class="push-pr">Opened <a href="${escapeHtml(result.pr)}" target="_blank" rel="noopener">${escapeHtml(result.pr)}</a></p>`
+    : result.prError
+      ? `<pre class="push-result bad">The PR didn't open, so it's still to create: ${escapeHtml(result.prError)}</pre>`
+      : ""
+  return `<pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>${opened}`
 }
 
 /** The commits, with a line under the first `unpushed` of them, the newest,
@@ -247,7 +269,7 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
       : ""
   return `<section class="pr">
     ${head}
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
     ${pushResult(pr)}
     ${
       more
@@ -311,15 +333,10 @@ function draw(stack: Stack, error = "") {
   document.title = stack.title
   const rows = arrangeRows(stack.rows, github)
   const lanes = graphLanes(rows)
-  /** The nearest PR under a row, past any shared commits */
-  const prBelow = (row: Group): Pr | undefined => {
-    const below = rows.find((r) => r.head === row.base)
-    return below && ("n" in below ? below : prBelow(below))
-  }
   // On GitHub, the PR below it, or trunk once that one has merged, since
   // GitHub then retargets this one
   const base = (pr: Pr) => {
-    const below = prBelow(pr)
+    const below = prBelow(rows, pr)
     return below && github[below.bookmark]?.state !== "MERGED"
       ? below.bookmark
       : stack.trunk
@@ -459,7 +476,7 @@ main.addEventListener("click", async (e) => {
   if (!bookmark || !threadUrl || pushes.get(bookmark) === "busy") return
   pushes.set(bookmark, "busy")
   redraw()
-  let result: { how: "ok" | "bad" | "cancelled"; text: string }
+  let result: PushResult
   try {
     const res = await fetch(new URL("push", threadUrl), {
       method: "POST",
@@ -467,8 +484,14 @@ main.addEventListener("click", async (e) => {
       body: JSON.stringify({ bookmark }),
     })
     if (res.ok) {
-      const { pushed, output }: { pushed: boolean; output: string } = await res.json()
-      result = { how: pushed ? "ok" : "cancelled", text: output }
+      const {
+        pushed,
+        output,
+        pr,
+        prError,
+      }: { pushed: boolean; output: string } & Pick<PushResult, "pr" | "prError"> =
+        await res.json()
+      result = { how: pushed ? "ok" : "cancelled", text: output, pr, prError }
     } else result = { how: "bad", text: (await res.text()) || `${res.status}` }
   } catch (e) {
     result = { how: "bad", text: String(e) }

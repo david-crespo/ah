@@ -12,7 +12,7 @@ import { type JjRun, jjRun } from "../../platform/jj.ts"
 import type { OpenFile, PageApp } from "../page/app.ts"
 import { noStore } from "../page/routes.ts"
 import { ensureBody, readStack, STACK_FILE, stackOpsDir } from "./data.ts"
-import { readGithub } from "./github.ts"
+import { type GhRun, ghRun, readGithub } from "./github.ts"
 import { push } from "./push.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
 
@@ -20,12 +20,13 @@ const json = (data: unknown) => Response.json(data, { headers: noStore })
 const failed = (e: Error) => new Response(e.message, { status: 500 })
 const done = () => new Response(null, { status: 204 })
 
-/** `openDoc` opens a PR's body. `confirm` and `run` are for tests, which
- * answer the push's sheet and stand in for jj. */
+/** `openDoc` opens a PR's body. `confirm`, `run` and `gh` are for tests,
+ * which answer the push's sheet and stand in for jj and gh. */
 export function stackApp(
   openDoc: OpenFile,
   confirm: Confirm = confirmInWindow,
   run: JjRun = jjRun,
+  gh: GhRun = ghRun,
 ): PageApp {
   return {
     async routes(sub, req, path, agent) {
@@ -50,7 +51,7 @@ export function stackApp(
         const { bookmark }: { bookmark?: unknown } = await req.json().catch(() => ({}))
         // The page's own URL, which its window was opened at
         const page = new URL("..", req.url)
-        return await push(path, page, bookmark, confirm, run).catch(failed)
+        return await push(path, page, bookmark, confirm, run, gh).catch(failed)
       }
       return null
     },

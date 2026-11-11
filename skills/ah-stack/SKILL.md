@@ -97,7 +97,17 @@ button. Clicking it has ah's window for the page show a sheet listing the
 commits the push would send; only clicking Push there runs
 `jj git push --bookmark` for that PR, and jj's answer shows on the PR. The
 sheet is native, so a page's script can't click it, and only ah's window can
-show it: in a browser tab the button says to push from the window. A push that would rewrite
+show it: in a browser tab the button says to push from the window.
+
+For a bookmark that isn't on the remote yet, the button says "Push and
+create PR": once the push works, the server opens the PR with
+`gh pr create`. Its title is the heading on line 1 of the PR's body file
+(else its `title` in stack.json) and its description the rest of the file.
+Its base is the bookmark of the PR it's built on in the graph if that PR is
+open on GitHub, else trunk. The sheet shows the title and base first, and
+says if the description is empty, so write the body before the user
+pushes. If the PR fails to open, the push stands and the page shows why;
+open the PR by hand then. A bookmark already on the remote opens no PR. A push that would rewrite
 commits the remote has is refused, to be pushed by hand. Pushing from the
 page is the user's action: never call the page's push route yourself. When
 the user asks you to push, push from your shell as usual, or point them at

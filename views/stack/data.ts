@@ -156,9 +156,7 @@ export async function readStack(pagePath: string): Promise<Stack> {
   // A body's title wins over stack.json's, since the body is what goes on
   // GitHub
   const rows = stack.rows.map(async (row) =>
-    "bookmark" in row
-      ? { ...row, title: (await bodyTitle(pagePath, row.bookmark)) ?? row.title }
-      : row,
+    "bookmark" in row ? { ...row, title: (await prText(pagePath, row)).title } : row,
   )
   return { ...stack, rows: await Promise.all(rows) }
 }
@@ -333,11 +331,18 @@ export function bodyPath(pagePath: string, bookmark: string): string | null {
   return /^[\w-][\w.-]*$/.test(name) ? join(dirname(pagePath), `${name}.md`) : null
 }
 
-/** The title a PR's body gives it, as a heading on its first line */
-async function bodyTitle(pagePath: string, bookmark: string): Promise<string | null> {
-  const path = bodyPath(pagePath, bookmark)
-  const text = path && (await readFile(path, "utf8").catch(() => null))
-  return text?.match(/^# (.+)/)?.[1].trim() || null
+/** A PR's title and description for GitHub, from its body: the heading on
+ * its first line, else its title in stack.json, and the rest of the file,
+ * empty without one */
+export async function prText(
+  pagePath: string,
+  pr: Pick<StackPr, "bookmark" | "title">,
+): Promise<{ title: string; body: string }> {
+  const path = bodyPath(pagePath, pr.bookmark)
+  const text = (path && (await readFile(path, "utf8").catch(() => null))) || ""
+  const heading = text.match(/^# (.*)(?:\n|$)/)
+  const title = heading?.[1].trim() || pr.title
+  return { title, body: text.slice(heading?.[0].length ?? 0).trim() }
 }
 
 /** The body of the stack's PR with `bookmark`, started with its title as a

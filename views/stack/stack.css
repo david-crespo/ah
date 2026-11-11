@@ -481,6 +481,11 @@ main .push-result.bad {
 main .push-result.cancelled {
   color: var(--muted);
 }
+/* The PR a push of a new branch opened */
+main .push-pr {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
 main .pr-head .short {
   margin-left: auto;
 }

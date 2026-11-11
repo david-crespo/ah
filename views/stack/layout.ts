@@ -1,9 +1,9 @@
 // What a stack page (client.ts) does with GitHub's side once it has it: where
 // a PR goes whose bookmark is gone because it merged, and which PRs start
-// collapsed. Kept apart from the page's drawing so it can be tested without
-// a DOM.
+// collapsed; and which PR a PR is built on, which push.ts uses too. Kept
+// apart from the page's drawing so it can be tested without a DOM.
 
-import type { Pr, Shared } from "./data.ts"
+import type { Group, Pr, Shared } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
 
 /** Merged or closed on GitHub */
@@ -27,3 +27,10 @@ export function arrangeRows(rows: (Pr | Shared)[], github: GithubPrs): (Pr | Sha
  * collapsed once it's merged */
 export const isCollapsed = (choice: boolean | undefined, gh: GithubPr | undefined) =>
   choice ?? gh?.state === "MERGED"
+
+/** The nearest PR under `row` in the graph, past any shared commits: one
+ * its commits are built on, never one beside it on the same base */
+export function prBelow(rows: (Pr | Shared)[], row: Group): Pr | undefined {
+  const below = rows.find((r) => r.head === row.base)
+  return below && ("n" in below ? below : prBelow(rows, below))
+}

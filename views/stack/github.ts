@@ -6,7 +6,7 @@
 import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
 import { rootFinder } from "../../core/workspace.ts"
-import { run } from "../../platform/proc.ts"
+import { type Output, run } from "../../platform/proc.ts"
 import { parseStackFile, STACK_FILE } from "./data.ts"
 
 export interface GithubPr {
@@ -54,6 +54,11 @@ type PrNode = Omit<GithubPr, "checks" | "reviewDecision"> & {
   }
 }
 
+/** Running gh, which tests stand in for */
+export type GhRun = (...args: string[]) => Promise<Output>
+
+export const ghRun: GhRun = (...args) => run("gh", args)
+
 const TTL = 15_000
 const cache = new Map<string, { at: number; prs: Promise<GithubPrs> }>()
 
@@ -70,7 +75,8 @@ export function readGithub(pagePath: string): Promise<GithubPrs> {
 
 let warnedNoGh = false
 
-async function fetchPrs(pagePath: string): Promise<GithubPrs> {
+/** The PRs for the stack.json next to `pagePath`, asked for now */
+export async function fetchPrs(pagePath: string, gh = ghRun): Promise<GithubPrs> {
   const dir = dirname(pagePath)
   const file = parseStackFile(await readFile(join(dir, STACK_FILE), "utf8"))
   const root = rootFinder()(dir)
@@ -84,7 +90,7 @@ async function fetchPrs(pagePath: string): Promise<GithubPrs> {
   const args = ["api", "graphql", "-f", `query=${prsQuery(file.prs.length)}`]
   args.push("-f", `owner=${owner}`, "-f", `name=${name}`)
   for (const [i, { bookmark }] of file.prs.entries()) args.push("-f", `h${i}=${bookmark}`)
-  const out = await run("gh", args).catch((e: NodeJS.ErrnoException) => {
+  const out = await gh(...args).catch((e: NodeJS.ErrnoException) => {
     if (e.code !== "ENOENT") throw e
     if (!warnedNoGh) console.error("ah: gh isn't installed, so stack pages show no PRs")
     warnedNoGh = true
