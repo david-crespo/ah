@@ -97,16 +97,19 @@ opened.
   shown, which opens the stack page in a window bound to you. Do PR work
   there: the home page only points to it.
 - `waiting` items have a stable `id` and `written`, the ISO time you wrote or
-  last checked the item. The page shows its age, and dims an item older than
-  six hours with "not rechecked since". When an item changes, rewrite it with
-  a new `written`; when it's done, remove it and add a `finished` entry.
+  last checked the item. The page shows its age, and marks the age of an item
+  older than six hours. When an item changes, rewrite it with a new
+  `written`; when it's done, remove it and add a `finished` entry.
+- The list is in order of what matters most. Each item shows as one line
+  until the user opens it, so write its `text` as one line, and its `note`,
+  shown only when it's open, as one or two sentences.
 - To postpone an item, as when the user says they won't get to it until
   tomorrow, give it `until`, an ISO time. Until then it's left out of the
-  list and its count, doesn't make its project "needs you", and isn't dimmed
-  as stale; it shows in a Postponed section under the list, closed at first,
-  with "until tomorrow 09:00" or "until 11-14" in place of its age. At that
-  time it's back in the list by itself, so you needn't edit it again. An
-  `until` that doesn't parse is ignored.
+  list and its count, and doesn't make its project "needs you"; it shows in
+  a Postponed section under the list, closed at first, with "until tomorrow
+  09:00" or "until 11-14" in place of its age. At that time it's back in the
+  list by itself, so you needn't edit it again. An `until` that doesn't parse
+  is ignored.
 - A waiting item's text links to `link`, a URL, or `file`, and each of its
   `links` has a `label` and an `href` or a `file`. A file is a markdown file,
   which opens in a doc page, or an HTML page, which opens in its page, in a

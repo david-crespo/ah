@@ -3,7 +3,8 @@
 // A home page, served as /home.js on the pages port; the page (file.ts) loads
 // it and /home.css. It draws the page's data (data.ts, served at _ah/home)
 // in four tabs: the live agents (In progress), the items in home.json that
-// wait on the user, with how long ago each was written, what finished, and
+// wait on the user, each one line with its age until it's opened to the rest
+// of its text, its note and its links, what finished, and
 // every project in workstreams.md with its computed status, its first
 // paragraph opening to the rest. A project with a stack page has a Stack
 // button by its name wherever it's shown, and a waiting item can link to a
@@ -80,7 +81,7 @@ const age = (ms: number) => {
   if (min < 48 * 60) return `${Math.round(min / 60)} h`
   return `${Math.round(min / 60 / 24)} d`
 }
-/** A written item is dimmed once it's this old */
+/** A waiting item's age is marked once it's this old */
 const STALE = 6 * 60 * 60_000
 
 const read = <T>(key: string): T | null => {
@@ -131,26 +132,29 @@ const agentRow = (a: AgentRow, stack: StackButton) => {
 }
 
 /** A waiting item, numbered `n`, or a postponed one, unnumbered with its
- * `until` in place of its age and never stale */
+ * `until` in place of its age. Its text is one line until it's opened. */
 const waitingRow = (w: Waiting, n: number | null, stack: StackButton) => {
   const at = new Date(w.written)
-  const valid = !isNaN(+at)
-  const stale = n !== null && valid && Date.now() - +at > STALE
+  const ms = Date.now() - +at
+  const old = ms > STALE
   const text = escapeHtml(w.text)
   const meta =
     n === null
       ? `<span class="meta" title="${escapeHtml(new Date(w.until!).toLocaleString())}">until ${until(w.until!)}</span>`
-      : valid
-        ? `<span class="meta" title="${escapeHtml(at.toLocaleString())}">${age(Date.now() - +at)}</span>`
-        : ""
-  return `<li class="row${stale ? " stale" : ""}">
+      : isNaN(+at)
+        ? ""
+        : `<span class="meta${old ? " old" : ""}" title="${old ? "Not rechecked since " : ""}${escapeHtml(at.toLocaleString())}">${age(ms)}</span>`
+  const key = `w-${w.id}`
+  return `<li class="row">
     <span class="n">${n ?? ""}</span>
-    <div>
-      <div class="top">
-        <span><span class="proj">${escapeHtml(w.project)}</span>${stack(w.project)}</span>
-        ${meta}
-      </div>
-      <div>${w.link ? link(w.link, text) : w.file ? fileLink(w.file, text) : text}</div>
+    <details data-key="${escapeHtml(key)}"${open.has(key) ? " open" : ""}>
+      <summary>
+        <div class="top">
+          <span><span class="proj">${escapeHtml(w.project)}</span>${stack(w.project)}</span>
+          ${meta}
+        </div>
+        <div class="first">${w.link ? link(w.link, text) : w.file ? fileLink(w.file, text) : text}</div>
+      </summary>
       ${w.note ? `<div class="note">${escapeHtml(w.note)}</div>` : ""}
       ${w.links
         .map((l) =>
@@ -159,8 +163,7 @@ const waitingRow = (w: Waiting, n: number | null, stack: StackButton) => {
             : fileLink(l.file!, escapeHtml(l.label), "more"),
         )
         .join("")}
-      ${stale ? `<div class="note">not rechecked since ${when(w.written)}</div>` : ""}
-    </div>
+    </details>
   </li>`
 }
 

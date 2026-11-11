@@ -16,6 +16,7 @@
   --run-bg: light-dark(#e4f5ec, #173326);
   --idle: var(--muted);
   --idle-bg: light-dark(#efede8, #2a2d32);
+  --old: light-dark(#9a6700, #d29922);
 }
 
 body {
@@ -222,8 +223,20 @@ main .waiting .n {
   font-variant-numeric: tabular-nums;
 }
 /* Written long enough ago that it may not hold any more */
-main .waiting .row.stale > div {
-  opacity: 0.6;
+main .waiting .meta.old {
+  color: var(--old);
+  font-weight: 600;
+}
+/* An item's text is one line until it's opened */
+main .waiting details:not([open]) .first,
+main .waiting details:not([open]) .first > .file {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+main .waiting .first > .file {
+  vertical-align: bottom;
 }
 /* Waiting items put off until later, under the list and closed at first */
 main .postponed {
@@ -252,11 +265,13 @@ main .finished .at {
 }
 
 /* A project's first paragraph is clamped until it's opened */
-main .projects summary {
+main .projects summary,
+main .waiting summary {
   list-style: none;
   cursor: pointer;
 }
-main .projects summary::-webkit-details-marker {
+main .projects summary::-webkit-details-marker,
+main .waiting summary::-webkit-details-marker {
   display: none;
 }
 main .projects p {
