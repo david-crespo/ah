@@ -32,7 +32,7 @@ import {
   STACK_FILE,
   type StackPr,
 } from "./data.ts"
-import { fetchPrs, type GhRun, githubRepo } from "./github.ts"
+import { fetchPrs, forgetGithub, type GhRun, githubRepo } from "./github.ts"
 import { prBelow } from "./layout.ts"
 
 /** What a push would send: its commits newest first, as short change ID and
@@ -270,8 +270,11 @@ export async function push(
     )
     if (!out.success) return new Response(out.stderr.trim(), { status: 500 })
     const output = (out.stderr + out.stdout).trim()
-    if (!prPlan) return Response.json({ pushed: true, output })
-    const opened = await openPr(gh, bookmark, prPlan)
+    // Once the PR is open too, so a read the push's jj operation set off
+    // before then isn't kept
+    const opened = prPlan && (await openPr(gh, bookmark, prPlan))
+    forgetGithub(pagePath)
+    if (!opened) return Response.json({ pushed: true, output })
     return Response.json({
       pushed: true,
       output,

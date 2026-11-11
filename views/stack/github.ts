@@ -63,10 +63,10 @@ const TTL = 15_000
 const cache = new Map<string, { at: number; prs: Promise<GithubPrs> }>()
 
 /** The PRs for the stack.json next to `pagePath` */
-export function readGithub(pagePath: string): Promise<GithubPrs> {
+export function readGithub(pagePath: string, gh = ghRun): Promise<GithubPrs> {
   const hit = cache.get(pagePath)
   if (hit && Date.now() - hit.at < TTL) return hit.prs
-  const prs = fetchPrs(pagePath)
+  const prs = fetchPrs(pagePath, gh)
   cache.set(pagePath, { at: Date.now(), prs })
   // A failure shouldn't stick for the whole TTL
   prs.catch(() => cache.delete(pagePath))
@@ -74,6 +74,10 @@ export function readGithub(pagePath: string): Promise<GithubPrs> {
 }
 
 let warnedNoGh = false
+
+/** Ask GitHub afresh next time for the page at `pagePath`, as after a push
+ * from it, which moves a branch's head there and may open a PR */
+export const forgetGithub = (pagePath: string) => cache.delete(pagePath)
 
 /** The PRs for the stack.json next to `pagePath`, asked for now */
 export async function fetchPrs(pagePath: string, gh = ghRun): Promise<GithubPrs> {

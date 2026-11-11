@@ -115,6 +115,7 @@ function app(
   // gh: the PRs open on GitHub, by head, and a new PR at /pull/7, with each
   // `gh pr create`'s arguments and its body file's text
   const created: { args: string[]; body: string }[] = []
+  let asks = 0
   const gh = async (...args: string[]): Promise<Output> => {
     const ok = (stdout: string) => ({ success: true, code: 0, stdout, stderr: "" })
     if (args[0] === "pr" && args[1] === "create") {
@@ -125,6 +126,7 @@ function app(
         : ok("https://github.com/o/r/pull/7\n")
     }
     // api graphql, with each head as -f hN=bookmark
+    asks++
     const heads = args.flatMap((a) => a.match(/^(h\d+)=(.*)$/)?.slice(1) ?? [])
     const repository: Record<string, { nodes: object[] }> = {}
     for (let i = 0; i < heads.length; i += 2) {
@@ -151,7 +153,13 @@ function app(
     expect(res.status).toBe(200)
     return JSON.parse(res.text) as { pushed: boolean; pr?: string; prError?: string }
   }
-  return { push, json, asked, pages, pushed, created }
+  /** The page's GitHub side, and how many times gh was asked for it so far */
+  const readPrs = async () => {
+    const req = new Request("http://127.0.0.1:7521/view/page/stack-1/_ah/stack-github")
+    await (await routes.routes("_ah/stack-github", req, page, null))!.json()
+    return asks
+  }
+  return { push, json, asked, pages, pushed, created, readPrs }
 }
 
 test("a bookmark that isn't one of the stack's PRs is a 404", async () => {
@@ -258,7 +266,10 @@ test("a PR beside another on trunk goes into trunk, and one that fails leaves th
 })
 
 test("Push in the sheet pushes the bookmark to the remote", async () => {
-  const { push, created } = app(() => true)
+  const { push, created, readPrs } = app(() => true)
+  // Kept for a while
+  expect(await readPrs()).toBe(1)
+  expect(await readPrs()).toBe(1)
   expect(remoteRef("ahead")).not.toBe(localRef("ahead"))
   const res = await push("ahead")
   expect(res.text).toContain("bookmark: ahead [move forward from")
@@ -267,6 +278,8 @@ test("Push in the sheet pushes the bookmark to the remote", async () => {
   expect(remoteRef("ahead")).toBe(localRef("ahead"))
   // It was on the remote already, so no PR, though it has none
   expect(created).toEqual([])
+  // GitHub has its new head, so the page's next read asks again
+  expect(await readPrs()).toBe(2)
 
   expect(remoteRef("fresh")).toBe("")
   expect((await push("fresh")).status).toBe(200)

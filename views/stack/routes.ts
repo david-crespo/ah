@@ -32,7 +32,7 @@ export function stackApp(
   return {
     async routes(sub, req, path, agent) {
       if (sub === "_ah/stack") return await readStack(path).then(json, failed)
-      if (sub === "_ah/stack-github") return await readGithub(path).then(json, failed)
+      if (sub === "_ah/stack-github") return await readGithub(path, gh).then(json, failed)
       if (sub === "_ah/skepsis" && req.method === "POST") {
         // Only a stack's page starts processes
         if (!(await stat(join(dirname(path), STACK_FILE)).catch(() => null))) return null

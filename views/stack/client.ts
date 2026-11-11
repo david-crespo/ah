@@ -518,6 +518,9 @@ main.addEventListener("click", async (e) => {
   }
   runs.set(bookmark, result)
   redraw()
+  // GitHub has the branch's new head now, and maybe a new PR, which then
+  // shows in place of the Body and Push buttons
+  if (result.how === "ok" && !fetching) void loadGithub()
 })
 
 // Named for the shape of Stack, so a tab never draws one from an older ah
