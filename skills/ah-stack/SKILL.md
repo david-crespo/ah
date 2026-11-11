@@ -44,7 +44,11 @@ it in a window, and binds it to this session. Run the same command without
 ```
 
 - `n` is the PR's place in the stack, and the page shows it as `1.`, so don't
-  number titles or bookmarks.
+  number titles or bookmarks. Keep the numbers in stack order. When a PR is
+  inserted or moved and no PR above that place has been pushed, renumber the
+  ones above it, and update the numbers that `merge`, `notes` and summaries
+  refer to. Once a PR above has been pushed, people know it by its number, so
+  leave the numbers alone and give the new PR the next free one.
 - Don't list commits or bases. ah takes each PR's commits from the graph: the
   bookmark's ancestors down to the nearest other PR's bookmark, a fork, or
   trunk. Commits below a fork that no PR's bookmark is on get a card of their
