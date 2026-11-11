@@ -6,7 +6,7 @@ description: "Show a stack of PRs as a page: each PR's commits, diff stats and s
 # Stack pages
 
 A stack page shows a stack of PRs the way the user reviews one: newest first,
-like `jj log`, each PR with its bookmark, how it merges, a summary, its files,
+like `jj log`, each PR with its bookmark, a summary, its files,
 and a line per commit that opens to the commit's description and files. ah
 draws it from jj, and you write only what jj doesn't know.
 
@@ -30,13 +30,12 @@ it in a window, and binds it to this session. Run the same command without
 ```json
 {
   "title": "Versioned docs stack",
-  "notes": ["1 merges to main on its own first. 2 branches off it."],
+  "notes": ["The schema change in 2 has to be live before 5 can deploy."],
   "prs": [
     {
       "n": 1,
       "title": "Track system releases",
       "bookmark": "vdocs-release-data",
-      "merge": "merges alone, first",
       "summary": "What the PR does.\n\nWhere a reviewer should start."
     }
   ]
@@ -54,6 +53,10 @@ it in a window, and binds it to this session. Run the same command without
   trunk. Commits below a fork that no PR's bookmark is on get a card of their
   own, shared by the PRs above, since each of them would include those
   commits on GitHub. The page draws the graph the way `jj log` does.
+- `merge` is optional: a few words on how the PR merges, shown after its
+  bookmark. Leave it out unless it says something the graph and GitHub
+  don't, such as a PR on a side branch that has to merge before one on the
+  main line. Never use it to restate the stack's order or what's pushed.
 - `notes` is a list of plain-text strings, each one paragraph. `summary` is
   plain text with blank lines between paragraphs. Both take backticks for
   code. Write the summary for a reviewer: what the PR does, then where to
