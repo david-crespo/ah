@@ -145,21 +145,29 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   const link = githubLink(gh)
   if (gh.state !== "OPEN") return link
   const notes: string[] = []
+  // Checks and review next to the PR's number, apart from its stack
+  if (gh.checks) {
+    const title = CHECKS[gh.checks]
+    notes.push(
+      `<a class="gh-checks ${gh.checks}" href="${escapeHtml(gh.url)}/checks" target="_blank" rel="noreferrer" title="${title}" aria-label="${title}"></a>`,
+    )
+  }
+  const review = REVIEWS[gh.reviewDecision]
+  if (review) {
+    const [text, cls, icon] = review
+    notes.push(
+      `<span class="gh-note gh-review ${cls}" title="Review on GitHub: ${text}"><svg viewBox="0 0 24 24" aria-label="${text}">${icon}</svg></span>`,
+    )
+  }
   // From a cache an older ah wrote, it has no stack
   if (gh.stack) {
     const { number, size, position } = gh.stack
     notes.push(
       note(
-        `stack #${number} · ${position}/${size}`,
+        `stack #${number}`,
         "",
         `In GitHub stack #${number}, ${position} of ${size} from the bottom, counting merged PRs`,
       ),
-    )
-  }
-  if (gh.checks) {
-    const title = CHECKS[gh.checks]
-    notes.push(
-      `<a class="gh-checks ${gh.checks}" href="${escapeHtml(gh.url)}/checks" target="_blank" rel="noreferrer" title="${title}" aria-label="${title}"></a>`,
     )
   }
   const tip = pr.commits[0]?.commit
@@ -180,13 +188,6 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   }
   if (base && gh.baseRefName !== base)
     notes.push(note(`base is ${gh.baseRefName} on GitHub, ${base} here`, "warn"))
-  const review = REVIEWS[gh.reviewDecision]
-  if (review) {
-    const [text, cls, icon] = review
-    notes.push(
-      `<span class="gh-note gh-review ${cls}" title="Review on GitHub: ${text}"><svg viewBox="0 0 24 24" aria-label="${text}">${icon}</svg></span>`,
-    )
-  }
   return link + notes.join("")
 }
 

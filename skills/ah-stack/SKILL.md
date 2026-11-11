@@ -134,8 +134,8 @@ Comments on it come to you as the ah-doc skill describes.
 
 Once a bookmark has a PR on GitHub, the page shows it from `gh`: a link
 with its state (draft, open, merged, closed), its title from GitHub, and,
-while it's open, its GitHub stack and place there (`stack #945 · 2/2`), its
-review and checks. It flags a PR whose branch on GitHub
+while it's open, its checks and review, then its GitHub stack (`stack
+#945`, with its place in the tooltip). It flags a PR whose branch on GitHub
 moved since the last fetch, with a Fetch button that runs `jj git fetch` in
 the repo (it sends nothing, so it isn't confirmed), and one whose base on
 GitHub isn't the PR below it, or trunk for the bottom one. Commits still to push are marked in
