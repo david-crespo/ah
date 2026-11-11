@@ -56,3 +56,28 @@ test("only a stack's page fetches, and one fetch at a time per repo", async () =
   go.resolve()
   expect((await first).status).toBe(200)
 })
+
+test("a fetch works in a working copy another workspace left stale", async () => {
+  // second rewrites the working-copy commit of here's default workspace
+  const second = join(root, "second")
+  here.jj("workspace", "add", second)
+  const inSecond = (...args: string[]) =>
+    execFileSync("jj", ["--config", "user.email=t@t", "--config", "user.name=t", ...args], {
+      cwd: second,
+      stdio: "pipe",
+    })
+  inSecond("new", "default@")
+  writeFileSync(join(second, "stale.txt"), "stale\n")
+  inSecond("squash", "-u", "--ignore-immutable")
+  expect(() => here.jj("status")).toThrow(/stale/)
+  writeFileSync(join(there.dir, "b.txt"), "b\n")
+  there.jj("commit", "-m", "Add b")
+  there.jj("bookmark", "create", "later", "-r", "@-")
+  there.jj("git", "push", "--bookmark", "later")
+  const res = await fetchRepo(page, jjRun)
+  const text = await res.text()
+  expect(text).not.toContain("stale")
+  expect(res.status).toBe(200)
+  expect(text).toContain("later@origin")
+  expect(() => here.jj("status")).toThrow(/stale/)
+})

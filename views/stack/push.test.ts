@@ -411,3 +411,36 @@ test("stackPlan: the stack's top, else a new stack of the open PRs down to trunk
   const { a: _, ...noA } = chain
   expect(plan(noA)).toEqual({ skip: "#44's base, a, is neither main nor an open PR here" })
 })
+
+test("a push works in a working copy another workspace left stale", async () => {
+  // second rewrites the default workspace's working-copy commit, then puts
+  // a commit on ahead to push
+  const second = join(root, "second")
+  jj("workspace", "add", second)
+  const there = (...args: string[]) =>
+    execFileSync("jj", ["--config", "user.email=t@t", "--config", "user.name=t", ...args], {
+      cwd: second,
+      stdio: "pipe",
+    })
+  there("new", "default@")
+  writeFileSync(join(second, "stale.txt"), "stale\n")
+  there("squash", "-u", "--ignore-immutable")
+  there("new", "ahead")
+  writeFileSync(join(second, "g.txt"), "g\n")
+  there("commit", "-m", "Add g")
+  there("bookmark", "move", "ahead", "--to", "@-")
+  expect(() => jj("status")).toThrow(/stale/)
+  try {
+    const { push } = app(() => true)
+    const res = await push("ahead")
+    expect(res.text).not.toContain("stale")
+    expect(res.status).toBe(200)
+    expect(remoteRef("ahead")).toBe(
+      jj("--ignore-working-copy", "log", "--no-graph", "-r", "ahead", "-T", "commit_id"),
+    )
+    // and leaves it stale, for its owner to update
+    expect(() => jj("status")).toThrow(/stale/)
+  } finally {
+    jj("workspace", "update-stale")
+  }
+})

@@ -127,15 +127,7 @@ export async function planPush(
   bookmark: string,
 ): Promise<Plan> {
   const log = async (revset: string, template: string) => {
-    const args = [
-      "--ignore-working-copy",
-      "log",
-      "--no-graph",
-      "-r",
-      revset,
-      "-T",
-      template,
-    ]
+    const args = ["log", "--no-graph", "-r", revset, "-T", template]
     const { success, stdout, stderr } = await jjRun(root, ...args)
     if (!success) throw new Refused(409, stderr.trim())
     return stdout.split("\n").filter(Boolean)
@@ -164,7 +156,7 @@ export async function planPush(
   return { remote, tip, commits, isNew: !pushed }
 }
 
-/** The commit `bookmark` is on, after a snapshot of the working copy */
+/** The commit `bookmark` is on */
 async function tipOf(jjRun: JjRun, root: string, bookmark: string): Promise<string> {
   const args = ["log", "--no-graph", "-r", JSON.stringify(bookmark), "-T", "commit_id"]
   const { success, stdout, stderr } = await jjRun(root, ...args)
@@ -175,9 +167,9 @@ async function tipOf(jjRun: JjRun, root: string, bookmark: string): Promise<stri
 /** The remote `jj git push` pushes to without --remote: git.push, else the
  * only remote, else origin */
 async function pushRemote(jjRun: JjRun, root: string): Promise<string> {
-  const config = await jjRun(root, "--ignore-working-copy", "config", "get", "git.push")
+  const config = await jjRun(root, "config", "get", "git.push")
   if (config.success) return config.stdout.trim()
-  const list = await jjRun(root, "--ignore-working-copy", "git", "remote", "list")
+  const list = await jjRun(root, "git", "remote", "list")
   const remotes = list.stdout
     .split("\n")
     .filter(Boolean)
@@ -197,7 +189,7 @@ export async function planPr(
   jjRun: JjRun,
   gh: GhRun,
 ): Promise<PrPlan | null> {
-  const remotes = await jjRun(root, "--ignore-working-copy", "git", "remote", "list")
+  const remotes = await jjRun(root, "git", "remote", "list")
   const repo = githubRepo(remotes.stdout)
   if (!repo) return null
   const stack = await readStack(pagePath)

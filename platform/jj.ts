@@ -9,12 +9,15 @@ import { type Output, run } from "./proc.ts"
 /** Running jj in `cwd`, uncolored */
 export type JjRun = (cwd: string, ...args: string[]) => Promise<Output>
 
-export const jjRun: JjRun = (cwd, ...args) => run("jj", ["--color=never", ...args], { cwd })
+/** Without the working copy, which none of its callers need: a snapshot would
+ * take its lock, write to the user's checkout, and fail once an agent in
+ * another workspace has rewritten an ancestor and left the checkout stale */
+export const jjRun: JjRun = (cwd, ...args) =>
+  run("jj", ["--color=never", "--ignore-working-copy", ...args], { cwd })
 
-/** jj's output in `cwd`, without snapshotting the working copy: a read
- * shouldn't take its lock. Throws jj's complaint. */
+/** jj's output in `cwd`. Throws jj's complaint. */
 export async function jj(cwd: string, ...args: string[]): Promise<string> {
-  const { success, stdout, stderr } = await jjRun(cwd, "--ignore-working-copy", ...args)
+  const { success, stdout, stderr } = await jjRun(cwd, ...args)
   if (!success) throw new Error(stderr.trim())
   return stdout
 }
