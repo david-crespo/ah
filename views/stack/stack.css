@@ -459,10 +459,30 @@ main button.push-button:disabled {
 main button.push-button.elsewhere {
   cursor: default;
 }
-/* What jj said about the PR's last push or fetch from here */
+/* What jj said about the PR's last push or fetch from here, with a button
+   that dismisses it in its corner */
+main .push-log {
+  position: relative;
+}
+main .push-log .dismiss {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+main .push-log .dismiss:hover {
+  color: var(--fg);
+}
 main .push-result {
   margin: 8px 0 0;
-  padding: 6px 8px;
+  padding: 6px 24px 6px 8px;
   font-size: 12px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;

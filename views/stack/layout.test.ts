@@ -1,7 +1,7 @@
 import { expect, test } from "vitest"
 import type { Pr, Shared } from "./data.ts"
 import type { GithubPr } from "./github.ts"
-import { arrangeRows, isCollapsed } from "./layout.ts"
+import { arrangeRows, isCollapsed, type RunResult, settledRuns } from "./layout.ts"
 
 const gh = (state: GithubPr["state"]) => ({ state }) as GithubPr
 const pr = (n: number, rest: Partial<Pr> = {}) =>
@@ -34,4 +34,26 @@ test("a merged PR starts collapsed, and the user's choice wins either way", () =
   expect(isCollapsed(undefined, undefined)).toBe(false)
   expect(isCollapsed(false, gh("MERGED"))).toBe(false)
   expect(isCollapsed(true, gh("OPEN"))).toBe(true)
+})
+
+test("a run's log goes once GitHub has the PR, unless it failed", () => {
+  const run = (how: RunResult["how"], extra: Partial<RunResult> = {}): RunResult => ({
+    how,
+    text: "",
+    at: 10,
+    ...extra,
+  })
+  const runs = new Map<string, "pushing" | RunResult>([
+    ["pushed", run("ok", { pr: "https://github.com/o/r/pull/1" })],
+    ["no-pr-yet", run("ok")],
+    ["pr-failed", run("ok", { prError: "gh: no auth" })],
+    ["failed", run("bad")],
+    ["cancelled", run("cancelled")],
+    ["out", "pushing"],
+  ])
+  const gh = { number: 1 } as GithubPr
+  const github = { pushed: gh, "pr-failed": gh, failed: gh, out: gh }
+  expect(settledRuns(runs, github, 11)).toEqual(["pushed", "cancelled"])
+  // A load asked before the run ended doesn't show what it did
+  expect(settledRuns(runs, github, 9)).toEqual([])
 })

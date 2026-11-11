@@ -35,7 +35,14 @@
 import type { Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
 import { escapeHtml } from "../escape.ts"
-import { arrangeRows, doneOnGithub, isCollapsed, prBelow } from "./layout.ts"
+import {
+  arrangeRows,
+  doneOnGithub,
+  isCollapsed,
+  prBelow,
+  type RunResult,
+  settledRuns,
+} from "./layout.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -172,18 +179,10 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   return link + notes.join("")
 }
 
-/** How a push or fetch from this page ended: jj's answer, and for a push
- * of a new branch, its new PR's URL or why it didn't open */
-interface RunResult {
-  how: "ok" | "bad" | "cancelled"
-  text: string
-  pr?: string
-  prError?: string
-}
-
 /** Pushes and fetches from this page, by the bookmark of the PR they were
- * clicked on: out, or how they ended, which shows on the PR until the page
- * reloads or another is clicked there */
+ * clicked on: out, or how they ended, which shows on the PR until GitHub's
+ * side shows the PR after it (settledRuns), the user dismisses it, or another
+ * is clicked there */
 const runs = new Map<string, "pushing" | "fetching" | RunResult>()
 const running = (bookmark: string) => typeof runs.get(bookmark) === "string"
 
@@ -226,7 +225,10 @@ function runResult(pr: Pr): string {
     : result.prError
       ? `<pre class="push-result bad">The PR didn't open, so it's still to create: ${escapeHtml(result.prError)}</pre>`
       : ""
-  return `<pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>${opened}`
+  return `<div class="push-log">
+      <button type="button" class="dismiss" data-dismiss="${escapeHtml(pr.bookmark)}" title="Dismiss" aria-label="Dismiss">×</button>
+      <pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>${opened}
+    </div>`
 }
 
 /** The commits, with a line under the first `unpushed` of them, the newest,
@@ -487,7 +489,7 @@ main.addEventListener("click", async (e) => {
   if (!bookmark || !threadUrl || running(bookmark)) return
   runs.set(bookmark, fetching ? "fetching" : "pushing")
   redraw()
-  let result: RunResult
+  let result: Omit<RunResult, "at">
   try {
     const res = await fetch(new URL(fetching ? "fetch" : "push", threadUrl), {
       method: "POST",
@@ -510,11 +512,20 @@ main.addEventListener("click", async (e) => {
   } catch (e) {
     result = { how: "bad", text: String(e) }
   }
-  runs.set(bookmark, result)
+  runs.set(bookmark, { ...result, at: Date.now() })
   redraw()
   // GitHub has the branch's new head now, and maybe a new PR, which then
-  // shows in place of the Body and Push buttons
-  if (result.how === "ok" && !fetching) void loadGithub()
+  // shows in place of the Body and Push buttons, and the log goes
+  if (result.how !== "bad") void loadGithub()
+})
+
+// A run's log, which the user is done with
+main.addEventListener("click", (e) => {
+  const bookmark = (e.target as Element).closest<HTMLElement>("button[data-dismiss]")
+    ?.dataset.dismiss
+  if (!bookmark || running(bookmark)) return
+  runs.delete(bookmark)
+  redraw()
 })
 
 // Named for the shape of Stack, so a tab never draws one from an older ah
@@ -535,10 +546,12 @@ async function get<T>(path: string): Promise<T> {
 /** GitHub's side, which nothing here hears change, so asked for again now
  * and then while the page is in view */
 async function loadGithub() {
+  const asked = Date.now()
   try {
     github = await get<GithubPrs>("stack-github")
     githubError = ""
     write(localStorage, githubKey, github)
+    for (const bookmark of settledRuns(runs, github, asked)) runs.delete(bookmark)
   } catch (e) {
     githubError = (e as Error).message
   }

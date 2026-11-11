@@ -1,7 +1,8 @@
 // What a stack page (client.ts) does with GitHub's side once it has it: where
 // a PR goes whose bookmark is gone because it merged, and which PRs start
-// collapsed; and which PR a PR is built on, which push.ts uses too. Kept
-// apart from the page's drawing so it can be tested without a DOM.
+// collapsed; which PR a PR is built on, which push.ts uses too; and when a
+// push's or fetch's log can go. Kept apart from the page's drawing so it can
+// be tested without a DOM.
 
 import type { Group, Pr, Shared } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
@@ -27,6 +28,35 @@ export function arrangeRows(rows: (Pr | Shared)[], github: GithubPrs): (Pr | Sha
  * collapsed once it's merged */
 export const isCollapsed = (choice: boolean | undefined, gh: GithubPr | undefined) =>
   choice ?? gh?.state === "MERGED"
+
+/** How a push or fetch from the page ended: jj's answer, and for a push
+ * of a new branch, its new PR's URL or why it didn't open. `at` is when. */
+export interface RunResult {
+  how: "ok" | "bad" | "cancelled"
+  text: string
+  pr?: string
+  prError?: string
+  at: number
+}
+
+/** The PRs whose last run's log can go, from GitHub's side as asked for at
+ * `asked`: a run that worked, once a load asked after it has the PR, so
+ * the card shows where it stands, or one the user cancelled. A failure, or
+ * a push whose PR didn't open, stays until the user dismisses it. */
+export function settledRuns(
+  runs: Map<string, unknown>,
+  github: GithubPrs,
+  asked: number,
+): string[] {
+  return [...runs]
+    .filter((entry): entry is [string, RunResult] => typeof entry[1] === "object")
+    .filter(([bookmark, run]) => {
+      if (run.at > asked) return false
+      if (run.how === "cancelled") return true
+      return run.how === "ok" && !run.prError && bookmark in github
+    })
+    .map(([bookmark]) => bookmark)
+}
 
 /** The nearest PR under `row` in the graph, past any shared commits: one
  * its commits are built on, never one beside it on the same base */
