@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { expect, test } from "vitest"
-import { exportSession, hookEvent } from "./hook.ts"
+import { exportSession, hookEvent, shellEvent } from "./hook.ts"
 
 test("hookEvent reads the hook's JSON and the shell's env", () => {
   const env = { REX_BLOCK: "t1" }
@@ -62,6 +62,26 @@ test("hookEvent ignores a run nested in another agent session's shell", () => {
   expect(hookEvent(prompt("a"), "codex", { CODEX_THREAD_ID: "a" })).toMatchObject({
     session: "a",
   })
+})
+
+test("shellEvent reports the pane's own shell, not one an agent runs", () => {
+  const pane = { REX_BLOCK: "t1", TERM_PROGRAM: "rex" }
+  expect(shellEvent("~/r/ah", pane)).toEqual({
+    kind: "shell",
+    block: "t1",
+    label: "~/r/ah",
+  })
+  expect(shellEvent("~/r/ah", {})).toBeNull()
+  // An interactive zsh from an agent's Bash tool (`zsh -i -c 'cd docs'`) has
+  // the agent's REX_BLOCK, and the session id its harness exports
+  for (const id of [
+    "AH_SESSION",
+    "CLAUDE_CODE_SESSION_ID",
+    "CODEX_THREAD_ID",
+    "OPENCODE_SESSION_ID",
+  ]) {
+    expect(shellEvent("docs", { ...pane, [id]: "a" })).toBeNull()
+  }
 })
 
 test("Claude's SessionStart exports its session to its Bash commands", () => {

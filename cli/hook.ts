@@ -22,7 +22,9 @@
 // Except for Codex hooks run by its shared daemon, whose env belongs to
 // another shell: the server finds those sessions' blocks (tuis.ts). A
 // harness an agent runs from its shell (`claude -p`, `codex exec`) has
-// the agent's REX_BLOCK too, so its hooks report nothing (`nested`).
+// the agent's REX_BLOCK too, so its hooks report nothing (`nested`), and
+// so does an interactive zsh an agent runs, whose `shell` hook would
+// otherwise label the agent's own pane (`shellEvent`).
 
 import { appendFileSync } from "node:fs"
 import { Command, Option } from "@commander-js/extra-typings"
@@ -38,6 +40,15 @@ import { sanitizeTitle } from "../core/summary.ts"
 /** The block a process was started in, from its env */
 const envBlock = (env: NodeJS.ProcessEnv) => env.REX_BLOCK || null
 
+/** The session ids harnesses export to the commands their agents run,
+ * which a pane's own shell never has */
+const SESSION_IDS = [
+  "AH_SESSION",
+  "CLAUDE_CODE_SESSION_ID",
+  "CODEX_THREAD_ID",
+  "OPENCODE_SESSION_ID",
+] as const
+
 /** Whether the hook's harness was run from another agent session's shell
  * (`claude -p`, `codex exec`), which ah ignores: its env then has the
  * session id that harness exports to its commands. Codex's and opencode's
@@ -46,9 +57,11 @@ const envBlock = (env: NodeJS.ProcessEnv) => env.REX_BLOCK || null
  * so for Claude in Claude ah's SessionStart hook exports AH_SESSION to
  * Claude's Bash commands, which Claude's own hooks never get. */
 function nested(env: NodeJS.ProcessEnv, harness: Harness, session: string): boolean {
-  const claude = harness === "claude" ? undefined : env.CLAUDE_CODE_SESSION_ID
-  const outer = [env.AH_SESSION, env.CODEX_THREAD_ID, env.OPENCODE_SESSION_ID, claude]
-  return outer.some((id) => id && id !== session)
+  return SESSION_IDS.some((name) => {
+    const id = env[name]
+    const own = harness === "claude" && name === "CLAUDE_CODE_SESSION_ID"
+    return id && id !== session && !own
+  })
 }
 
 /** On SessionStart, Claude's hooks can export variables to the session's
@@ -137,6 +150,17 @@ export function hookEvent(
   }
 }
 
+/** The event for a shell's label, or null for a shell an agent runs (an
+ * interactive zsh from its Bash tool), which has the agent's REX_BLOCK but
+ * isn't the pane's shell: a cd there would relabel the agent's own pane,
+ * and nothing would put it back while the pane's shell sits under the agent */
+export function shellEvent(label: string, env = process.env): RegistryEvent | null {
+  const block = envBlock(env)
+  const clean = sanitizeTitle(label)
+  if (!block || !clean || SESSION_IDS.some((name) => env[name])) return null
+  return { kind: "shell", block, label: clean }
+}
+
 const agent = new Command("agent")
   .summary("Report an agent hook event to ah")
   .description("Report an agent hook event to ah. Reads the hook's JSON from stdin.")
@@ -173,9 +197,8 @@ const shell = new Command("shell")
   .argument("<label>", "What the shell calls its directory")
   .addOption(portOption())
   .action(async (label, { port }) => {
-    const block = envBlock(process.env)
-    const clean = sanitizeTitle(label)
-    if (block && clean) await send(port, { kind: "shell", block, label: clean })
+    const event = shellEvent(label)
+    if (event) await send(port, event)
   })
 
 export const hook = new Command("hook")
