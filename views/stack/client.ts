@@ -6,7 +6,8 @@
 // how it merges, its files collapsed under it, and a line per
 // commit that opens to its description and files. Once a PR is pushed, a line
 // under its newest commits marks the ones still to push, with a Push button
-// on it; a PR whose bookmark isn't on the remote yet has its Push button by
+// on it, and each of those says whether it's new, changed since the remote's
+// version, or only rebased, as when a PR below gained a commit; a PR whose bookmark isn't on the remote yet has its Push button by
 // its Body button. Push has the server push the bookmark once the user
 // confirms it in a sheet on the page's window (push.ts), and jj's answer
 // shows on the PR. For a bookmark not on the remote yet, the button says
@@ -248,16 +249,62 @@ function runResult(pr: Pr): string {
     </div>`
 }
 
+/** How a commit still to push differs from what the remote has: new, only
+ * rebased, or changed */
+function pushKind(c: Commit): "new" | "rebased" | "changed" {
+  const r = c.rewrite
+  return !r ? "new" : r.add || r.del || r.reworded ? "changed" : "rebased"
+}
+
+const PUSH_TAG_TITLES = {
+  new: "Not on the remote yet",
+  rebased:
+    "Only moved onto new parents: its changes and description are as the remote has them",
+  changed:
+    "Its changes or description differ from the remote's version, apart from moving onto new parents",
+}
+
+/** A commit's tag for how it differs from what the remote has */
+function pushTag(c: Commit): string {
+  const kind = pushKind(c)
+  const { add = 0, del = 0, reworded = false } = c.rewrite ?? {}
+  const text =
+    kind === "changed"
+      ? [add || del ? `changed +${add} −${del}` : "", reworded ? "reworded" : ""]
+          .filter(Boolean)
+          .join(", ")
+      : kind
+  return `<span class="push-tag ${kind}" title="${PUSH_TAG_TITLES[kind]}">${text}</span>`
+}
+
+/** The bar's text: how many to push, and how they differ from what the
+ * remote has unless all are new */
+function toPushText(commits: Commit[]): string {
+  const kinds = commits.map(pushKind)
+  const count = (k: string) => kinds.filter((x) => x === k).length
+  if (count("new") === kinds.length) return `↑ ${kinds.length} to push`
+  if (count("rebased") === kinds.length) return `↑ ${kinds.length} to push, only rebased`
+  const parts = (["new", "changed", "rebased"] as const)
+    .filter((k) => count(k))
+    .map((k) => `${count(k)} ${k}`)
+  return `↑ ${kinds.length} to push: ${parts.join(", ")}`
+}
+
 /** The commits, with a line under the first `unpushed` of them, the newest,
- * when there are any, with `button` on it */
+ * when there are any, with `button` on it. Unless those are all new, each
+ * says how it differs from what the remote has. */
 function commitList(commits: Commit[], unpushed = 0, button = ""): string {
-  const items = commits.map((c) => {
+  const toPush = commits.slice(0, unpushed)
+  const tagged = toPush.some((c) => c.rewrite)
+  const items = commits.map((c, i) => {
     const [title, ...rest] = c.description.split("\n")
     const body = rest.join("\n").trim()
-    return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
+    const tag = tagged && i < unpushed
+    return `<li><details class="commit${tag && pushKind(c) === "rebased" ? " rebased" : ""}" ${openAttr(`c-${c.change}`)}>
       <summary>
         <span class="mono cid" title="${c.change} @ ${c.commit}">${escapeHtml(c.short)}</span>
         <span class="title">${escapeHtml(title || "(no description)")}</span>
+        ${tag ? pushTag(c) : ""}
         ${stat(c.files, { rev: c.change })}
       </summary>
       <div class="detail">
@@ -270,7 +317,7 @@ function commitList(commits: Commit[], unpushed = 0, button = ""): string {
     items.splice(
       unpushed,
       0,
-      `<li class="to-push"><span>↑ ${unpushed} to push</span>${button}${unpushed < commits.length ? '<span class="pushed">pushed ↓</span>' : ""}</li>`,
+      `<li class="to-push"><span>${toPushText(toPush)}</span>${button}${unpushed < commits.length ? '<span class="pushed">pushed ↓</span>' : ""}</li>`,
     )
   return `<ol class="commits">${items.join("")}</ol>`
 }

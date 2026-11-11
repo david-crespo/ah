@@ -348,6 +348,24 @@ main .to-push > .pushed::before {
   content: "·";
   margin: 0 8px;
 }
+/* How a commit still to push differs from the remote's: a rebased one is
+ * the same commit moved, so it stays in the background */
+main .push-tag {
+  flex: none;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 6px;
+  border-radius: 8px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+}
+main .push-tag.changed {
+  color: color-mix(in srgb, var(--warn) 70%, var(--fg));
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+main .commit.rebased > summary .title {
+  color: var(--muted);
+}
 main .commit > summary {
   gap: 6px 8px;
   padding: 6px 0;

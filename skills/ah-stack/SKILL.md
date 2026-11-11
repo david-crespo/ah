@@ -94,7 +94,10 @@ red, its tooltip says why.
 
 A PR with commits still to push has a Push button on the bar that marks
 them, and a PR whose bookmark isn't on the remote yet has one by its Body
-button. Clicking it has ah's window for the page show a sheet listing the
+button. When the remote has an earlier version of any of them, each is
+tagged new, rebased (only moved onto new parents, as when a PR below gained
+a commit) or changed (by `jj interdiff`, with its lines, or reworded), and
+the bar counts them. Clicking it has ah's window for the page show a sheet listing the
 commits the push would send; only clicking Push there runs
 `jj git push --bookmark` for that PR, and jj's answer shows on the PR. The
 sheet is native, so a page's script can't click it, and only ah's window can

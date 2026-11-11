@@ -45,6 +45,18 @@ export interface Commit {
   commit: string
   description: string
   files: FileStat[]
+  /** On a PR's commit still to push, when its remote bookmark has an earlier
+   * version of it: what changed since */
+  rewrite?: Rewrite
+}
+
+/** The lines a commit's diff adds and removes over its earlier version's
+ * (jj interdiff, so a new parent doesn't count), and whether its description
+ * changed. Nothing changed when it was only rebased. */
+export interface Rewrite {
+  add: number
+  del: number
+  reworded: boolean
 }
 
 /** Commits drawn as one card, newest first. `head` is its newest commit and
@@ -245,6 +257,54 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     const from = base === change ? change : JSON.stringify(base)
     return { base, diff: { from, to }, files: parseGitDiff(diff) }
   }
+  /** `commits`, with a rewrite on each of `unpushed` that the remote
+   * bookmark `tip` has an earlier version of, found by its change ID */
+  const withRewrites = async (tip: string, commits: Commit[], unpushed: Commit[]) => {
+    if (!unpushed.length) return commits
+    const remote = await jj(
+      root,
+      "log",
+      "--no-graph",
+      "-r",
+      `::remote_bookmarks(exact:${tip}) ~ ::trunk()`,
+      "-T",
+      `change_id.short(8) ++ " " ++ commit_id ++ "\\n"`,
+    )
+    const earlier = new Map(
+      remote
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => line.split(" ") as [string, string]),
+    )
+    const rewrite = async (c: Commit): Promise<Rewrite | undefined> => {
+      const was = earlier.get(c.change)
+      if (!was) return
+      const diff = await jj(
+        root,
+        "interdiff",
+        "--git",
+        "--context",
+        "0",
+        "--from",
+        was,
+        "--to",
+        c.commit,
+      )
+      // interdiff has a changed description as a file of this name
+      const files = parseGitDiff(diff).filter((f) => f.path !== "JJ-COMMIT-DESCRIPTION")
+      return {
+        add: files.reduce((n, f) => n + f.add, 0),
+        del: files.reduce((n, f) => n + f.del, 0),
+        reworded: diff.includes("diff --git a/JJ-COMMIT-DESCRIPTION "),
+      }
+    }
+    return Promise.all(
+      commits.map(async (c) => {
+        const r = unpushed.includes(c) ? await rewrite(c) : undefined
+        return r ? { ...c, rewrite: r } : c
+      }),
+    )
+  }
 
   // Each row with the PRs that have its commits, which are the ones built on
   // it: none for a PR with no commits of its own
@@ -259,7 +319,9 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     const own = [...groups.values()].find((g) => owner(g) === pr)
     // On a commit, a remote bookmark of this name, other than git's
     const onRemote = `remote_bookmarks.filter(|b| b.remote() != "git" && b.name() == ${tip}).len() > 0`
-    const [pushed, measured] = await Promise.all([
+    const commits = own?.commits ?? []
+    const unpushed = commits.filter((c) => !pushedIn.get(c.commit)!.includes(String(pr.n)))
+    const [pushed, measured, rewritten] = await Promise.all([
       jj(
         root,
         "log",
@@ -270,17 +332,16 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
         `if(${onRemote}, commit_id.short(8) ++ "\n")`,
       ),
       own && measure(own.commits, tip),
+      withRewrites(tip, commits, unpushed),
     ])
     const row: Pr = {
       ...pr,
       ...none,
       ...measured,
-      commits: own?.commits ?? [],
+      commits: rewritten,
       missing: false,
       pushed: pushed.split("\n")[0] || null,
-      unpushed: (own?.commits ?? []).filter(
-        (c) => !pushedIn.get(c.commit)!.includes(String(pr.n)),
-      ).length,
+      unpushed: unpushed.length,
     }
     return { row, has: own?.prs ?? [] }
   })

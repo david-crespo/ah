@@ -289,6 +289,44 @@ test("readStack shows commits below a fork with no PR's bookmark as shared", asy
   }
 })
 
+test("readStack tells an unpushed commit that was only rebased from one that changed", async () => {
+  const repo = testRepo()
+  try {
+    repo.commit("a")
+    repo.jj("bookmark", "create", "one", "-r", "@-")
+    const b = repo.commit("b")
+    const c = repo.commit("c")
+    const d = repo.commit("d")
+    repo.jj("bookmark", "create", "two", "-r", "@-")
+    execFileSync("git", ["init", "--bare", "--quiet", join(repo.dir, "remote.git")])
+    repo.jj("git", "remote", "add", "origin", join(repo.dir, "remote.git"))
+    repo.jj("git", "push", "--all")
+    // A commit on one moves two's up; then c changes a line and d its
+    // description
+    repo.jj("new", "--insert-after", "one", "-m", "Add e")
+    writeFileSync(join(repo.dir, "e.txt"), "e\n")
+    repo.jj("bookmark", "set", "one", "-r", "@")
+    repo.jj("edit", c)
+    writeFileSync(join(repo.dir, "c.txt"), "C\n")
+    repo.jj("describe", d, "-m", "Add d, edited")
+    repo.jj("new", "two")
+    const stack = await repo.stack("one", "two")
+    const rewrites = (n: number) =>
+      prs(stack)
+        .find((p) => p.n === n)!
+        .commits.map((c) => [c.change, c.rewrite ?? null])
+    expect(rewrites(2)).toEqual([
+      [d, { add: 0, del: 0, reworded: true }],
+      [c, { add: 1, del: 1, reworded: false }],
+      [b, { add: 0, del: 0, reworded: false }],
+    ])
+    // e is new, and a is pushed
+    expect(rewrites(1).map(([, r]) => r)).toEqual([null, null])
+  } finally {
+    rmSync(repo.dir, { recursive: true })
+  }
+})
+
 test("readStack shares the commits below a PR that forks inside another", async () => {
   const repo = testRepo()
   try {
