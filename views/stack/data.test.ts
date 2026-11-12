@@ -332,6 +332,11 @@ test("readStack tells an unpushed commit that was only rebased from one that cha
     expect(changes(interdiff(2).to)).toEqual(`${d} ${c} ${b}`)
     expect(changes(interdiff(1).to).split(" ")).toHaveLength(2)
     expect(changes(interdiff(1).from).split(" ")).toHaveLength(1)
+    // two's push rewrites what's pushed; one only adds e
+    expect(prs(stack).map((p) => [p.n, p.rewrites])).toEqual([
+      [2, true],
+      [1, false],
+    ])
     // and what it shows: c's line, d's description, and all of new e
     expect(interdiff(2)).toMatchObject({ add: 1, del: 1, reworded: true })
     expect(interdiff(1)).toMatchObject({ add: 1, del: 0 })

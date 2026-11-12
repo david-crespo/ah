@@ -85,6 +85,9 @@ export interface Pr extends StackPr, Group {
   missing: boolean
   /** The bookmark's commit on its remote as of the last fetch, if it's been pushed */
   pushed: string | null
+  /** That commit isn't one of its ancestors, as after a rebase or an edit, so
+   * a push rewrites what's pushed */
+  rewrites: boolean
   /** How many of its commits its remote bookmark doesn't have: all of them
    * before it's pushed. A pushed commit's ancestors are pushed too, so
    * they're the newest ones. */
@@ -349,7 +352,14 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     }
     // Listed before its bookmark exists
     if (!existing.includes(pr.bookmark)) {
-      const row: Pr = { ...pr, ...none, missing: true, pushed: null, unpushed: 0 }
+      const row: Pr = {
+        ...pr,
+        ...none,
+        missing: true,
+        pushed: null,
+        rewrites: false,
+        unpushed: 0,
+      }
       return { row, has: [] }
     }
     const tip = JSON.stringify(pr.bookmark)
@@ -366,18 +376,20 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
         "-r",
         `remote_bookmarks(exact:${tip})`,
         "-T",
-        `if(${onRemote}, commit_id.short(8) ++ "\n")`,
+        `if(${onRemote}, commit_id.short(8) ++ if(self.contained_in(${JSON.stringify(`::${tip}`)}), "", " rewrites") ++ "\n")`,
       ),
       own && measure(own.commits, tip),
       withRewrites(tip, commits, unpushed),
     ])
+    const [pushedAt, rewrites] = pushed.split("\n")[0].split(" ")
     const row: Pr = {
       ...pr,
       ...none,
       ...measured,
       commits: rewritten,
       missing: false,
-      pushed: pushed.split("\n")[0] || null,
+      pushed: pushedAt || null,
+      rewrites: !!rewrites,
       unpushed: unpushed.length,
     }
     // jj can't interdiff from none, as when what the remote has is all

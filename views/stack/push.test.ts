@@ -224,13 +224,17 @@ test("a bookmark that isn't one of the stack's PRs is a 404", async () => {
   expect(asked).toEqual([])
 })
 
-test("a push that would rewrite what's pushed is refused", async () => {
-  const { push, asked, pushed } = app(() => true)
+test("a push that rewrites what's pushed is a force push, once confirmed", async () => {
+  const { push, asked } = app(() => true)
   const res = await push("rewritten")
-  expect(res.status).toBe(409)
-  expect(res.text).toContain("Push a rewrite by hand")
-  expect(asked).toEqual([])
-  expect(pushed()).toBe(false)
+  expect(res.status).toBe(200)
+  expect(asked[0]).toMatchObject({
+    heading: "Force push rewritten to origin?",
+    notes: ["This rewrites rewritten on origin, replacing 1 commit there."],
+    rows: [{ text: "Add c, edited" }],
+    button: "Force push",
+  })
+  expect(remoteRef("rewritten")).toBe(localRef("rewritten"))
 })
 
 test("a bookmark with nothing to push is refused", async () => {

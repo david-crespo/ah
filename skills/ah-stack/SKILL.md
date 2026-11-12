@@ -123,8 +123,10 @@ A PR opened into the PR below it also joins that PR's GitHub stack
 below is in no stack, the push makes one of the open PRs under the new one,
 down to the one on trunk, and the new one. The sheet says which, or why it
 joins none, and in a repo without stacks it does neither. If the stack
-fails to change, the PR stands and the page says why. A bookmark already on the remote opens no PR. A push that would rewrite
-commits the remote has is refused, to be pushed by hand. Pushing from the
+fails to change, the PR stands and the page says why. A bookmark already on the remote opens no PR. When the remote's
+bookmark isn't an ancestor of the local one, as after a rebase or an edit,
+the button reads Force push and the sheet says how many commits there it
+replaces; jj refuses it if the remote moved since the last fetch. Pushing from the
 page is the user's action: never call the page's push route yourself. When
 the user asks you to push, push from your shell as usual, or point them at
 the button.

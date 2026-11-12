@@ -2,9 +2,11 @@
 // The page's Push button only asks: the server works out from jj what the
 // push would send, shows it in a sheet on the page's window (platform/ask.ts)
 // and runs `jj git push` only once the person clicks Push there. A page with
-// no window of ah's, like a browser tab, can't push. A push that would
-// rewrite what the remote has is refused, to be pushed by hand. One push at a
-// time per repo, counting the time its sheet is up.
+// no window of ah's, like a browser tab, can't push. A push that rewrites
+// what the remote has, as after a rebase or an edit, is a force push, and the
+// sheet says so: jj only moves a remote bookmark sideways or back when the
+// remote still has it where the last fetch found it. One push at a time per
+// repo, counting the time its sheet is up.
 //
 // Pushing a bookmark that's new on a GitHub remote opens its PR too, once
 // the push has worked, with `gh pr create`: titled and described from the
@@ -44,12 +46,14 @@ import { fetchPrs, forgetGithub, type GhRun, type GithubPrs, githubRepo } from "
 import { prBelow } from "./layout.ts"
 
 /** What a push would send: its commits newest first, as short change ID and
- * first line of the description, and whether the bookmark is new there */
+ * first line of the description, whether the bookmark is new there, and how
+ * many of the commits there it replaces, if it rewrites what's pushed */
 export interface Plan {
   remote: string
   tip: string
   commits: { id: string; text: string }[]
   isNew: boolean
+  replaces: number
 }
 
 /** The PR a new branch's push opens on GitHub, in `repo` (owner/name), and
@@ -98,6 +102,10 @@ export function pushQuestion(
 ): Question {
   const rows = plan.commits.slice(0, SHOWN)
   const notes = plan.isNew ? [`New branch on ${plan.remote}.`] : []
+  if (plan.replaces)
+    notes.push(
+      `This rewrites ${bookmark} on ${plan.remote}, replacing ${plan.replaces} commit${plan.replaces === 1 ? "" : "s"} there.`,
+    )
   if (pr) {
     notes.push(`Then a PR opens into ${pr.base}, titled:`, pr.title)
     if (!pr.body) notes.push("Its description is empty.")
@@ -111,16 +119,16 @@ export function pushQuestion(
     else if (stack) notes.push(`It joins no GitHub stack: ${stack.skip}.`)
   }
   return {
-    heading: `Push ${bookmark} to ${plan.remote}?`,
+    heading: `${plan.replaces ? "Force push" : "Push"} ${bookmark} to ${plan.remote}?`,
     notes,
     rows,
     more: plan.commits.length - rows.length,
-    button: pr ? "Push and create PR" : "Push",
+    button: pr ? "Push and create PR" : plan.replaces ? "Force push" : "Push",
   }
 }
 
 /** What pushing `bookmark` in the repo at `root` would send, from jj, or
- * Refused if it would rewrite what's pushed or send nothing */
+ * Refused if it would send nothing */
 export async function planPush(
   jjRun: JjRun,
   root: string,
@@ -137,11 +145,9 @@ export async function planPush(
   const local = JSON.stringify(bookmark)
   const there = `remote_bookmarks(exact:${local}, exact:${JSON.stringify(remote)})`
   const [pushed] = await log(there, `commit_id ++ "\n"`)
-  if (pushed && (await log(`${there} ~ ::${local}`, `commit_id ++ "\n"`)).length)
-    throw new Refused(
-      409,
-      `${bookmark} on ${remote} isn't an ancestor of ${bookmark} here, so pushing it would rewrite what's pushed. Push a rewrite by hand.`,
-    )
+  const replaces = pushed
+    ? (await log(`::${there} ~ ::${local}`, `commit_id ++ "\n"`)).length
+    : 0
   // Before its first push, what the remote has of it under other bookmarks
   // isn't sent
   const from = pushed ? there : `remote_bookmarks(remote=exact:${JSON.stringify(remote)})`
@@ -153,7 +159,7 @@ export async function planPush(
   ).map((line) => ({ id: line.slice(0, 8), text: line.slice(9) }))
   if (!commits.length)
     throw new Refused(409, `${bookmark} has nothing to push to ${remote}`)
-  return { remote, tip, commits, isNew: !pushed }
+  return { remote, tip, commits, isNew: !pushed, replaces }
 }
 
 /** The commit `bookmark` is on */

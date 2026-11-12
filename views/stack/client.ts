@@ -218,7 +218,12 @@ function pushButton(pr: Pr, fresh = false): string {
             "Push and create PR",
             `Push ${pr.bookmark} and open its PR, after the window asks you`,
           ]
-        : ["Push", `Push ${pr.bookmark}, after the window asks you`]
+        : pr.rewrites
+          ? [
+              "Force push",
+              `Push ${pr.bookmark}, rewriting what's pushed, after the window asks you`,
+            ]
+          : ["Push", `Push ${pr.bookmark}, after the window asks you`]
   return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(pr.bookmark)}" title="${escapeHtml(title)}"${running(pr.bookmark) || !inWindow ? " disabled" : ""}>${label}</button>`
 }
 
