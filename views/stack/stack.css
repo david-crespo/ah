@@ -348,8 +348,7 @@ main .to-push > .pushed::before {
   content: "·";
   margin: 0 8px;
 }
-/* How a commit still to push differs from the remote's: a rebased one is
- * the same commit moved, so it stays in the background */
+/* How a commit still to push differs from the remote's */
 main .push-tag {
   flex: none;
   font-size: 11px;
@@ -384,9 +383,6 @@ main .commit > summary > button.short {
   min-width: 9ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
-}
-main .commit.rebased > summary .title {
-  color: var(--muted);
 }
 main .commit > summary {
   gap: 6px 8px;

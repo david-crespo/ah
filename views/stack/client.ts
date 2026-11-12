@@ -6,8 +6,8 @@
 // how it merges, its files collapsed under it, and a line per
 // commit that opens to its description and files. Once a PR is pushed, a line
 // under its newest commits marks the ones still to push, with a Push button
-// on it, and each of those says whether it's new, changed since the remote's
-// version, or only rebased, as when a PR below gained a commit; a PR whose bookmark isn't on the remote yet has its Push button by
+// on it, and each of those says whether it's new or changed since the remote's
+// version, with no tag for one only rebased, as when a PR below gained a commit; a PR whose bookmark isn't on the remote yet has its Push button by
 // its Body button. Push has the server push the bookmark once the user
 // confirms it in a sheet on the page's window (push.ts), and jj's answer
 // shows on the PR. For a bookmark not on the remote yet, the button says
@@ -261,12 +261,6 @@ function pushKind(c: Commit): "new" | "rebased" | "changed" {
   return !r ? "new" : r.add || r.del || r.reworded ? "changed" : "rebased"
 }
 
-const PUSH_TAG_TITLES = {
-  new: "Not on the remote yet",
-  rebased:
-    "Only moved onto new parents: its changes and description are as the remote has them",
-}
-
 /** A button that opens an interdiff in skepsis, with its line counts on a
  * segment of their own */
 function changedTag(
@@ -282,11 +276,13 @@ function changedTag(
   return `<button type="button" class="push-tag changed" data-diff="${data}" data-title="${title}">${text}${lines}</button>`
 }
 
-/** A commit's tag for how it differs from what the remote has */
+/** A commit's tag for how it differs from what the remote has, with none
+ * for one only rebased, since there's nothing in it to look at */
 function pushTag(c: Commit): string {
   const kind = pushKind(c)
-  if (kind !== "changed")
-    return `<span class="push-tag ${kind}" title="${PUSH_TAG_TITLES[kind]}">${kind}</span>`
+  if (kind === "new")
+    return '<span class="push-tag" title="Not on the remote yet">new</span>'
+  if (kind === "rebased") return ""
   const { from, ...changes } = c.rewrite!
   return changedTag({ from, to: c.commit }, changes, "Open what changed in skepsis")
 }
@@ -303,14 +299,14 @@ function prTag({ from, to, add, del, reworded }: NonNullable<Pr["interdiff"]>): 
   )
 }
 
-/** The bar's text: how many to push, and how they differ from what the
- * remote has unless all are new */
+/** The bar's text: how many to push, and how many are new or changed
+ * unless all are new. The rest were only rebased. */
 function toPushText(commits: Commit[]): string {
   const kinds = commits.map(pushKind)
   const count = (k: string) => kinds.filter((x) => x === k).length
   if (count("new") === kinds.length) return `↑ ${kinds.length} to push`
-  if (count("rebased") === kinds.length) return `↑ ${kinds.length} to push, only rebased`
-  const parts = (["new", "changed", "rebased"] as const)
+  if (count("rebased") === kinds.length) return `↑ ${kinds.length} to push, unchanged`
+  const parts = (["new", "changed"] as const)
     .filter((k) => count(k))
     .map((k) => `${count(k)} ${k}`)
   return `↑ ${kinds.length} to push: ${parts.join(", ")}`
@@ -326,7 +322,7 @@ function commitList(commits: Commit[], unpushed = 0, button = ""): string {
     const [title, ...rest] = c.description.split("\n")
     const body = rest.join("\n").trim()
     const tag = tagged && i < unpushed
-    return `<li><details class="commit${tag && pushKind(c) === "rebased" ? " rebased" : ""}" ${openAttr(`c-${c.change}`)}>
+    return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
       <summary>
         <span class="mono cid" title="${c.change} @ ${c.commit}">${escapeHtml(c.short)}</span>
         <span class="title">${escapeHtml(title || "(no description)")}</span>
