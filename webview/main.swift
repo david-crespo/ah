@@ -554,7 +554,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
     }
   }
 
-  /** Return goes to the next match, ⇧Return the previous, and Escape closes */
+  /** Return goes to the next match, ⇧Return the previous, and Escape closes,
+   * dropping the selection that shows the match */
   func control(
     _ control: NSControl, textView: NSTextView, doCommandBy selector: Selector
   ) -> Bool {
@@ -563,6 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       find(backwards: NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
     case #selector(NSResponder.cancelOperation(_:)):
       findBar.isHidden = true
+      webView.evaluateJavaScript("getSelection().removeAllRanges()")
       window.makeFirstResponder(webView)
     default:
       return false
