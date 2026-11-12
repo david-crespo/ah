@@ -76,6 +76,11 @@ item in the one that fits:
   collapsed under the title. Put all of it there. There's no separate review
   file. Use `<p>`, `<ul>`, `<code>`, `<a>`. The detail should be enough to act
   on without the conversation.
+- An item of only a few sentences, like most review findings, leaves out
+  the `<h3>`: its text shows in full beside the icons, with nothing
+  collapsed, and Go and comments quote its first 200 characters as the
+  title. Don't write a heading that only restates a short item. One tracker
+  can have both kinds.
 - When you know the fix, say what it is, apart from what's wrong: under
   `<h4>Fix</h4>`, or after "Fix:" in each entry of a list of small problems.
   The user is deciding whether to have it done, and a description of the

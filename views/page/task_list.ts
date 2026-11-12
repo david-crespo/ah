@@ -9,7 +9,8 @@
 //   </ah-item>
 //
 // and the element lays it out: a status icon, the id and the title on one
-// line, with the detail collapsed under it. An item done in several steps
+// line, with the detail collapsed under it. An item with no heading is its
+// text, shown in full where the title would be. An item done in several steps
 // lists them in its detail, each with a status of its own:
 //
 //   <ah-step status="done">What the step does</ah-step>
@@ -370,6 +371,16 @@ function statusButton(className: string, host: HTMLElement, target: () => Target
   }
 }
 
+/** How much of an item's text a request quotes when it has no heading */
+const TITLE_MAX = 200
+
+/** `text` cut to `max` characters at a word, marked as cut */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text
+  const space = text.lastIndexOf(" ", max - 1)
+  return text.slice(0, space > 0 ? space : max - 1) + "…"
+}
+
 const statusOf = (el: HTMLElement): Status => {
   const s = el.getAttribute("status") ?? "todo"
   return (STATUSES as readonly string[]).includes(s) ? (s as Status) : "todo"
@@ -406,18 +417,25 @@ export class AhItem extends HTMLElement implements Commentable {
     if (this.#built) return
     this.#built = true
     const heading = [...this.children].find((c) => /^H[1-6]$/.test(c.tagName))
-    this.#title = heading?.textContent?.trim().replace(/\s+/g, " ") ?? ""
-    const rest = [...this.childNodes].filter(
+    const content = [...this.childNodes].filter(
       (n) => n !== heading && !(n.nodeType === Node.TEXT_NODE && !n.textContent?.trim()),
     )
+    // Without a heading, the item is its text, shown in full beside the
+    // icons, and requests name it by its start
+    const title = heading ?? document.createElement("div")
+    if (heading) title.classList.add("ah-item-title")
+    else {
+      title.className = "ah-item-body ah-item-text"
+      title.append(...content)
+    }
+    const rest = heading ? content : []
+    this.#title = clip(title.textContent?.trim().replace(/\s+/g, " ") ?? "", TITLE_MAX)
 
     const head = document.createElement(rest.length ? "summary" : "div")
     head.className = "ah-item-head"
     const id = document.createElement("span")
     id.className = "ah-item-id"
     id.textContent = this.id
-    const title = heading ?? document.createElement("span")
-    title.classList.add("ah-item-title")
     // Inside a <summary>, a click would also toggle the detail
     const onClick = (button: HTMLElement, action: () => void) =>
       button.addEventListener("click", (e) => {

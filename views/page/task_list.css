@@ -434,6 +434,32 @@ ah-step:not(:hover) .ah-step-chat[data-state="ready"]:not(:focus-visible) {
   padding-left: 1.2em;
 }
 
+.ah-item-body pre {
+  margin: 6px 0;
+  padding: 6px 8px;
+  overflow-x: auto;
+  border: 1px solid var(--t-line);
+  border-radius: 5px;
+  background: var(--t-page);
+}
+
+/* An item with no heading: its text where the title would be, shown in
+   full rather than collapsed under it */
+.ah-item-head > .ah-item-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+}
+
+ah-item[status="done"] .ah-item-text,
+ah-item[status="dropped"] .ah-item-text {
+  color: var(--t-muted);
+}
+
+ah-item[status="dropped"] .ah-item-text {
+  text-decoration: line-through;
+}
+
 /* Sections of a long detail, labeled lists (a rev's change ID or a
    decision's name beside what it says), and background folded away under a
    <details> */
