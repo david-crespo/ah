@@ -315,13 +315,26 @@ test("readStack tells an unpushed commit that was only rebased from one that cha
       prs(stack)
         .find((p) => p.n === n)!
         .commits.map((c) => [c.change, c.rewrite ?? null])
+    const from = expect.stringMatching(/^[0-9a-f]{40}$/)
     expect(rewrites(2)).toEqual([
-      [d, { add: 0, del: 0, reworded: true }],
-      [c, { add: 1, del: 1, reworded: false }],
-      [b, { add: 0, del: 0, reworded: false }],
+      [d, { from, add: 0, del: 0, reworded: true }],
+      [c, { from, add: 1, del: 1, reworded: false }],
+      [b, { from, add: 0, del: 0, reworded: false }],
     ])
     // e is new, and a is pushed
     expect(rewrites(1).map(([, r]) => r)).toEqual([null, null])
+    // Each PR's interdiff: its commits on the remote, against its commits
+    // here, apart from what's below it
+    const changes = (revset: string) =>
+      repo.jj("log", "--no-graph", "-r", revset, "-T", 'change_id.short(8) ++ " "').trim()
+    const interdiff = (n: number) => prs(stack).find((p) => p.n === n)!.interdiff!
+    expect(changes(interdiff(2).from)).toEqual(`${d} ${c} ${b}`)
+    expect(changes(interdiff(2).to)).toEqual(`${d} ${c} ${b}`)
+    expect(changes(interdiff(1).to).split(" ")).toHaveLength(2)
+    expect(changes(interdiff(1).from).split(" ")).toHaveLength(1)
+    // and what it shows: c's line, d's description, and all of new e
+    expect(interdiff(2)).toMatchObject({ add: 1, del: 1, reworded: true })
+    expect(interdiff(1)).toMatchObject({ add: 1, del: 0 })
   } finally {
     rmSync(repo.dir, { recursive: true })
   }

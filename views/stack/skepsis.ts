@@ -13,14 +13,22 @@ import { showUrl, windowsShowing } from "../../platform/window.ts"
 const command = (process.env.AH_SKEPSIS || "skepsis").trim().split(/\s+/)
 
 /** skepsis's arguments for the diff a page asks for: { rev } for one
- * revision, { from, to } for a range. Null for anything else, or a revision
- * starting with "-", which skepsis would take for a flag. */
+ * revision, { from, to } for a range, and with `interdiff: true`, how `to`
+ * changed `from`'s changes (jj interdiff). Null for anything else, or a
+ * revision starting with "-", which skepsis would take for a flag. */
 export function diffArgs(body: unknown): string[] | null {
   const rev = (v: unknown): v is string =>
-    typeof v === "string" && /^[^-\s][^\s]{0,199}$/.test(v)
+    typeof v === "string" && /^[^-\s][^\s]{0,499}$/.test(v)
   if (!isRecord(body)) return null
   if (rev(body.rev)) return ["-r", body.rev]
-  if (rev(body.from) && rev(body.to)) return ["--from", body.from, "--to", body.to]
+  if (rev(body.from) && rev(body.to))
+    return [
+      ...(body.interdiff === true ? ["--interdiff"] : []),
+      "--from",
+      body.from,
+      "--to",
+      body.to,
+    ]
   return null
 }
 

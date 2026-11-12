@@ -4,6 +4,13 @@ import { diffArgs, sendCommand } from "./skepsis.ts"
 test("diffArgs takes a revision or a range, and no flags", () => {
   expect(diffArgs({ rev: "ktxrpslz" })).toEqual(["-r", "ktxrpslz"])
   expect(diffArgs({ from: "one", to: "two" })).toEqual(["--from", "one", "--to", "two"])
+  expect(diffArgs({ from: "one", to: "two", interdiff: true })).toEqual([
+    "--interdiff",
+    "--from",
+    "one",
+    "--to",
+    "two",
+  ])
   for (const body of [
     null,
     "ktxr",

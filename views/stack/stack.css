@@ -359,9 +359,31 @@ main .push-tag {
   color: var(--muted);
   border: 1px solid var(--line);
 }
-main .push-tag.changed {
-  color: color-mix(in srgb, var(--warn) 70%, var(--fg));
-  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+/* A changed one opens the commit's or PR's interdiff. Its line counts sit on
+   a tinted segment, so they don't read as part of the diff stat beside it. */
+main button.push-tag {
+  display: inline-flex;
+  font-family: inherit;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+main .push-tag > .mono {
+  margin: 0 -6px 0 6px;
+  padding: 0 6px;
+  font-size: 10.5px;
+  line-height: 16px;
+  background: var(--hover);
+  border-left: 1px solid var(--line);
+}
+main button.push-tag:hover {
+  border-color: var(--muted);
+}
+/* A commit's diff stat at one width, so the tags before it line up */
+main .commit > summary > button.short {
+  min-width: 9ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 main .commit.rebased > summary .title {
   color: var(--muted);
@@ -436,11 +458,13 @@ main button.body-button:hover {
   background: var(--hover);
 }
 main button.short.busy,
+main button.push-tag.busy,
 main button.body-button.busy {
   opacity: 0.5;
   cursor: progress;
 }
 main button.short.failed,
+main button.push-tag.failed,
 main button.body-button.failed {
   outline: 1px solid var(--del);
 }

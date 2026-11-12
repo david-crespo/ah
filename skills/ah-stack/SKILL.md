@@ -82,7 +82,12 @@ diff and update its body to match.
 
 Each diff stat (`+12 −3`) on a PR or commit is a button. Clicking it has the
 server open that diff in skepsis: `-r <change>` for a commit,
-`--from <base> --to <bookmark>` for a PR. Comments sent from skepsis come to
+`--from <base> --to <bookmark>` for a PR. A commit's "changed" tag is a
+button too, for `--interdiff --from <the remote's version> --to <commit>`:
+what changed in it, apart from moving onto new parents. A pushed PR with
+commits to push has one by its diff stat for the whole PR: `jj interdiff`
+from its commits on the remote to its commits here, which needs a jj with
+range support in interdiff (newer than 0.47). Comments sent from skepsis come to
 the agent the page is bound to as messages; treat them as the user's. A
 second click on the same diff brings its page back rather than starting
 another. The server runs skepsis with `AH_SKEPSIS` from its environment

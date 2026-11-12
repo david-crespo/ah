@@ -50,13 +50,20 @@ export interface Commit {
   rewrite?: Rewrite
 }
 
-/** The lines a commit's diff adds and removes over its earlier version's
- * (jj interdiff, so a new parent doesn't count), and whether its description
- * changed. Nothing changed when it was only rebased. */
-export interface Rewrite {
+/** What jj interdiff shows: the lines the newer diff adds and removes over
+ * the earlier one's, so a new parent doesn't count, and whether a description
+ * changed */
+export interface Changes {
   add: number
   del: number
   reworded: boolean
+}
+
+/** How a commit differs from its earlier version. Nothing changed when it
+ * was only rebased. */
+export interface Rewrite extends Changes {
+  /** The earlier version's commit ID, on the remote bookmark */
+  from: string
 }
 
 /** Commits drawn as one card, newest first. `head` is its newest commit and
@@ -82,6 +89,9 @@ export interface Pr extends StackPr, Group {
    * before it's pushed. A pushed commit's ancestors are pushed too, so
    * they're the newest ones. */
   unpushed: number
+  /** Once pushed, with commits still to push: revsets for its commits on
+   * the remote and its commits now, for jj interdiff, and what that shows */
+  interdiff: (Changes & { from: string; to: string }) | null
 }
 
 /** Commits below a fork that no PR's bookmark is on */
@@ -146,6 +156,24 @@ const stacks = new Map<string, { key: string; stack: Promise<Stack> }>()
 /** The stack.json next to `pagePath`, filled in from the jj repo it's in.
  * jj is only asked again once stack.json or the repo's operations have
  * changed, since a page asks on every save of a PR's body too. */
+/** A pushed PR's revsets for jj interdiff: its commits on the remote, which
+ * are its remote bookmark's ancestors that aren't trunk's or its base's,
+ * here or on the remote, against its commits here. `tip` and the diff's
+ * revsets are as `measure` quotes them. Without spaces, which skepsis's
+ * arguments can't have. */
+export function interdiff(
+  tip: string,
+  { base, diff }: { base: string; diff: { from: string; to: string } },
+): { from: string; to: string } {
+  // The base by a bookmark, which its revset quotes, has a remote version
+  const below = ["trunk()", diff.from]
+  if (diff.from !== base) below.push(`remote_bookmarks(exact:${diff.from})`)
+  return {
+    from: `::remote_bookmarks(exact:${tip})~::(${below.join("|")})`,
+    to: `${diff.from}..${diff.to}`,
+  }
+}
+
 export async function readStack(pagePath: string): Promise<Stack> {
   const dir = dirname(pagePath)
   const text = await readFile(join(dir, STACK_FILE), "utf8")
@@ -257,6 +285,26 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     const from = base === change ? change : JSON.stringify(base)
     return { base, diff: { from, to }, files: parseGitDiff(diff) }
   }
+  const changes = async (from: string, to: string): Promise<Changes> => {
+    const diff = await jj(
+      root,
+      "interdiff",
+      "--git",
+      "--context",
+      "0",
+      "--from",
+      from,
+      "--to",
+      to,
+    )
+    // interdiff has a changed description as a file of this name
+    const files = parseGitDiff(diff).filter((f) => f.path !== "JJ-COMMIT-DESCRIPTION")
+    return {
+      add: files.reduce((n, f) => n + f.add, 0),
+      del: files.reduce((n, f) => n + f.del, 0),
+      reworded: diff.includes("diff --git a/JJ-COMMIT-DESCRIPTION "),
+    }
+  }
   /** `commits`, with a rewrite on each of `unpushed` that the remote
    * bookmark `tip` has an earlier version of, found by its change ID */
   const withRewrites = async (tip: string, commits: Commit[], unpushed: Commit[]) => {
@@ -278,25 +326,7 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     )
     const rewrite = async (c: Commit): Promise<Rewrite | undefined> => {
       const was = earlier.get(c.change)
-      if (!was) return
-      const diff = await jj(
-        root,
-        "interdiff",
-        "--git",
-        "--context",
-        "0",
-        "--from",
-        was,
-        "--to",
-        c.commit,
-      )
-      // interdiff has a changed description as a file of this name
-      const files = parseGitDiff(diff).filter((f) => f.path !== "JJ-COMMIT-DESCRIPTION")
-      return {
-        add: files.reduce((n, f) => n + f.add, 0),
-        del: files.reduce((n, f) => n + f.del, 0),
-        reworded: diff.includes("diff --git a/JJ-COMMIT-DESCRIPTION "),
-      }
+      return was ? { from: was, ...(await changes(was, c.commit)) } : undefined
     }
     return Promise.all(
       commits.map(async (c) => {
@@ -309,7 +339,14 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   // Each row with the PRs that have its commits, which are the ones built on
   // it: none for a PR with no commits of its own
   const prs = file.prs.map(async (pr) => {
-    const none = { head: pr.bookmark, base: "", diff: null, files: [], commits: [] }
+    const none = {
+      head: pr.bookmark,
+      base: "",
+      diff: null,
+      interdiff: null,
+      files: [],
+      commits: [],
+    }
     // Listed before its bookmark exists
     if (!existing.includes(pr.bookmark)) {
       const row: Pr = { ...pr, ...none, missing: true, pushed: null, unpushed: 0 }
@@ -343,6 +380,14 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
       pushed: pushed.split("\n")[0] || null,
       unpushed: unpushed.length,
     }
+    // jj can't interdiff from none, as when what the remote has is all
+    // below the PR now
+    const revs = row.pushed && row.unpushed && measured && interdiff(tip, measured)
+    if (
+      revs &&
+      (await jj(root, "log", "--no-graph", "-r", revs.from, "--limit", "1", "-T", "1"))
+    )
+      row.interdiff = { ...revs, ...(await changes(revs.from, revs.to)) }
     return { row, has: own?.prs ?? [] }
   })
   const shared = [...groups.values()]

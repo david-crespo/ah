@@ -33,7 +33,7 @@
 // goes with the PRs with no commits of their own (layout.ts). GitHub's side
 // from the last load is kept too, so neither waits on gh after a reload.
 
-import type { Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
+import type { Changes, Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
 import { escapeHtml } from "../escape.ts"
 import {
@@ -260,21 +260,42 @@ const PUSH_TAG_TITLES = {
   new: "Not on the remote yet",
   rebased:
     "Only moved onto new parents: its changes and description are as the remote has them",
-  changed:
-    "Its changes or description differ from the remote's version, apart from moving onto new parents",
+}
+
+/** A button that opens an interdiff in skepsis, with its line counts on a
+ * segment of their own */
+function changedTag(
+  diff: { from: string; to: string },
+  { add, del, reworded }: Changes,
+  title: string,
+): string {
+  const text = [add || del ? "changed" : "", reworded ? "reworded" : ""]
+    .filter(Boolean)
+    .join(", ")
+  const lines = add || del ? `<span class="mono">${counts(add, del)}</span>` : ""
+  const data = escapeHtml(JSON.stringify({ ...diff, interdiff: true }))
+  return `<button type="button" class="push-tag changed" data-diff="${data}" data-title="${title}">${text}${lines}</button>`
 }
 
 /** A commit's tag for how it differs from what the remote has */
 function pushTag(c: Commit): string {
   const kind = pushKind(c)
-  const { add = 0, del = 0, reworded = false } = c.rewrite ?? {}
-  const text =
-    kind === "changed"
-      ? [add || del ? `changed +${add} −${del}` : "", reworded ? "reworded" : ""]
-          .filter(Boolean)
-          .join(", ")
-      : kind
-  return `<span class="push-tag ${kind}" title="${PUSH_TAG_TITLES[kind]}">${text}</span>`
+  if (kind !== "changed")
+    return `<span class="push-tag ${kind}" title="${PUSH_TAG_TITLES[kind]}">${kind}</span>`
+  const { from, ...changes } = c.rewrite!
+  return changedTag({ from, to: c.commit }, changes, "Open what changed in skepsis")
+}
+
+/** A PR's tag for how its commits differ from the remote's, apart from moving
+ * onto new parents. A new commit's description makes the interdiff's
+ * descriptions differ, so it's only "reworded" when no lines changed. */
+function prTag({ from, to, add, del, reworded }: NonNullable<Pr["interdiff"]>): string {
+  if (!add && !del && !reworded) return ""
+  return changedTag(
+    { from, to },
+    { add, del, reworded: reworded && !add && !del },
+    "Open what changed in the PR since the last push in skepsis",
+  )
 }
 
 /** The bar's text: how many to push, and how they differ from what the
@@ -334,6 +355,7 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
       <button type="button" class="fold" data-fold="${escapeHtml(pr.bookmark)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>
       <h2><span class="n">${pr.n}.</span> ${title}</h2>
       ${collapsed && gh ? githubLink(gh) : ""}
+      ${pr.interdiff ? prTag(pr.interdiff) : ""}
       ${pr.diff ? stat(pr.files, pr.diff) : ""}
     </div>`
   if (collapsed) return `<section class="pr collapsed">${head}</section>`
@@ -499,7 +521,9 @@ function paintButtons() {
     button.classList.toggle("busy", state === "busy")
     button.classList.toggle("failed", !!state && state !== "busy")
     button.title =
-      state && state !== "busy" ? state : diff ? "Open in skepsis" : "Open the PR body"
+      state && state !== "busy"
+        ? state
+        : (button.dataset.title ?? (diff ? "Open in skepsis" : "Open the PR body"))
   }
 }
 
