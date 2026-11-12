@@ -30,6 +30,11 @@ this session, as when picking work back up in a new one, run
 `ah tool tracker add <path>`. The binding outlasts server restarts. If it
 fails, mention it in a line and move on.
 
+When the user wants a tracker in a window of its own rather than the
+dashboard, add `--in window` (or `--in tab` for the browser). It's added
+and bound the same way, but the current tracker stays as it was, so an
+item number without a tracker named still means the current one's.
+
 Picking up: the SessionStart hook names the workspace's current tracker.
 `ah tool tracker ls` lists the workspace's active ones, the current one marked
 `*`, then the parked ones; `ah tool tracker ls --done` lists the finished ones.

@@ -409,7 +409,8 @@ export class Core {
       return Response.json({ context: agent && (await this.#context(agent, event)) })
     }
     if (rest === "current-tracker" && req.method === "POST") {
-      // { agent, path }: make it current; without `path`, read it
+      // { agent, path }: add it and make it current, or with `current: false`
+      // only add it; without `path`, read it
       const body: unknown = await req.json().catch(() => null)
       const ref = isRecord(body) ? parseAgentRef(body.agent) : null
       if (!isRecord(body) || !ref) return new Response("bad agent", { status: 400 })
@@ -420,9 +421,10 @@ export class Core {
       if (!("path" in body)) return Response.json({ path: this.trackers.currentPath(root) })
       if (!isString(body.path) || !body.path)
         return new Response("bad path", { status: 400 })
-      this.trackers.add(root, body.path)
+      const current = body.current !== false
+      this.trackers.add(root, body.path, Date.now(), { current })
       const agent = agentId(this.registry, ref)
-      if (agent) this.#notices.madeCurrent(agent, body.path)
+      if (agent && current) this.#notices.madeCurrent(agent, body.path)
       return Response.json({ path: body.path })
     }
     if (rest === "tracker-status" && req.method === "POST") {

@@ -81,6 +81,16 @@ test("tabs on one workspace share its current tracker", () => {
   expect(changes).toHaveLength(2)
 })
 
+test("a tracker added for a window of its own leaves the current one", () => {
+  const a = workspace("a")
+  const current = note(a, "current-tracker")
+  const windowed = note(a, "windowed-tracker")
+  trackers.add(a, current)
+  trackers.add(a, windowed, Date.now(), { current: false })
+  expect(trackers.currentPath(a)).toBe(current)
+  expect(trackers.get(a).active.map((t) => t.path)).toContain(windowed)
+})
+
 test("the current tracker outlives the tabs that set it", () => {
   // Kept by workspace, so nothing about tabs closing can drop it
   const a = workspace("a")

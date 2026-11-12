@@ -3,7 +3,8 @@
 // its tabs, and the trackers it has had, each active, parked or done. Kept
 // in the registry (registry.ts) by workspace root.
 //
-// Adding a tracker makes it active and current. Active ones are listed to
+// Adding a tracker makes it active and, unless it's for a window of its
+// own, current. Active ones are listed to
 // switch between. Parking one (work left) or finishing it (none) takes it
 // out of the list, and out of the role if it's current; the one used before
 // it takes over. Resuming or adding it again brings it back. An active one
@@ -126,9 +127,9 @@ export class Trackers {
     return null
   }
 
-  /** Make `path` the workspace's current tracker, and active if it wasn't,
-   * here and in any other workspace that lists it */
-  add(root: WorkspaceRoot, path: string, now = Date.now()) {
+  /** Make `path` active if it wasn't, here and in any other workspace that
+   * lists it, and the workspace's current tracker unless `current` is false */
+  add(root: WorkspaceRoot, path: string, now = Date.now(), { current = true } = {}) {
     for (const { trackers } of this.#records.values()) {
       const t = trackers.find((t) => t.path === path)
       if (t) Object.assign(t, { status: "active", used: now })
@@ -138,7 +139,7 @@ export class Trackers {
     if (!record.trackers.some((t) => t.path === path)) {
       record.trackers.push({ path, status: "active", used: now })
     }
-    record.current = path
+    if (current) record.current = path
     this.#source.changed({ add: path, root })
   }
 

@@ -5,9 +5,15 @@
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { dirname } from "node:path"
-import { Command } from "@commander-js/extra-typings"
+import { Command, Option } from "@commander-js/extra-typings"
 import { callServer, die, portOption, serverUrl } from "./shared.ts"
-import { absolute, newPathOrDie, openablePathOrDie, showInServer } from "./files.ts"
+import {
+  absolute,
+  newPathOrDie,
+  openablePathOrDie,
+  showInServer,
+  showPage,
+} from "./files.ts"
 import { ensureDashboardPage } from "./dashboard.ts"
 import { status } from "../platform/server.ts"
 import { currentAgent } from "../platform/session.ts"
@@ -36,23 +42,33 @@ export const tracker = new Command("tracker")
 
 tracker
   .command("add")
-  .summary("Add a tracker and make it the current one")
+  .summary("Add a tracker, as the current one or in a window of its own")
   .description(
-    "Add a file to this workspace's active trackers and make it the current tracker, which the dashboard shows. A parked or finished tracker becomes active again. To start a new task list, pass --title and --goal, and ah writes it from the template. By convention a new task list goes at .claude/notes/<date>-<slug>-tracker/index.html. It gets a directory of its own because a page reloads when anything in its directory changes.",
+    "Add a file to this workspace's active trackers and make it the current tracker, which the dashboard shows. With --in, it opens in a window or browser tab of its own instead, and the current tracker stays as it was. A parked or finished tracker becomes active again. To start a new task list, pass --title and --goal, and ah writes it from the template. By convention a new task list goes at .claude/notes/<date>-<slug>-tracker/index.html. It gets a directory of its own because a page reloads when anything in its directory changes.",
   )
   .argument("<file>")
   .option("--title <title>", "A new task list's title")
   .option("--goal <goal>", "A new task list's goal, a sentence or two")
+  .addOption(
+    new Option(
+      "--in <place>",
+      "Open it in a window of its own or a tab of the default browser, not the dashboard",
+    ).choices(["window", "tab"] as const),
+  )
   .addOption(portOption())
-  .action(async (file, { title, goal, port }) => {
+  .action(async (file, { title, goal, in: place, port }) => {
     const agent =
       currentAgent() ?? die("ah tool tracker add: not running in an agent session")
     ensureTaskList(file, title, goal)
     const path = openablePathOrDie(file)
     // Bound the way `ah tool doc` and `page` bind; the dashboard's view of the file
     // leaves the binding alone
-    await showInServer(fileKind(path), port, path)
-    await postJson(port, "current-tracker", { agent, path })
+    const { url, views } = await showInServer(fileKind(path), port, path)
+    await postJson(port, "current-tracker", { agent, path, current: !place })
+    if (place) {
+      await showPage(place, url, path, views)
+      return console.log(url.href)
+    }
     console.log(`the tracker: ${path}`)
     // The dashboard already shows the new tracker, so an open one stays
     // behind whatever the user is looking at
