@@ -477,15 +477,17 @@ export class Core {
       return Response.json({ agent: body.agent })
     }
     if (rest === "send" && req.method === "POST") {
-      // { block, agent, text }: a message from a tool in pane `block`, which
-      // picks `agent` if given; or, outside Rex, straight to `agent`
+      // { block, agent, cwd, text }: a message from a tool in pane `block`,
+      // which picks `agent` if given; or, outside Rex, straight to `agent`,
+      // else to an agent in the workspace of `cwd`, where the tool runs
       const body: unknown = await req.json().catch(() => null)
       if (!isRecord(body) || !isString(body.text) || !body.text.trim())
         return new Response("bad text", { status: 400 })
       const block = isString(body.block) ? body.block : null
       const agent = isString(body.agent) ? body.agent : null
       if (!block) {
-        const address = agent && this.directory.reach(agent)
+        const cwd = isString(body.cwd) ? body.cwd : null
+        const address = agent && this.directory.reach(agent, cwd)
         if (!address) return new Response("no agent to send to", { status: 409 })
         try {
           await postTo(address, `${RELAYED}\n\n${body.text}`)

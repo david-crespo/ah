@@ -102,17 +102,17 @@ export class Directory implements AgentDirectory {
     if (own && addressAlive(own)) return { address: own, via: "agent" }
     const standIn = agent && this.standIn(agent)
     if (standIn) return { address: standIn, via: "tab" }
-    const workspace = this.#liveInWorkspace(subject.path)
+    const workspace = this.#liveInWorkspace(dirname(subject.path))
     if (workspace) return { address: workspace, via: "workspace" }
     return own ? { address: own, via: "agent" } : null
   }
 
-  /** The live agent working in the workspace `path` is in that last did
-   * something, for a file whose own agent and its tab are gone: a tracker
-   * whose session closed, or a draft from one */
-  #liveInWorkspace(path: string): Address | null {
+  /** The live agent working in `dir`'s workspace that last did something,
+   * for a file or message whose own agent and its tab are gone: a tracker
+   * whose session closed, a draft from one, or a diff review opened from one */
+  #liveInWorkspace(dir: string): Address | null {
     const rootOf = rootFinder()
-    const root = rootOf(dirname(path))
+    const root = rootOf(dir)
     if (!root) return null
     const best = this.#latest(
       [...this.#registry.agents]
@@ -123,10 +123,11 @@ export class Directory implements AgentDirectory {
   }
 
   /** Where to post to `agent` now: its own address while that's alive, else
-   * its stand-in's */
-  reach(agent: AgentId): Address | null {
+   * its stand-in's, else that of the live agent in `dir`'s workspace */
+  reach(agent: AgentId, dir: string | null = null): Address | null {
     const own = this.address(agent)
-    return addressAlive(own) ? own : (this.standIn(agent) ?? own)
+    if (addressAlive(own)) return own
+    return this.standIn(agent) ?? (dir ? this.#liveInWorkspace(dir) : null) ?? own
   }
 
   hold({ path }: Subject, held: boolean) {

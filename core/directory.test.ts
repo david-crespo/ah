@@ -159,6 +159,17 @@ test("with its agent's tab gone, a file's requests go to an agent in its workspa
   expect(directory.route(fileSubject(join(dir, "loose.md")))).toEqual(null)
 })
 
+test("with its agent's tab gone, a message goes to an agent in the sender's workspace", () => {
+  const repo = join(dir, "repo")
+  mkdirSync(join(repo, ".jj"), { recursive: true })
+  show({ t2: ["block:2"] })
+  report({ ...start("codex", "th2", "block:2"), cwd: join(repo, "src") })
+  // block:1's pane, and with it its tab, closed long ago
+  expect(directory.reach("block:1", repo)).toEqual(codex("th2"))
+  expect(directory.reach("block:1")).toEqual(null)
+  expect(directory.reach("block:1", join(dir, "other"))).toEqual(null)
+})
+
 test("an agent whose session ended isn't live", () => {
   show({ t1: ["block:1", "block:2", "block:9"] })
   report(start("codex", "th1", "block:1"))

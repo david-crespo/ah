@@ -76,7 +76,9 @@ export async function pickAgentNear(port: number): Promise<AgentId | null> {
 
 /** Send text to agent, or else to the agent a send from block goes to, and
  * say whether it took it or it's held for the next one in the tab. With
- * several agents in the tab and none picked, refuse and list them. */
+ * several agents in the tab and none picked, refuse and list them. Outside
+ * Rex, if agent is gone, the server sends to an agent in this directory's
+ * workspace. */
 export async function sendToTab(
   port: number,
   block: string | null,
@@ -95,7 +97,7 @@ export async function sendToTab(
   }
   const { status } = await callServer<{ status: "sent" | "held" }>(
     serverUrl(port, "core/send"),
-    { body: { block, agent, text } },
+    { body: { block, agent, cwd: process.cwd(), text } },
   )
   return status
 }
