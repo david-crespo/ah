@@ -13,6 +13,11 @@
 // loopback hosts open in the default browser, and links of other schemes
 // (mailto:) in their apps. ⌘[ and ⌘] go back and forward.
 //
+// ⌘F opens a find bar over the page's top right corner, for any page, and
+// ⌘G and ⇧⌘G go to the next and previous match. A page that handles ⌘F
+// itself, like a doc page, keeps it: WKWebView only passes a key the page
+// didn't take on to the menu.
+//
 // Hovering a link shows its address in the bottom left corner, as a
 // browser's status bar does: a script in every frame reports the link under
 // the pointer, and the window draws it over the page.
@@ -132,6 +137,10 @@ func mainMenu() -> NSMenu {
     menuItem("Copy", #selector(NSText.copy(_:)), "c"),
     menuItem("Paste", #selector(NSText.paste(_:)), "v"),
     menuItem("Select All", #selector(NSText.selectAll(_:)), "a"),
+    .separator(),
+    menuItem("Find…", #selector(AppDelegate.showFind(_:)), "f"),
+    menuItem("Find Next", #selector(AppDelegate.findNext(_:)), "g"),
+    menuItem("Find Previous", #selector(AppDelegate.findPrevious(_:)), "G"),
   ])
   add("View", [
     menuItem("Reload", #selector(WKWebView.reload(_:)), "r"),
@@ -356,7 +365,7 @@ let hoveredLinkScript = """
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate,
-  WKScriptMessageHandler
+  WKScriptMessageHandler, NSSearchFieldDelegate
 {
   let options: Options
   var window: NSWindow!
@@ -367,6 +376,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
   /** The hovered link's address, in the bottom left corner */
   var linkStatus: NSView!
   var linkStatusText: NSTextField!
+  /** ⌘F's bar, hidden until opened */
+  var findBar: NSView!
+  var findField: NSSearchField!
   /** The question in the window's sheet, by its connection */
   var asking: [Int32: Asking] = [:]
 
@@ -403,6 +415,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       defer: false)
     window.contentView = webView
     addLinkStatus()
+    addFindBar()
     window.isReleasedWhenClosed = false
     // Dark whatever the system's appearance, title bar and page alike: the
     // web view inherits it, so prefers-color-scheme is dark too
@@ -483,6 +496,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, 
       linkStatus.bottomAnchor.constraint(equalTo: webView.bottomAnchor, constant: -8),
       linkStatus.widthAnchor.constraint(lessThanOrEqualTo: webView.widthAnchor, multiplier: 0.7),
     ])
+  }
+
+  func addFindBar() {
+    findField = NSSearchField()
+    findField.placeholderString = "Find in page"
+    findField.delegate = self
+    findField.translatesAutoresizingMaskIntoConstraints = false
+
+    findBar = NSView()
+    findBar.wantsLayer = true
+    findBar.layer?.backgroundColor = NSColor(white: 0.16, alpha: 1).cgColor
+    findBar.layer?.borderColor = NSColor(white: 0.3, alpha: 1).cgColor
+    findBar.layer?.borderWidth = 1
+    findBar.layer?.cornerRadius = 8
+    findBar.translatesAutoresizingMaskIntoConstraints = false
+    findBar.isHidden = true
+    findBar.addSubview(findField)
+    webView.addSubview(findBar)
+    NSLayoutConstraint.activate([
+      findField.leadingAnchor.constraint(equalTo: findBar.leadingAnchor, constant: 6),
+      findField.trailingAnchor.constraint(equalTo: findBar.trailingAnchor, constant: -6),
+      findField.topAnchor.constraint(equalTo: findBar.topAnchor, constant: 6),
+      findField.bottomAnchor.constraint(equalTo: findBar.bottomAnchor, constant: -6),
+      findField.widthAnchor.constraint(equalToConstant: 240),
+      findBar.topAnchor.constraint(equalTo: webView.topAnchor, constant: 8),
+      findBar.trailingAnchor.constraint(equalTo: webView.trailingAnchor, constant: -8),
+    ])
+  }
+
+  @objc func showFind(_ sender: Any?) {
+    findBar.isHidden = false
+    window.makeFirstResponder(findField)
+    findField.selectText(nil)
+  }
+
+  @objc func findNext(_ sender: Any?) { find(backwards: false) }
+  @objc func findPrevious(_ sender: Any?) { find(backwards: true) }
+
+  /** The next match after the page's selection, which WKWebView selects and
+   * scrolls to. The field's text turns red when there's none. */
+  func find(backwards: Bool) {
+    let query = findField.stringValue
+    if query.isEmpty { return }
+    let configuration = WKFindConfiguration()
+    configuration.backwards = backwards
+    webView.find(query, configuration: configuration) { [weak self] result in
+      self?.findField.textColor = result.matchFound ? .labelColor : .systemRed
+    }
+  }
+
+  /** As the query changes, the match stays where it is if it still matches,
+   * since a search starts after the selection */
+  func controlTextDidChange(_ notification: Notification) {
+    webView.evaluateJavaScript("getSelection().collapseToStart()") { [weak self] _, _ in
+      self?.find(backwards: false)
+    }
+  }
+
+  /** Return goes to the next match, ⇧Return the previous, and Escape closes */
+  func control(
+    _ control: NSControl, textView: NSTextView, doCommandBy selector: Selector
+  ) -> Bool {
+    switch selector {
+    case #selector(NSResponder.insertNewline(_:)):
+      find(backwards: NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
+    case #selector(NSResponder.cancelOperation(_:)):
+      findBar.isHidden = true
+      window.makeFirstResponder(webView)
+    default:
+      return false
+    }
+    return true
   }
 
   func userContentController(
