@@ -355,20 +355,20 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   const head = `<div class="pr-head${dot}">
       <button type="button" class="fold" data-fold="${escapeHtml(pr.bookmark)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>
       <h2><span class="n">${pr.n}.</span> ${title}</h2>
-      ${collapsed && gh ? githubLink(gh) : ""}
       ${pr.interdiff ? prTag(pr.interdiff) : ""}
       ${pr.diff ? stat(pr.files, pr.diff) : ""}
     </div>`
-  if (collapsed) return `<section class="pr collapsed">${head}</section>`
   // Before a first push, all of them are to push, which goes without saying
   const unpushed = pr.pushed ? pr.unpushed : 0
   // Its bookmark is new on the remote, so the button goes by Body
   const fresh = !pr.pushed && pr.commits.length > 0
   const files = pr.files.length
+  const meta = `<div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+    ${runResult(pr)}`
+  if (collapsed) return `<section class="pr collapsed">${head}${meta}</section>`
   return `<section class="pr">
     ${head}
-    <div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
-    ${runResult(pr)}
+    ${meta}
     ${
       files
         ? `<details class="more" ${openAttr(`pr-${pr.bookmark}`)}>

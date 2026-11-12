@@ -122,7 +122,7 @@ main .pr-head h2 {
   flex: 1;
   min-width: 0;
 }
-/* Folds the card to its head line, or opens it */
+/* Folds the card to its head and meta lines, or opens it */
 /* On the title's first line: 24px tall, at 16px and 1.5 */
 main button.fold {
   align-self: flex-start;
@@ -154,9 +154,6 @@ main button.fold svg {
 }
 main button.fold[aria-expanded="true"] svg {
   transform: rotate(90deg);
-}
-main .pr.collapsed {
-  padding-block: 8px;
 }
 main .pr-head .gh-pr {
   font-size: 12.5px;
