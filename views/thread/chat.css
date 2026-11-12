@@ -231,9 +231,11 @@
   left: 4px;
 }
 #conversation .conversation-controls {
+  position: relative;
   display: flex;
   flex: none;
   align-items: flex-end;
+  justify-content: flex-end;
   gap: 8px;
   margin-top: 8px;
 }
@@ -296,7 +298,6 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  margin-left: auto;
   width: 36px;
   height: 36px;
   border: 1px solid var(--chat-line);
@@ -403,7 +404,6 @@
   align-items: center;
   gap: 6px;
   align-self: center;
-  margin-left: auto;
   padding: 3px 10px;
   border: 1px solid var(--chat-line);
   border-radius: 999px;
@@ -424,11 +424,151 @@
 #conversation[data-status="disconnected"] .conversation-status {
   color: var(--chat-ink);
 }
-#conversation
-  .conversation-offline:not([hidden])
-  + .conversation-compose[hidden]
-  + .conversation-toggle {
-  margin-left: 0;
+/* Batch mode: requests wait on the page until the user sends them together.
+   The button is always beside the toggle; while batching, it's a pill with
+   the count that opens the panel listing them. */
+#conversation .conversation-batch-count:empty {
+  display: none;
+}
+#conversation .conversation-batch {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  min-width: 36px;
+  justify-content: center;
+  padding: 0 9px;
+  border: 1px solid var(--chat-line);
+  border-radius: 6px;
+  background: var(--chat-panel);
+  color: var(--chat-muted);
+  box-shadow: 0 4px 12px #0002;
+  cursor: pointer;
+}
+#conversation .conversation-batch:hover {
+  color: var(--chat-ink);
+}
+#conversation .conversation-batch svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#conversation[data-batching] .conversation-batch {
+  border-color: var(--chat-batch);
+  background: var(--chat-batch);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#conversation {
+  --chat-batch: light-dark(#8250df, #a371f7);
+}
+#conversation .conversation-batch-panel {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(360px, calc(100vw - 40px));
+  max-height: min(60dvh, 480px);
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  border: 1px solid var(--chat-line);
+  border-radius: 8px;
+  background: var(--chat-page);
+  box-shadow: 0 8px 28px #0003;
+}
+#conversation .conversation-batch-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--chat-muted);
+}
+#conversation .conversation-batch-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#conversation .conversation-batch-list:empty {
+  display: none;
+}
+#conversation .conversation-batch-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--chat-line);
+  font-size: 13px;
+}
+#conversation .conversation-batch-list li:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+#conversation .conversation-batch-list li > div {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+#conversation .conversation-batch-kind {
+  margin-right: 6px;
+  font-weight: 600;
+}
+#conversation .conversation-batch-remove {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: none;
+  color: var(--chat-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+#conversation .conversation-batch-remove:hover {
+  border-color: var(--chat-line);
+  color: var(--chat-ink);
+}
+#conversation .conversation-batch-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+}
+#conversation .conversation-batch-list:not(:empty) + .conversation-batch-actions {
+  border-top: 1px solid var(--chat-line);
+}
+#conversation .conversation-batch-actions button {
+  padding: 4px 12px;
+  border: 1px solid var(--chat-line);
+  border-radius: 6px;
+  background: var(--chat-panel);
+  color: var(--chat-ink);
+  cursor: pointer;
+}
+#conversation .conversation-batch-discard[data-confirm] {
+  border-color: light-dark(#cf222e, #ff7b72);
+  color: light-dark(#cf222e, #ff7b72);
+}
+#conversation .conversation-batch-actions .conversation-batch-send {
+  border-color: var(--chat-batch);
+  background: var(--chat-batch);
+  color: #fff;
+  font-weight: 600;
 }
 #conversation .conversation-status,
 #conversation .conversation-error,

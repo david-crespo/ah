@@ -12,6 +12,8 @@
   --t-green: light-dark(#1a7f37, #3fb950);
   --t-yellow: light-dark(#9a6700, #d29922);
   --t-red: light-dark(#d1242f, #f85149);
+  /* The conversation's batch color (chat.css) */
+  --t-purple: light-dark(#8250df, #a371f7);
   --t-button: light-dark(#1f883d, #238636);
 }
 
@@ -292,6 +294,10 @@ ah-step:not(:hover) .ah-step-chat[data-state="ready"]:not(:focus-visible) {
 
 .ah-item-action[data-state="pending"] {
   color: var(--t-blue);
+}
+
+.ah-item-action[data-state="batched"] {
+  color: var(--t-purple);
 }
 
 .ah-item-action .spin {
@@ -609,6 +615,10 @@ ah-step[status="dropped"] .ah-step-text {
 
 ah-item :is(.ah-item-status, .ah-step-status)[data-state="pending"] {
   color: var(--t-blue);
+}
+
+ah-item :is(.ah-item-status, .ah-step-status)[data-state="batched"] {
+  color: var(--t-purple);
 }
 
 ah-item :is(.ah-item-status, .ah-step-status)[data-state="error"] {

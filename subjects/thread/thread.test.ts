@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, expect, test } from "vitest"
 import { fileSubject } from "../../model.ts"
 import { LiveDoc } from "../../views/doc/doc.ts"
-import { parseActivity, parseRequest } from "./events.ts"
+import { parseActivity, parseBatch, parseRequest } from "./events.ts"
 import { threadKinds } from "./kinds.ts"
 import { header, render, Thread } from "./thread.ts"
 
@@ -94,6 +94,36 @@ test("a request goes to the bound session, rendered, after the edits it follows"
       `Request ${request.id}: a comment on the passage "there" (after "hello "):`,
       "warmer",
     ])
+  } finally {
+    session.close()
+  }
+})
+
+test("a batch's requests go out together in one post when it's sent", async () => {
+  const session = await inbox()
+  try {
+    const { path, doc } = await markdownFile("text\n")
+    const file = {
+      subject: fileSubject(path),
+      address: () => ({ harness: "claude" as const, socket: session.socket }),
+    }
+    const thread = await markdownThread(file, doc)
+    await thread.batch(parseBatch({ action: "open" }))
+    const chat = (text: string) =>
+      thread.request(parseRequest({ kind: "chat", text }, threadKinds))
+    const first = await chat("one")
+    const second = await chat("two")
+    expect(first.batched).toBe(true)
+    expect(session.posts).toEqual([])
+    await thread.batch(parseBatch({ action: "send" }))
+    expect(session.posts).toHaveLength(1)
+    const content: string[] = JSON.parse(session.posts[0]).message.content.split("\n")
+    expect(content.slice(1)).toEqual([
+      "A batch: the user queued these 2 requests on the page and sent them together.",
+      `Request ${first.request.id}: one`,
+      `Request ${second.request.id}: two`,
+    ])
+    expect((await chat("three")).batched).toBe(false)
   } finally {
     session.close()
   }

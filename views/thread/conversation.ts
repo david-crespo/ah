@@ -2,6 +2,7 @@
 import MarkdownExit from "markdown-exit"
 import type { Request, ThreadEntry } from "../../model.ts"
 import type {
+  BatchInput,
   ThreadSnapshot,
   RequestInput,
   RequestKinds,
@@ -125,6 +126,8 @@ export class Conversation {
   private newMessages: HTMLButtonElement
   private dock: HTMLElement
   private offline: HTMLElement
+  private batchButton: HTMLButtonElement
+  private batchPanel: HTMLElement
   private snapshot: ThreadSnapshot | null = null
   private rows = new Map<string, HTMLElement>()
   /** The time dividers, relabeled on each update so "Yesterday" stays true */
@@ -182,6 +185,18 @@ export class Conversation {
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 3v5a2 2 0 0 1-2 2h-9m3-3-3 3 3 3"/></svg>
           </button>
         </form>
+        <button class="conversation-batch" type="button" aria-expanded="false" aria-controls="conversation-batch-panel">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5 13.5 5 8 7.5 2.5 5z"/><path d="m2.5 8 5.5 2.5L13.5 8"/><path d="m2.5 11 5.5 2.5 5.5-2.5"/></svg>
+          <span class="conversation-batch-count"></span>
+        </button>
+        <div class="conversation-batch-panel" id="conversation-batch-panel" role="dialog" aria-label="Batch" hidden>
+          <p class="conversation-batch-note">Batch is empty</p>
+          <ol class="conversation-batch-list"></ol>
+          <div class="conversation-batch-actions">
+            <button class="conversation-batch-discard" type="button">Discard</button>
+            <button class="conversation-batch-send" type="button"></button>
+          </div>
+        </div>
         <button class="conversation-toggle" type="button" aria-expanded="false" aria-controls="conversation-history" aria-label="Open conversation" aria-keyshortcuts="Meta+I Control+I">
           <span class="conversation-spinner" aria-hidden="true"></span>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 10 4-4 4 4"/></svg>
@@ -208,6 +223,31 @@ export class Conversation {
       if (this.open && bottom) this.feed.scrollTop = this.feed.scrollHeight
     }).observe(this.dock)
     this.offline = this.element.querySelector(".conversation-offline")!
+    this.batchButton = this.element.querySelector(".conversation-batch")!
+    this.batchPanel = this.element.querySelector(".conversation-batch-panel")!
+    this.batchButton.addEventListener("click", () => {
+      const shown = this.batchButton.getAttribute("aria-expanded") === "true"
+      if (this.snapshot?.batching) this.showBatch(!shown)
+      else void this.batch({ action: "open", requests: [] })
+    })
+    this.batchPanel
+      .querySelector(".conversation-batch-send")!
+      .addEventListener("click", () => void this.batch({ action: "send", requests: [] }))
+    this.batchPanel
+      .querySelector(".conversation-batch-discard")!
+      // The second click discards: the window app's web view has no confirm()
+      .addEventListener("click", (event) => {
+        const button = event.currentTarget as HTMLButtonElement
+        if (button.hasAttribute("data-confirm"))
+          return void this.batch({ action: "discard", requests: [] })
+        button.toggleAttribute("data-confirm", true)
+        button.textContent = `Discard ${this.batched().length}?`
+      })
+    document.addEventListener("pointerdown", (event) => {
+      const target = event.target as Node
+      if (!this.batchPanel.contains(target) && !this.batchButton.contains(target))
+        this.showBatch(false)
+    })
     this.toggle.addEventListener("click", () => this.setOpen(!this.open))
     this.form.addEventListener("submit", (event) => {
       event.preventDefault()
@@ -218,7 +258,14 @@ export class Conversation {
       this.saveDraft()
     })
     this.element.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && this.open) {
+      if (
+        event.key === "Escape" &&
+        this.batchButton.getAttribute("aria-expanded") === "true"
+      ) {
+        event.preventDefault()
+        this.showBatch(false)
+        this.batchButton.focus()
+      } else if (event.key === "Escape" && this.open) {
         event.preventDefault()
         this.setOpen(false)
       }
@@ -376,7 +423,15 @@ export class Conversation {
         meta.toggleAttribute("hidden", !meta.textContent)
       }
     }
+    // Requests taken out of the batch leave the conversation
+    const ids = new Set(snapshot.entries.map((entry) => entry.id))
+    for (const [id, row] of this.rows) {
+      if (ids.has(id)) continue
+      row.remove()
+      this.rows.delete(id)
+    }
     this.feed.append(this.since)
+    this.renderBatch()
     this.labelTimes()
     this.showRows()
     if (this.open && added) {
@@ -613,6 +668,94 @@ export class Conversation {
     this.toggle.setAttribute("aria-label", label)
     this.toggle.title = `${label} (⌘I)`
     this.element.toggleAttribute("data-unread", unseen)
+  }
+
+  /** The requests held in the batch, oldest first */
+  private batched(): Request[] {
+    const held = new Set(
+      this.snapshot?.requests.filter((r) => r.status === "batched").map((r) => r.id),
+    )
+    return (this.snapshot?.entries ?? []).filter(
+      (entry): entry is ThreadEntry & Request =>
+        entry.type === "request" && held.has(entry.id),
+    )
+  }
+
+  private async batch(input: BatchInput) {
+    this.reportError("")
+    try {
+      const response = await fetch(new URL("batch", this.threadUrl), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      if (!response.ok) throw new Error(await response.text())
+      if (input.action === "send" || input.action === "discard") this.showBatch(false)
+    } catch (error) {
+      this.reportError(
+        error instanceof Error ? error.message : "Could not change the batch",
+      )
+    }
+  }
+
+  private showBatch(show: boolean) {
+    this.batchPanel.hidden = !show || !this.snapshot?.batching
+    this.batchButton.setAttribute("aria-expanded", String(!this.batchPanel.hidden))
+    const discard = this.batchPanel.querySelector(".conversation-batch-discard")!
+    discard.removeAttribute("data-confirm")
+    discard.textContent = "Discard"
+  }
+
+  /** The batch button: while batching, how many requests it holds, and the
+   * panel listing them */
+  private renderBatch() {
+    const batching = this.snapshot?.batching ?? false
+    const held = this.batched()
+    this.element.toggleAttribute("data-batching", batching)
+    this.batchButton.querySelector(".conversation-batch-count")!.textContent = batching
+      ? String(held.length)
+      : ""
+    const label = batching ? `Batch: ${held.length} held` : "Start batching"
+    this.batchButton.title = label
+    this.batchButton.setAttribute("aria-label", label)
+    this.input.placeholder = batching ? "Add to batch" : "Reply"
+    if (!batching) this.showBatch(false)
+    // The list says what's in it; an empty one says so
+    this.batchPanel.querySelector<HTMLElement>(".conversation-batch-note")!.hidden =
+      held.length > 0
+    const send = this.batchPanel.querySelector<HTMLButtonElement>(
+      ".conversation-batch-send",
+    )!
+    send.textContent = held.length ? `Send ${held.length}` : "Stop batching"
+    this.batchPanel.querySelector<HTMLElement>(".conversation-batch-discard")!.hidden =
+      !held.length
+    this.batchPanel.querySelector(".conversation-batch-list")!.replaceChildren(
+      ...held.map((request) => {
+        const { label, body } = describe(request, this.kinds)
+        const item = document.createElement("li")
+        const text = document.createElement("div")
+        const kind = document.createElement("span")
+        kind.className = "conversation-batch-kind"
+        kind.textContent = label ?? "Message"
+        const quote = request.args.selection
+        const what = document.createElement("span")
+        what.className = "conversation-batch-body"
+        what.textContent = quote ? `“${quote}” ${body}` : body
+        text.append(kind, what)
+        const remove = document.createElement("button")
+        remove.type = "button"
+        remove.className = "conversation-batch-remove"
+        remove.textContent = "×"
+        remove.setAttribute("aria-label", `Take out of the batch: ${body.slice(0, 80)}`)
+        remove.title = "Take out of the batch"
+        remove.addEventListener(
+          "click",
+          () => void this.batch({ action: "remove", requests: [request.id] }),
+        )
+        item.append(text, remove)
+        return item
+      }),
+    )
   }
 
   async send(input: RequestInput): Promise<RequestResult> {

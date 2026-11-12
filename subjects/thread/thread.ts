@@ -18,6 +18,7 @@ import { describeAddress, postTo, addressAlive } from "../../platform/session.ts
 import type { Address, Request, Subject } from "../../model.ts"
 import {
   type ActivityInput,
+  type BatchInput,
   type RequestInput,
   type RequestKinds,
   type RequestResult,
@@ -139,16 +140,35 @@ export class Thread {
   }
 
   /** Log a request and post it to the session, with the context ahead of
-   * it. A failed post leaves it waiting in the log, held for the next agent
-   * to turn up, so it never fails the user's send. */
+   * it, or keep it in the batch if the page has one open. A failed post
+   * leaves it waiting in the log, held for the next agent to turn up, so it
+   * never fails the user's send. */
   request(input: RequestInput): Promise<RequestResult> {
     return this.#serially(async () => {
-      await this.#takeContext()
+      const batched = this.#log.batching
+      // A batch takes the context when it's sent, covering all of it
+      if (!batched) await this.#takeContext()
       const request = await this.#log.request(input)
-      const agentConnected = await this.#deliver([request])
+      const agentConnected = batched
+        ? addressAlive(this.#bound.address())
+        : await this.#deliver([request])
       this.#hold()
       this.#broadcast()
-      return { request, agentConnected }
+      return { request, agentConnected, batched }
+    })
+  }
+
+  /** Open, send, discard, or change the page's batch. Sent, its requests go
+   * to the agent in one post. */
+  batch(input: BatchInput): Promise<void> {
+    return this.#serially(async () => {
+      const sent = await this.#log.batch(input)
+      if (sent.length) {
+        await this.#takeContext()
+        await this.#deliver(sent, true)
+      }
+      this.#hold()
+      this.#broadcast()
     })
   }
 
@@ -192,12 +212,17 @@ export class Thread {
   /** Post the requests, with the context no post has carried ahead of them,
    * and log that they went. Not to a session that's gone, which might still
    * take the post. */
-  async #deliver(requests: Request[]): Promise<boolean> {
+  async #deliver(requests: Request[], batch = false): Promise<boolean> {
     const address = this.#bound.address()
     if (!address || !addressAlive(address)) return false
     const lines = [
       header(this.#options, this.#log.subject, this.#options.port),
       ...this.#unsent,
+      ...(batch
+        ? [
+            `A batch: the user queued these ${requests.length} requests on the page and sent them together.`,
+          ]
+        : []),
       ...requests.map((request) => render(request, this.#options.kinds)),
     ]
     try {

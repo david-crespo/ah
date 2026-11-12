@@ -247,8 +247,10 @@ export interface Activity {
 /** One line of a subject's request log */
 export type ThreadEntry = Request | Activity
 
-/** Where a request stands, worked out from the log */
+/** Where a request stands, worked out from the log. A batched one is held
+ * in the page's batch until the user sends it. */
 export type RequestStatus =
+  | "batched"
   | "waiting"
   | "working"
   | "done"

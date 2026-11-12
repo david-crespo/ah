@@ -52,6 +52,10 @@ const STATUS_ICONS: Record<Status, string> = {
 /** A button's face for each state of its request; `ready` is the button's own */
 const STATE_ICONS = {
   pending: svg(`<circle class="spin" cx="8" cy="8" r="5.5" pathLength="100"/>`),
+  // The conversation's batch icon
+  batched: svg(
+    `<path d="M8 2.5 13.5 5 8 7.5 2.5 5z"/><path d="m2.5 8 5.5 2.5L13.5 8"/><path d="m2.5 11 5.5 2.5 5.5-2.5"/>`,
+  ),
   question: QUESTION_ICON,
   error: svg(
     `<path d="M8 2.8 13.6 12.5H2.4z"/><path d="M8 6.6v2.6"/><circle class="fill" cx="8" cy="10.9" r=".6"/>`,
@@ -68,6 +72,7 @@ const COMMENT_ICON = svg(
 
 const STATE_TITLES: Record<Exclude<ButtonState, "ready">, string> = {
   pending: "Sent; the agent is on it",
+  batched: "In the batch; it goes when you send the batch",
   question: "The agent asked a question",
   error: "The agent reported an error",
 }
@@ -120,6 +125,8 @@ class RequestButton {
     )
     const request = sent && thread?.requests.find((r) => r.id === sent.id)
     switch (request?.status) {
+      case "batched":
+        return "batched"
       case "waiting":
       case "working":
         return "pending"
@@ -326,7 +333,7 @@ class StatusMenu {
    * the last status sent is still with the agent. */
   toggle(button: RequestButton, current: Status, pick: (status: string) => void) {
     if (this.#button === button) return this.close()
-    if (button.state === "pending") return
+    if (button.state === "pending" || button.state === "batched") return
     if (!this.el.isConnected) document.body.append(this.el)
     this.#button = button
     this.#pick = pick
@@ -514,7 +521,7 @@ export class AhItem extends HTMLElement implements Commentable {
     this.#go.el.hidden = !threadUrl
     this.#go.el.inert = !(status === "todo" || status === "hold")
     this.#go.render(GO_ICON, `Go ahead: ${this.id}`)
-    this.#go.el.disabled = this.#go.state === "pending"
+    this.#go.el.disabled = this.#go.state === "pending" || this.#go.state === "batched"
     this.#comment.el.hidden = !threadUrl
     this.#comment.render(COMMENT_ICON, `Comment on ${this.id}`)
   }

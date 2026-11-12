@@ -29,7 +29,8 @@ const pending = new Command("pending")
     const { entries, requests } = await callServer<ThreadSnapshot>(threadUrl(path, port))
     const byId = new Map(entries.map((e) => [e.id, e]))
     for (const state of requests) {
-      if (state.status === "done") continue
+      // A batched request isn't the agent's until the user sends the batch
+      if (state.status === "done" || state.status === "batched") continue
       const request = byId.get(state.id)
       if (!request) continue
       console.log(JSON.stringify({ ...request, status: state.status }))
@@ -105,7 +106,7 @@ const send = new Command("send")
     // A comment on the page quotes what it's on; from the lines, the lines
     const quoted = selection ?? (lines ? linesOf(path, lines) : "")
     await ensureStarted(port)
-    const { request, agentConnected } = await callServer<RequestResult>(
+    const { request, agentConnected, batched } = await callServer<RequestResult>(
       fileUrl(path, port, "request"),
       {
         body: quoted
@@ -113,7 +114,7 @@ const send = new Command("send")
           : { kind: "chat", text, args: {} },
       },
     )
-    console.log(`${agentConnected ? "sent" : "held"} ${request.id}`)
+    console.log(`${batched ? "batched" : agentConnected ? "sent" : "held"} ${request.id}`)
   })
 
 export const message = new Command("message")

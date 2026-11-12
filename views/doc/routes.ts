@@ -119,7 +119,7 @@ export class DocBackend {
         },
       )
     }
-    if (sub === "request") {
+    if (sub === "request" || sub === "batch") {
       return (
         (await threadRoute(req, sub, await this.files.thread(path))) ??
         new Response("not found", { status: 404 })

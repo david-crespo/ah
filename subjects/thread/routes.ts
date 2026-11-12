@@ -1,9 +1,9 @@
-// A thread's routes: `request` under the page it belongs to, from the page,
+// A thread's routes: `request` and `batch` under the page it belongs to, from the page,
 // and `activity` under the files API (subjects/files/routes.ts), from the
 // agent (through `ah message respond` and `pending`): GET for the requests and
 // history, POST for a phase or reply.
 
-import { InputError, parseActivity, parseRequest } from "./events.ts"
+import { InputError, parseActivity, parseBatch, parseRequest } from "./events.ts"
 import type { Thread } from "./thread.ts"
 
 /** `sub` is the path after the page's own; null if it isn't a thread route */
@@ -13,11 +13,15 @@ export async function threadRoute(
   thread: Thread,
 ): Promise<Response | null> {
   if (sub === "activity" && req.method === "GET") return Response.json(thread.state())
-  if ((sub !== "request" && sub !== "activity") || req.method !== "POST") return null
+  if (!["request", "activity", "batch"].includes(sub) || req.method !== "POST") return null
   try {
     const body = await req.json()
     if (sub === "activity") {
       return Response.json({ activity: await thread.activity(parseActivity(body)) })
+    }
+    if (sub === "batch") {
+      await thread.batch(parseBatch(body))
+      return new Response(null, { status: 204 })
     }
     return Response.json(await thread.request(parseRequest(body, thread.kinds)))
   } catch (error) {

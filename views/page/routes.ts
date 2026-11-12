@@ -192,9 +192,10 @@ export class PageBackend {
       this.files.pages(path).broadcast(JSON.stringify({ type: "reload" }))
       return new Response(null, { status: 204 })
     }
-    if (sub === "_ah/request")
+    if (sub === "_ah/request" || sub === "_ah/batch")
       return (
-        (await threadRoute(req, "request", await this.files.thread(path))) ?? notFound()
+        (await threadRoute(req, sub.slice("_ah/".length), await this.files.thread(path))) ??
+        notFound()
       )
     if (sub.startsWith("_ah/")) return notFound()
     if (sub === "") {

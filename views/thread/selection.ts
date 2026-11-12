@@ -126,7 +126,11 @@ export function setUpSelectionComments(
       hidePopover()
       window.getSelection()?.removeAllRanges()
       showToast(
-        result.agentConnected ? "Comment sent" : "Comment saved · no agent connected",
+        result.batched
+          ? "Added to batch"
+          : result.agentConnected
+            ? "Comment sent"
+            : "Comment saved · no agent connected",
       )
     } catch (error) {
       showToast(

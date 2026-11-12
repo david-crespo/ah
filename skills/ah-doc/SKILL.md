@@ -78,7 +78,9 @@ for every `ah` command. opencode has no sandbox.
 ## Handling requests
 
 Each request after the header starts `Request <id>: ` and says what it asks;
-the id is what `ah message respond` takes.
+the id is what `ah message respond` takes. A message that says it's a batch
+holds several requests the user queued and sent together: handle them as the
+ah-page skill says for a batch.
 
 - When finished with a request, post your answer or edit summary with
   `done`. For work that takes a while, post `start` first, which shows a

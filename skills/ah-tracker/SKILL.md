@@ -126,7 +126,8 @@ around the items; the stylesheet and `task_list.js` own all of that.
   them.
 - In chat, refer to items by ID and a short label: "4 (tracker skill)".
 - Work one item at a time and stop for review after each, unless the user has
-  said to run through several. Keep items in separate revs where practical,
+  said to run through several. Go on several items sent as one batch says
+  that: do them all, then stop. Keep items in separate revs where practical,
   and keep tracker IDs out of rev descriptions.
 
 ## Where answers go

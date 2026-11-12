@@ -2,7 +2,7 @@ import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "vitest"
-import { InputError, parseActivity, parseRequest, ThreadLog } from "./events.ts"
+import { InputError, parseActivity, parseBatch, parseRequest, ThreadLog } from "./events.ts"
 import { threadKinds } from "./kinds.ts"
 
 function assert(value: unknown, message = "Assertion failed"): asserts value {
@@ -193,4 +193,36 @@ test("validates payloads and does not persist unknown activity targets", () =>
     assert(chat.args.selection === undefined)
     await rejects(() => log.activity(activity("start", ["missing"])), 404)
     assert(log.entries.length === 0)
+  }))
+
+const batch = (action: string, requests: string[] = []) => parseBatch({ action, requests })
+
+test("a batch holds requests until sent, and what's taken out of it is gone", () =>
+  withLog(async (log, path) => {
+    const before = await log.request(user())
+    await rejects(() => log.batch(batch("send")), 409)
+    await log.batch(batch("open"))
+    const kept = await log.request(user())
+    const removed = await log.request(user())
+    assert(statuses(log) === "waiting,batched,batched")
+    assert(log.undelivered().length === 1)
+    await rejects(() => log.batch(batch("remove", [before.id])), 409)
+    await log.batch(batch("remove", [removed.id]))
+    assert(!log.entries.some((e) => e.id === removed.id))
+    // Reloaded mid-batch, it's still open
+    const reloaded = await ThreadLog.open(path, "/draft.md")
+    assert(reloaded.batching && statuses(reloaded) === "waiting,batched")
+    const sent = await log.batch(batch("send"))
+    assert(sent.map((r) => r.id).join() === kept.id)
+    assert(!log.batching && statuses(log) === "waiting,waiting")
+  }))
+
+test("discarding a batch drops its requests and closes it", () =>
+  withLog(async (log, path) => {
+    await log.batch(batch("open"))
+    await log.request(user())
+    assert((await log.batch(batch("discard"))).length === 0)
+    const reloaded = await ThreadLog.open(path, "/draft.md")
+    assert(!reloaded.batching && reloaded.entries.length === 0)
+    await rejects(() => parseBatch({ action: "close" }), 400)
   }))

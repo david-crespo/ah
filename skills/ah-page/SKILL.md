@@ -104,6 +104,14 @@ Then come the requests, each starting `Request <id>: `:
 - `Request <id>, answering <earlier id>`: the user answering your question
   on an earlier request. Finish both ids together.
 
+A message whose requests follow `A batch: the user queued these N requests
+on the page and sent them together.` comes from the page's batch mode: the
+user collected them while reading and sent them as one instruction. Handle
+every request in it, one after another, without stopping for review between
+them; stop early only for one that needs the user's answer first
+(`needs-reply`), and keep going with the rest if they don't depend on it.
+Post `start` for all of them when you begin, and answer each one as usual.
+
 A comment phrased as a question ("why is this number so high?") wants an
 answer on the page, not an edit; a comment on a page is often about what it
 shows rather than its wording. Edits come from imperatives ("split this by
