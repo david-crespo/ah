@@ -155,9 +155,6 @@ main button.fold svg {
 main button.fold[aria-expanded="true"] svg {
   transform: rotate(90deg);
 }
-main .pr-head .gh-pr {
-  font-size: 12.5px;
-}
 /* Dim, so a title from the PR's body doesn't read as starting with it */
 main .pr-head h2 .n {
   color: var(--muted);

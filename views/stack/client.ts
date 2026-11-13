@@ -141,25 +141,26 @@ function githubLink(gh: GithubPr): string {
 
 /** The PR's link and where it stands on GitHub, with what doesn't match
  * here: its head, saying which side moved, and its base, which should be the
- * PR below it or trunk */
-function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
+ * PR below it or trunk. The link, checks, and review lead the meta line, and
+ * the rest follows the bookmark. */
+function githubMeta(pr: Pr, gh: GithubPr, base: string): [string, string] {
   const link = githubLink(gh)
-  if (gh.state !== "OPEN") return link
-  const notes: string[] = []
-  // Checks and review next to the PR's number, apart from its stack
+  if (gh.state !== "OPEN") return [link, ""]
+  const lead = [link]
   if (gh.checks) {
     const title = CHECKS[gh.checks]
-    notes.push(
+    lead.push(
       `<a class="gh-checks ${gh.checks}" href="${escapeHtml(gh.url)}/checks" target="_blank" rel="noreferrer" title="${title}" aria-label="${title}"></a>`,
     )
   }
   const review = REVIEWS[gh.reviewDecision]
   if (review) {
     const [text, cls, icon] = review
-    notes.push(
+    lead.push(
       `<span class="gh-note gh-review ${cls}" title="Review on GitHub: ${text}"><svg viewBox="0 0 24 24" aria-label="${text}">${icon}</svg></span>`,
     )
   }
+  const notes: string[] = []
   // From a cache an older ah wrote, it has no stack
   if (gh.stack) {
     const { number, size, position } = gh.stack
@@ -189,7 +190,7 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): string {
   }
   if (base && gh.baseRefName !== base)
     notes.push(note(`base is ${gh.baseRefName} on GitHub, ${base} here`, "warn"))
-  return link + notes.join("")
+  return [lead.join(""), notes.join("")]
 }
 
 /** Pushes and fetches from this page, by the bookmark of the PR they were
@@ -363,7 +364,8 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   // Its bookmark is new on the remote, so the button goes by Body
   const fresh = !pr.pushed && pr.commits.length > 0
   const files = pr.files.length
-  const meta = `<div class="pr-meta">${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${gh ? githubMeta(pr, gh, base) : ""}</div>
+  const [ghLead, ghNotes] = gh ? githubMeta(pr, gh, base) : ["", ""]
+  const meta = `<div class="pr-meta">${ghLead}${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${ghNotes}</div>
     ${runResult(pr)}`
   if (collapsed) return `<section class="pr collapsed">${head}${meta}</section>`
   return `<section class="pr">
