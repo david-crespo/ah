@@ -310,8 +310,9 @@ main .commit {
   margin: 0;
 }
 /* Between a PR's commits still to push and the ones its remote has: a bar
- * in place of the lines above and below it */
-main .commits > li.to-push {
+ * in place of the lines above and below it. A folded card has it last. */
+main .commits > li.to-push,
+main .pr.collapsed > .to-push {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -331,6 +332,9 @@ main .commits > li.to-push {
   background-clip: padding-box;
   border-radius: 1px;
   border-bottom-color: transparent;
+}
+main .pr.collapsed > .to-push {
+  margin-top: 10px;
 }
 main .commits > li:has(+ .to-push) {
   border-bottom-color: transparent;

@@ -372,7 +372,13 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   const [ghLead, ghNotes] = gh ? githubMeta(pr, gh, base) : ["", ""]
   const meta = `<div class="pr-meta">${ghLead}${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${ghNotes}</div>
     ${runResult(pr)}`
-  if (collapsed) return `<section class="pr collapsed">${head}${meta}</section>`
+  // Folded, the bar for its commits still to push stands in for them
+  if (collapsed) {
+    const bar = unpushed
+      ? `<div class="to-push"><span>${toPushText(pr.commits.slice(0, unpushed))}</span>${pushButton(pr)}</div>`
+      : ""
+    return `<section class="pr collapsed">${head}${meta}${bar}</section>`
+  }
   return `<section class="pr">
     ${head}
     ${meta}
