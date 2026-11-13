@@ -8,12 +8,13 @@
 // (subjects/thread/) and the dashboard record are the same for both.
 
 import { spawn } from "node:child_process"
-import { existsSync, mkdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs"
 import { text } from "node:stream/consumers"
-import { basename, dirname, join } from "node:path"
+import { basename, dirname, join, relative } from "node:path"
 import { Command, Option } from "@commander-js/extra-typings"
 import { fileKind } from "../model.ts"
-import { die, portOption } from "./shared.ts"
+import { rootFinder } from "../core/workspace.ts"
+import { die, pickOne, portOption } from "./shared.ts"
 import {
   absolute,
   newPathOrDie,
@@ -29,7 +30,7 @@ import { openFloat } from "../platform/rex.ts"
 import { mergeDisk } from "../views/doc/merge.ts"
 import { docFormat } from "../views/doc/doc.ts"
 import { STACK_FILE } from "../views/stack/data.ts"
-import { stackJson, stackPage } from "../views/stack/file.ts"
+import { findStacks, stackJson, stackPage, type FoundStack } from "../views/stack/file.ts"
 import { HOME_FILE } from "../views/home/data.ts"
 import { homeJson, homePage } from "../views/home/file.ts"
 
@@ -63,6 +64,47 @@ function ensureApp(
   if (existsSync(json)) return
   writeFileSync(json, data[1](title))
   console.log(`wrote ${absolute(json)}`)
+}
+
+/** The ago in "3h ago", from a time in ms */
+function ago(ms: number): string {
+  const mins = Math.max(0, Math.round((Date.now() - ms) / 60_000))
+  if (mins < 60) return `${mins}m ago`
+  if (mins < 48 * 60) return `${Math.round(mins / 60)}h ago`
+  return `${Math.round(mins / 1440)}d ago`
+}
+
+/** With no file, the stack page in this workspace's notes: the only one, or
+ * the one the user picks from several */
+async function pickStack(): Promise<string> {
+  const cwd = realpathSync(process.cwd())
+  const root = rootFinder()(cwd) ?? cwd
+  const stacks = findStacks([...new Set([root, cwd])].map((d) => join(d, ".claude/notes")))
+  const line = (s: FoundStack) =>
+    `${s.title}  ${relative(root, s.page)}  (${ago(s.modified)})`
+  if (!stacks.length) {
+    die(
+      "ah tool stack: no stack pages in .claude/notes here; start one with ah tool stack .claude/notes/<date>-<slug>-stack/index.html --title '...'",
+    )
+  }
+  let stack = stacks[0]
+  if (stacks.length > 1) {
+    if (!process.stdin.isTTY) {
+      const list = stacks.map((s) => `  ${line(s)}`).join("\n")
+      die(
+        `ah tool stack: ${stacks.length} stacks here; run in a terminal to pick one, or pass a file:\n${list}`,
+      )
+    }
+    const picked = await pickOne(
+      "Which stack?",
+      stacks.map((s) => ({ name: line(s), value: s })),
+    )
+    if (!picked) die("ah: no stack picked, nothing shown")
+    stack = picked
+  } else {
+    console.error(`ah: opening ${line(stack)}`)
+  }
+  return stack.page
 }
 
 /** Any URL, like a diff review tool's page: shown in a window or
@@ -230,13 +272,19 @@ const page = new Command("page")
 const stack = new Command("stack")
   .summary("A stack of PRs: their commits and diff stats")
   .description(
-    `Open a stack's page: the PRs listed in the stack.json next to it, newest first, each with its commits and diff stats from jj, redrawn when a jj operation lands. Each diff stat is a button that opens that commit's or PR's diff in skepsis, whose comments go to the agent the page is bound to; AH_SKEPSIS in the server's environment is the command that runs skepsis, else skepsis on PATH. A PR with commits to push has a Push button: the page's ah window shows a native sheet listing what the push would send, and the server runs \`jj git push --bookmark\` only if the user clicks Push there (a page outside ah's window can't push); for a bookmark not on the remote yet it also opens the PR with \`gh pr create\`, titled and described from the PR's body file, into the PR below it if that one is open on GitHub, else trunk, and puts it in the GitHub stack of the PR below it, or makes one of the open PRs under it, when the repo has stacks; pushing from the page is the user's action, and an agent never calls its route. If the file isn't there, ah writes it and a stack.json to fill in, which needs --title. By convention a stack goes at .claude/notes/<date>-<slug>-stack/index.html. ${BINDING}`,
+    `Open a stack's page: the PRs listed in the stack.json next to it, newest first, each with its commits and diff stats from jj, redrawn when a jj operation lands. Each diff stat is a button that opens that commit's or PR's diff in skepsis, whose comments go to the agent the page is bound to; AH_SKEPSIS in the server's environment is the command that runs skepsis, else skepsis on PATH. A PR with commits to push has a Push button: the page's ah window shows a native sheet listing what the push would send, and the server runs \`jj git push --bookmark\` only if the user clicks Push there (a page outside ah's window can't push); for a bookmark not on the remote yet it also opens the PR with \`gh pr create\`, titled and described from the PR's body file, into the PR below it if that one is open on GitHub, else trunk, and puts it in the GitHub stack of the PR below it, or makes one of the open PRs under it, when the repo has stacks; pushing from the page is the user's action, and an agent never calls its route. If the file isn't there, ah writes it and a stack.json to fill in, which needs --title. By convention a stack goes at .claude/notes/<date>-<slug>-stack/index.html. With no file, ah looks for stack pages in .claude/notes of this workspace, most recently changed first: it opens the only one, or from a terminal asks which of several, and says so on stderr. ${BINDING}`,
   )
-  .argument("<file>")
+  .argument("[file]", "The stack's index.html; omit it to open one found in this workspace")
   .option("--title <title>", "A new stack's title")
   .addOption(portOption())
   .action(async (file, { title, port }) => {
-    ensureApp("stack", file, title, stackPage, [STACK_FILE, stackJson])
+    if (!file) {
+      if (title)
+        die("ah tool stack: a new stack needs a path: ah tool stack <file> --title")
+      file = await pickStack()
+    } else {
+      ensureApp("stack", file, title, stackPage, [STACK_FILE, stackJson])
+    }
     await openFile(openablePathOrDie(file), "window", port)
   })
 

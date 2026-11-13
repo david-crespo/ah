@@ -1,6 +1,8 @@
 // What every group's commands share: the port, starting the server, reading
 // the server's responses, and erroring out.
 
+import { styleText } from "node:util"
+import select from "@inquirer/select"
 import { InvalidArgumentError, Option } from "@commander-js/extra-typings"
 import { DEFAULT_PORT, ensureServer } from "../platform/server.ts"
 
@@ -66,3 +68,44 @@ function parseInteger(value: string): number {
 /** `-p, --port`, on every command that starts or talks to the server */
 export const portOption = (description = "Port the server is on") =>
   new Option("-p, --port <port>", description).argParser(parseInteger).default(DEFAULT_PORT)
+
+/** Let the user pick one of `choices` in the terminal, or null if they quit
+ * with q, Ctrl+C, or Ctrl+D. Draws on stderr, since stdout is for a page's
+ * URL. */
+export async function pickOne<T>(
+  message: string,
+  choices: { name: string; value: T }[],
+): Promise<T | null> {
+  // q quits, which select has no key for
+  const quit = new AbortController()
+  const onKey = (_: string, key?: { name?: string }) => {
+    if (key?.name === "q") quit.abort()
+  }
+  process.stdin.on("keypress", onKey)
+  try {
+    return await select(
+      {
+        message,
+        choices,
+        theme: {
+          // j and k move too
+          keybindings: ["vim"],
+          style: {
+            keysHelpTip: (keys: [string, string][]) =>
+              [...keys, ["q", "quit"]]
+                .map(([k, action]) => `${styleText("bold", k)} ${styleText("dim", action)}`)
+                .join(styleText("dim", " • ")),
+          },
+        },
+      },
+      { output: process.stderr, signal: quit.signal },
+    )
+  } catch (e) {
+    if (e instanceof Error && ["AbortPromptError", "ExitPromptError"].includes(e.name)) {
+      return null
+    }
+    throw e
+  } finally {
+    process.stdin.off("keypress", onKey)
+  }
+}

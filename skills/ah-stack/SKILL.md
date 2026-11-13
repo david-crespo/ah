@@ -25,6 +25,11 @@ directory of its own. ah writes the page and a `stack.json` next to it, opens
 it in a window, and binds it to this session. Run the same command without
 `--title` to open an existing one.
 
+To reopen a stack without remembering its path, run `ah tool stack` with no
+file. It looks in this workspace's `.claude/notes` and opens the most recently
+changed stack page; with several, the user picks one in the terminal, so run
+it with a path when you know which one you want.
+
 ## stack.json
 
 ```json
