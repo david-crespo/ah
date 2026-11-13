@@ -117,14 +117,14 @@ ah-page skill says for a batch.
   "downleveling", em-dash chains, fake gravity. Match the register of the
   surrounding text. Keep the meaning; don't pad. As with comments, if the
   identical tic recurs elsewhere in the document, fix it there too.
-- An edit notice, a line starting `Edit notice:`: the file changed on disk
-  since the last request: the user's saves in an editor, or your own edits
-  echoed back. It gives one splice covering everything that changed in that
-  window (what was inserted, deleted or replaced, and the text before it),
-  quoted as JSON strings. If it matches
-  changes you just made, ignore the notice. Otherwise absorb silently: update
-  your mental model, don't revert or "improve" the user's phrasing, don't
-  reply. If an Edit fails to match afterwards, re-read the file. Edit notices
+- An edit notice (a line starting with `Edit notice:`): the file changed on
+  disk since the last request, from the user's editor saves or your own edits
+  echoed back. It has a `; `-separated clause for each changed stretch (what
+  was inserted, deleted, or replaced, and the text before it), with text
+  quoted as JSON strings. If it leaves changes out and tells you to re-read
+  the file, do so. Ignore stretches that match edits you just made, and
+  absorb the rest silently: update your mental model, don't revert or
+  "improve" the user's phrasing, and don't reply. If an Edit fails to match afterwards, re-read the file. Edit notices
   never arrive on their own: they share a message with the request they are
   context for, on the line before it.
 - ah configures helix (the page's editor pane) to reload external edits and

@@ -43,7 +43,7 @@ On a markdown file, a request can be preceded by a context line describing how t
 Edit notice: since the last request, the file on disk replaced "<old>" with "<new>" after "<40 characters before>"
 ```
 
-The text is JSON-quoted so the notice stays on a single line. If a change only adds or removes text, the notice uses `inserted` or `deleted` instead of `replaced`.
+Each stretch of lines that changed gets its own clause, trimmed to the characters that changed, with clauses separated by `; `. So a small edit of yours far from a big one of the agent's still shows up rather than being cut off. The snippets are JSON-quoted so the notice stays on a single line. If a change only adds or removes text, its clause uses `inserted` or `deleted` instead of `replaced`. Past about 8000 characters, the notice ends with how many changes it left out and tells the agent to re-read the file.
 
 ### Held requests
 

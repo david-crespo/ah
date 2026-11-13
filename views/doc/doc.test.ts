@@ -51,3 +51,26 @@ test("the edit window covers every change since the last comment, once", async (
   await doc.refresh()
   expect(doc.takeEdit()).toEqual(null)
 })
+
+test("an edit notice keeps far-apart changes separate, so a small one isn't cut off", async () => {
+  const middle = "unchanged line\n".repeat(300)
+  const { path, doc } = await markdownFile(`# Title\n${middle}the end, with a typpo\n`)
+  await writeFile(path, `# New Title\n${middle}the end, with a typo\n`)
+  await doc.refresh()
+  expect(doc.takeEdit()).toEqual(
+    `Edit notice: since the last request, the file on disk inserted "New " after "# "; deleted "p" after ${JSON.stringify(middle.slice(-21) + "the end, with a typ")}`,
+  )
+})
+
+test("an edit notice past its length says how many changes it left out", async () => {
+  const lines = (word: string) =>
+    Array.from({ length: 20 }, (_, i) => `${i} ${word.repeat(300)}\n`)
+  const { path, doc } = await markdownFile(lines("a").join("\n"))
+  await writeFile(path, lines("b").join("\n"))
+  await doc.refresh()
+  const notice = doc.takeEdit()!
+  const left = Number(notice.match(/; and made (\d+) more changes, so re-read it$/)![1])
+  expect(left).toBeGreaterThan(0)
+  expect(notice.match(/replaced/g)!.length + left).toEqual(20)
+  expect(notice.length).toBeLessThan(8100)
+})

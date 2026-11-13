@@ -351,8 +351,7 @@ type Change = { from: number; to: number; insert: string }
 /** The changes that turn `before` into `after`, a run of whole lines each, in
  * order and as offsets into `before`, the way CodeMirror takes them. A
  * reload or merge applied this way leaves a cursor outside them where it
- * was. Only the CodeMirror pane uses it, which nothing ships; it's here
- * rather than there so its tests run without CodeMirror's packages. */
+ * was. The CodeMirror pane uses it, and so do edit notices (doc.ts). */
 export function lineChanges(before: string, after: string): Change[] {
   const lines = before.split("\n")
   const next = after.split("\n")

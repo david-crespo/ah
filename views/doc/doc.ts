@@ -2,16 +2,23 @@
 // and pushed to every page showing it. One per open file, from `ah tool
 // doc` until close.
 //
-// It also keeps an edit window: disk changes since the last
-// comment (helix saves, and the agent's own edits echoed back) accumulate
-// from the text they started from, and the next comment carries them as one
-// splice, so the session's picture of the file stays current without a
-// re-read and without being woken for every save.
+// It also keeps an edit window: disk changes since the last comment (Helix
+// saves, and the agent's own edits echoed back) accumulate from the text
+// they started from. The next comment includes an edit notice with a splice
+// for each run of changed lines, trimmed to the changed characters. That
+// keeps the session's view of the file current without a re-read or waking
+// the agent on every save, and separate splices keep a small user edit far
+// from a large agent edit from being truncated.
 
 import { type FSWatcher, watch } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { basename, dirname } from "node:path"
+import { lineChanges } from "./merge.ts"
 import { splice } from "./splice.ts"
+
+/** Past this many characters, an edit notice stops listing changes and says
+ * how many it left out */
+const MAX_NOTICE = 8000
 
 /** How the preview renders a file: AsciiDoc for .adoc and .asciidoc, and
  * markdown for anything else */
@@ -73,18 +80,30 @@ export class LiveDoc {
     const base = this.#windowBase
     this.#windowBase = null
     if (base === null || base === this.text) return null
-    const { start, delLen, insert } = splice(base, this.text)
     // Quoted as JSON strings, so newlines in them keep the notice one line
     const quote = (text: string) => JSON.stringify(text.slice(0, 2000))
-    const removed = base.slice(start, start + delLen)
-    const change = !removed
-      ? `inserted ${quote(insert)}`
-      : !insert
-        ? `deleted ${quote(removed)}`
-        : `replaced ${quote(removed)} with ${quote(insert)}`
-    const before = base.slice(Math.max(0, start - 40), start)
-    const at = before ? ` after ${JSON.stringify(before)}` : " at the start"
-    return `Edit notice: since the last request, the file on disk ${change}${at}`
+    const changes = lineChanges(base, this.text).map(({ from, to, insert: lines }) => {
+      // Trimmed from whole lines to the characters that changed
+      const { start, delLen, insert } = splice(base.slice(from, to), lines)
+      const at = from + start
+      const removed = base.slice(at, at + delLen)
+      const change = !removed
+        ? `inserted ${quote(insert)}`
+        : !insert
+          ? `deleted ${quote(removed)}`
+          : `replaced ${quote(removed)} with ${quote(insert)}`
+      const before = base.slice(Math.max(0, at - 40), at)
+      return `${change}${before ? ` after ${JSON.stringify(before)}` : " at the start"}`
+    })
+    let notice = "Edit notice: since the last request, the file on disk"
+    for (const [i, change] of changes.entries()) {
+      if (i && notice.length + change.length > MAX_NOTICE) {
+        const left = changes.length - i
+        return `${notice}; and made ${left} more change${left === 1 ? "" : "s"}, so re-read it`
+      }
+      notice += `${i ? ";" : ""} ${change}`
+    }
+    return notice
   }
 
   /** The text as the page takes it, also sent when a page connects */
