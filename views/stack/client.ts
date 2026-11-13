@@ -349,12 +349,18 @@ function commitList(commits: Commit[], unpushed = 0, button = ""): string {
 const CHEVRON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>`
 
 function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
-  const collapsed = isCollapsed(folds[pr.bookmark], gh)
+  const files = pr.files.length
+  // Like a merged PR whose commits left the stack: nothing to unfold
+  const empty = !files && !pr.commits.length
+  const collapsed = empty || isCollapsed(folds[pr.bookmark], gh)
   const title = escapeHtml(gh?.title ?? pr.title)
   // A dot on the graph for its commits, which aren't drawn
   const dot = collapsed && pr.commits.length ? " dot" : ""
+  const fold = empty
+    ? ""
+    : `<button type="button" class="fold" data-fold="${escapeHtml(pr.bookmark)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>`
   const head = `<div class="pr-head${dot}">
-      <button type="button" class="fold" data-fold="${escapeHtml(pr.bookmark)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>
+      ${fold}
       <h2><span class="n">${pr.n}.</span> ${title}</h2>
       ${pr.interdiff ? prTag(pr.interdiff) : ""}
       ${pr.diff ? stat(pr.files, pr.diff) : ""}
@@ -363,7 +369,6 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   const unpushed = pr.pushed ? pr.unpushed : 0
   // Its bookmark is new on the remote, so the button goes by Body
   const fresh = !pr.pushed && pr.commits.length > 0
-  const files = pr.files.length
   const [ghLead, ghNotes] = gh ? githubMeta(pr, gh, base) : ["", ""]
   const meta = `<div class="pr-meta">${ghLead}${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${ghNotes}</div>
     ${runResult(pr)}`
