@@ -354,8 +354,9 @@ function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
   const empty = !files && !pr.commits.length
   const collapsed = empty || isCollapsed(folds[pr.bookmark], gh)
   const title = escapeHtml(gh?.title ?? pr.title)
-  // A dot on the graph for its commits, which aren't drawn
-  const dot = collapsed && pr.commits.length ? " dot" : ""
+  // A dot on the graph for its commits, which aren't drawn, or for a merged
+  // PR whose commits have left the stack, so it still has its place on the line
+  const dot = collapsed ? " dot" : ""
   const fold = empty
     ? ""
     : `<button type="button" class="fold" data-fold="${escapeHtml(pr.bookmark)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>`
