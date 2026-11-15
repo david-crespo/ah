@@ -73,7 +73,12 @@ function app(
     asked.push(q)
     return await answer(q)
   }
-  const routes = stackApp(async () => {}, confirm, spr)
+  const routes = stackApp(
+    async () => {},
+    async () => {},
+    confirm,
+    spr,
+  )
   const run = async (command: string, tip: string | null, message = "") => {
     const req = new Request("http://127.0.0.1:7521/view/page/stack-1/_ah/spr", {
       method: "POST",

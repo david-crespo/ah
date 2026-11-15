@@ -14,17 +14,27 @@ import { noStore } from "../page/routes.ts"
 import { ensureBody, readStack, STACK_FILE, stackOpsDir } from "./data.ts"
 import { type GhRun, ghRun, readGithub } from "./github.ts"
 import { type AiRun, aiRun, draftMessage } from "./message.ts"
-import { diffArgs, openSkepsis } from "./skepsis.ts"
+import { type DiffRequest, diffArgs } from "./skepsis.ts"
 import { readStatus, runSpr, type SprRun, sprRun } from "./spr.ts"
 
 const json = (data: unknown) => Response.json(data, { headers: noStore })
 const failed = (e: Error) => new Response(e.message, { status: 500 })
 const done = () => new Response(null, { status: 204 })
 
-/** `openDoc` opens a PR's body. `confirm`, `spr`, `gh` and `ai` are for
- * tests, which answer the sheet and stand in for jj-spr, gh and ai. */
+/** Open a diff of the repo at `cwd` in skepsis, with comments going to the
+ * agent the page at `page` is bound to */
+export type OpenDiff = (spec: {
+  cwd: string
+  diff: DiffRequest
+  page: string
+}) => Promise<void>
+
+/** `openDoc` opens a PR's body, and `openDiff` a diff stat's diff. `confirm`,
+ * `spr`, `gh` and `ai` are for tests, which answer the sheet and stand in
+ * for jj-spr, gh and ai. */
 export function stackApp(
   openDoc: OpenFile,
+  openDiff: OpenDiff,
   confirm: Confirm = confirmInWindow,
   spr: SprRun = sprRun,
   gh: GhRun = ghRun,
@@ -36,13 +46,13 @@ export function stackApp(
       if (sub === "_ah/stack-github") return await readGithub(path, gh).then(json, failed)
       if (sub === "_ah/stack-status") return await readStatus(path, spr).then(json, failed)
       if (sub === "_ah/skepsis" && req.method === "POST") {
-        // Only a stack's page starts processes
+        // Only a stack's page opens diffs
         if (!(await stat(join(dirname(path), STACK_FILE)).catch(() => null))) return null
         const diff = diffArgs(await req.json().catch(() => null))
         if (!diff) return new Response("bad diff", { status: 400 })
         // At the root, since jj reads skepsis's paths relative to where it runs
         const cwd = rootFinder()(dirname(path)) ?? dirname(path)
-        return await openSkepsis(cwd, diff, agent).then(done, failed)
+        return await openDiff({ cwd, diff, page: path }).then(done, failed)
       }
       if (sub === "_ah/pr-body" && req.method === "POST") {
         const { tip }: { tip?: unknown } = await req.json().catch(() => ({}))

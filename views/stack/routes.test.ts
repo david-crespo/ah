@@ -8,7 +8,10 @@ import { LiveReload } from "../page/files.ts"
 import { STACK_FILE } from "./data.ts"
 import { stackApp } from "./routes.ts"
 
-const app = stackApp(async () => {})
+const app = stackApp(
+  async () => {},
+  async () => {},
+)
 
 test("a stack's page is told its data changed, and to reload for anything else", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ah-live-")))

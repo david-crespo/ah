@@ -10,6 +10,10 @@ There are three kinds:
 
 A session starting in a workspace with old files, or on a machine with setup problems, is told to run `ah doctor` and to offer the user the changes rather than make them unasked.
 
+## skepsis hosted in the server
+
+A stack page's diff buttons open skepsis in the server, at `/view/skepsis/<id>/` on the API port, rather than starting a separate skepsis process. ah no longer reads `AH_SKEPSIS`, so remove it from the server's environment. skepsis windows that were open show a 404 or a closed connection after the restart; click the diff stat again.
+
 ## Views renamed doc and page
 
 **State version 1.** The thread logs moved from `~/.local/state/ah/markdown/` and `html/` to `doc/` and `page/`, and the GitHub cache from `~/.cache/ah/markdown/` to `doc/`. Where both directories had a log for the same file, the newer one was kept.

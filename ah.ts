@@ -9,8 +9,9 @@
 // - cli/: the commands, and the clients of the server's routes they call.
 //   The server's code is the four layers under it.
 // - views/<name>/: a view's page and routes (/view/<name>/): the dashboard,
-//   and the doc and page subject types that serve a file's views, and the
-//   stack and home, apps on pages (views/page/app.ts). What more than one view uses is at the top of views/ (the terminal theme,
+//   and the doc and page subject types that serve a file's views, the
+//   stack and home, apps on pages (views/page/app.ts), and skepsis,
+//   a diff review. What more than one view uses is at the top of views/ (the terminal theme,
 //   GitHub's markdown styles) and in views/thread/ (the conversation panel
 //   and selection popover).
 // - core/: the agents, their registry, the tab titles they give Rex tabs,
@@ -34,7 +35,8 @@ import { Dashboard } from "./views/dashboard/routes.ts"
 import { DocBackend } from "./views/doc/routes.ts"
 import { PageBackend } from "./views/page/routes.ts"
 import { pageScripts } from "./views/page/upgrade.ts"
-import { stackApp } from "./views/stack/routes.ts"
+import { type OpenDiff, stackApp } from "./views/stack/routes.ts"
+import { SkepsisView } from "./views/skepsis/routes.ts"
 import { homeApp } from "./views/home/routes.ts"
 import { tool } from "./cli/tool.ts"
 import { message } from "./cli/message.ts"
@@ -55,6 +57,7 @@ import { frameAncestors, gateHeaders, requestGate } from "./platform/origin.ts"
 import { themeCss } from "./views/theme.ts"
 import { type AgentId, type FileKind, fileKind, type RexState } from "./model.ts"
 import { showPage, windows } from "./cli/files.ts"
+import { showUrl } from "./platform/window.ts"
 import {
   onRexHealth,
   type RexHealth,
@@ -218,12 +221,27 @@ async function serve(port: number) {
     const { url, views } = await files.bind(path, null, agent)
     await showPage("window", new URL(url, `http://127.0.0.1:${port}`), path, views)
   }
+  // A stack page's diff stats: the diff in skepsis, whose comments go to the
+  // agent the page is bound to when they're sent. Its URL is the same for
+  // the same diff, so a second click brings the first window forward.
+  const skepsisView = new SkepsisView((spec, text) =>
+    core.sendTo(pageBackend.files.binding(spec.page), text, spec.cwd),
+  )
+  const openDiff: OpenDiff = async (spec) => {
+    const path = await skepsisView.open(spec)
+    await showUrl(
+      "window",
+      `http://127.0.0.1:${port}${path}`,
+      { name: "skepsis", badge: "S", color: "#475569" },
+      true,
+    )
+  }
   const pageBackend = new PageBackend(
     port,
     pagesPort,
     core.directory,
     core.trackers,
-    [stackApp(openFile), homeApp(() => core.agents(), openFile)],
+    [stackApp(openFile, openDiff), homeApp(() => core.agents(), openFile)],
     upgrades,
   )
   const dashboardBackend = new Dashboard({
@@ -236,6 +254,7 @@ async function serve(port: number) {
     dashboard: dashboardBackend,
     doc: docBackend,
     page: pageBackend,
+    skepsis: skepsisView,
   } satisfies Record<string, ViewRoutes>
 
   // One watcher for everything that follows the terminal, and one agent

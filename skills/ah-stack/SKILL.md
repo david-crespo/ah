@@ -97,9 +97,9 @@ in skepsis. After a push, the commits changed since are tagged new or
 changed, and a changed PR has a tag by its diff stat. A changed tag opens the
 interdiff: what changed apart from moving onto new parents. Comments sent from
 skepsis come to the agent the page is bound to as messages; treat them as the
-user's. The server runs skepsis with `AH_SKEPSIS` from its environment (an
-absolute command like `node /Users/me/skepsis/cli.ts`), else `skepsis` on
-PATH. If a button has a red outline, its tooltip has the error.
+user's. A second click on the same diff brings its window forward rather
+than opening another. The server hosts skepsis itself. If a button has a red
+outline, its tooltip has the error.
 
 ## Pushing, landing, and syncing
 

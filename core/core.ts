@@ -30,6 +30,7 @@ import {
 } from "../platform/session.ts"
 import {
   type Address,
+  type AgentId,
   type AgentRef,
   fileSubject,
   HARNESSES,
@@ -111,6 +112,13 @@ const tabOf = (rex: RexState | null, block: string) =>
   null
 
 type Listener = (registry: Registry, blocks: string[]) => void
+
+/** No agent to send to: none given, or it can't be reached */
+export class NoAgent extends Error {
+  constructor() {
+    super("no agent to send to")
+  }
+}
 
 export class Core {
   readonly registry: Registry
@@ -487,12 +495,11 @@ export class Core {
       const agent = isString(body.agent) ? body.agent : null
       if (!block) {
         const cwd = isString(body.cwd) ? body.cwd : null
-        const address = agent && this.directory.reach(agent, cwd)
-        if (!address) return new Response("no agent to send to", { status: 409 })
         try {
-          await postTo(address, `${RELAYED}\n\n${body.text}`)
+          await this.sendTo(agent, body.text, cwd)
         } catch (e) {
-          return new Response(`couldn't post to ${agent}: ${e}`, { status: 502 })
+          const status = e instanceof NoAgent ? 409 : 502
+          return new Response((e as Error).message, { status })
         }
         return Response.json({ status: "sent" })
       }
@@ -506,6 +513,23 @@ export class Core {
     }
     if (rest !== "") return new Response("not found", { status: 404 })
     return Response.json(this.agents(new URL(req.url).searchParams.has("all")))
+  }
+
+  /** Post `text` to `agent` as a message from a tool outside Rex, like
+   * skepsis's Send, or if it's gone, to an agent in the workspace of `cwd`.
+   * Throws NoAgent if there's none to reach. */
+  async sendTo(
+    agent: AgentId | null,
+    text: string,
+    cwd: string | null = null,
+  ): Promise<void> {
+    const address = agent && this.directory.reach(agent, cwd)
+    if (!address) throw new NoAgent()
+    try {
+      await postTo(address, `${RELAYED}\n\n${text}`)
+    } catch (e) {
+      throw new Error(`couldn't post to ${agent}: ${e}`)
+    }
   }
 
   /** The live agents, or with `all`, also the ones that aren't in a block

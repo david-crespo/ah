@@ -48,6 +48,11 @@ export const frameAncestors = (framedBy: number) =>
     .map((h) => `http://${h}`)
     .join(" ")}`
 
+/** A redirect to `location`, a path on the request's own origin. Relative,
+ * since `req.url` says http:// even for a client that came in over HTTPS. */
+export const redirect = (location: string) =>
+  new Response(null, { status: 302, headers: { location } })
+
 /** The headers the gate reads, from a fetch Request or a Node upgrade
  * request's headers */
 export function gateHeaders(
