@@ -188,8 +188,12 @@ export async function showUrl(
 }
 
 /** A file's window name: its own name, or its directory's for an index.html,
- * less the date notes start with */
+ * less the date notes start with. A directory called page is there to keep
+ * the page apart from its tool's other files, so the name is the directory's
+ * above it. */
 export function windowName(path: string): string {
-  const name = basename(path) === "index.html" ? basename(dirname(path)) : basename(path)
-  return name.replace(/^\d{4}-\d{2}-\d{2}-/, "")
+  let named = path
+  if (basename(named) === "index.html") named = dirname(named)
+  if (named !== path && basename(named) === "page") named = dirname(named)
+  return basename(named).replace(/^\d{4}-\d{2}-\d{2}-/, "")
 }
