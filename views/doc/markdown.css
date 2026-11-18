@@ -453,6 +453,20 @@ ah-markdown {
   .tok-link {
     text-decoration: underline;
   }
+  /* A diff's lines and hunk headers, as GitHub colors them (.pl-mi1, .pl-md,
+     and .pl-mdr in github-markdown.css), with its variables for the theme */
+  .tok-inserted {
+    color: var(--color-prettylights-syntax-markup-inserted-text);
+    background: var(--color-prettylights-syntax-markup-inserted-bg);
+  }
+  .tok-deleted {
+    color: var(--color-prettylights-syntax-markup-deleted-text);
+    background: var(--color-prettylights-syntax-markup-deleted-bg);
+  }
+  .language-diff .tok-meta {
+    color: var(--color-prettylights-syntax-meta-diff-range);
+    font-weight: 700;
+  }
 
   @media (prefers-color-scheme: dark) {
     .diff-old {
