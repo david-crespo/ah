@@ -11,6 +11,10 @@ commit that opens to the commit's description and files. jj-spr owns the
 file and pushes the PRs. ah draws the page from the file, from jj, and from
 `jj spr stack-file status`.
 
+Upstream jj-spr has no stack files. Build `jj spr` from the `stackfile`
+branch of https://github.com/david-crespo/jj-spr, which also has the jj-spr
+skill, at `skills/jj-spr`.
+
 The jj-spr skill covers the stack file and jj-spr's commands: the format,
 changing a stack, what to do when a command refuses, and taking over a stack
 that was pushed with `jj git push`. Read it before writing or changing a
