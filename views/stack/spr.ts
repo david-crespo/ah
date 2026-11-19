@@ -1,11 +1,11 @@
 // jj-spr, which owns the stack file and pushes its PRs (`jj spr`, run at the
 // repo's root). Its status, for the page: what `submit` would do for each
-// entry, and the problems it would refuse on. And the page's Push buttons,
-// served at the page's _ah/spr: a button only asks, and the server shows
-// what `submit` would do in a sheet on the page's window (platform/ask.ts),
-// then runs it only once the person clicks Push there. A page with no window
-// of ah's, like a browser tab, can't push. One run at a time per repo,
-// counting the time its sheet is up.
+// entry, and the problems it would refuse on. And the page's Push, Land and
+// Sync buttons, served at the page's _ah/spr: a button only asks, and the
+// server shows what jj-spr would do in a sheet on the page's window
+// (platform/ask.ts), then runs it only once the person clicks there. A page
+// with no window of ah's, like a browser tab, can't run one. One run at a
+// time per repo, counting the time its sheet is up.
 
 import { readdir, readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
@@ -95,19 +95,23 @@ class Refused extends Error {
   }
 }
 
-/** What a page asks jj-spr to do: push the PRs up to the one with `tip`, or
- * all of them with null, with `message` for the commits that update
- * existing PRs */
+export type SprCommand = "submit" | "land" | "sync"
+
+/** What a page asks jj-spr to do: submit or land the PRs up to the one
+ * with `tip`, or all of them with null, or sync the stack. `message` is
+ * for the commits a submit adds to open PRs. */
 export interface SprAsk {
+  command: SprCommand
   tip: string | null
   message: string
 }
 
 const parseAsk = (body: unknown): SprAsk | null =>
   isRecord(body) &&
+  (body.command === "submit" || body.command === "land" || body.command === "sync") &&
   (body.tip === null || typeof body.tip === "string") &&
   typeof body.message === "string"
-    ? { tip: body.tip, message: body.message }
+    ? { command: body.command, tip: body.tip, message: body.message }
     : null
 
 /** The message for update commits when the page sends none */
@@ -116,14 +120,47 @@ export const FALLBACK_MESSAGE = "Update"
 /** The sheet's rows, at most 8 */
 const SHOWN = 8
 
-/** The sheet's question for `ask`, from what `status` says submit would do,
- * or Refused when it would do nothing or refuse */
+/** The sheet's question for `ask`, from what `status` says, or Refused
+ * when it would do nothing or jj-spr would refuse */
 export function sprQuestion(ask: SprAsk, status: SprStatus): Question {
   const { entries } = status
   const upto =
     ask.tip === null ? entries.length - 1 : entries.findIndex((e) => e.tip === ask.tip)
   if (upto < 0) throw new Refused(404, "not a PR in this stack")
-  const scope = entries.slice(0, upto + 1).filter((e) => !e.merged)
+  // Newest first, as the page has them
+  const scope = entries
+    .slice(0, upto + 1)
+    .filter((e) => !e.merged)
+    .reverse()
+  const title = (e: SprEntry) => e.title ?? e.tip
+  const question = (verb: string, shown: SprEntry[], notes: string[], text = title) => {
+    const rows = shown.map((e) => ({ id: e.pr ? `#${e.pr}` : "new", text: text(e) }))
+    return {
+      heading: `${verb} ${shown.length === 1 ? title(shown[0]) : `${shown.length} PRs`}?`,
+      notes,
+      rows: rows.slice(0, SHOWN),
+      more: rows.length - Math.min(rows.length, SHOWN),
+      button: verb,
+    }
+  }
+  if (ask.command === "sync") {
+    const merged = entries.filter((e) => !e.merged && e.state === "merged")
+    return {
+      ...question("Sync", merged, [
+        "This abandons the merged changes, rebases the rest onto trunk, and marks those PRs merged in the stack file.",
+      ]),
+      heading: "Sync the stack?",
+    }
+  }
+  if (ask.command === "land") {
+    const fresh = scope.find((e) => !e.pr)
+    if (fresh) throw new Refused(409, `${title(fresh)} isn't on GitHub yet`)
+    const how =
+      scope.length === 1
+        ? "It's squash-merged on GitHub."
+        : "Each is squash-merged on GitHub, bottom first."
+    return question("Land", scope, [how])
+  }
   const problems = status.problems.filter(
     (p) => p.tip === null || scope.some((e) => e.tip === p.tip),
   )
@@ -132,33 +169,34 @@ export function sprQuestion(ask: SprAsk, status: SprStatus): Question {
       409,
       `jj spr would refuse:\n${problems.map((p) => `- ${p.message}`).join("\n")}`,
     )
-  const todo = scope.filter((e) => e.actions?.some(isTodo)).reverse()
+  const todo = scope.filter((e) => e.actions?.some(isTodo))
   if (!todo.length) throw new Refused(409, "Nothing to push: it's all up to date")
-  const rows = todo.map((e) => ({
-    id: e.pr ? `#${e.pr}` : "new",
-    text: `${e.title ?? e.tip}: ${e.actions!.filter(isTodo).join(", ")}`,
-  }))
   const updates = todo.some((e) => e.pr && e.actions!.includes("push the changes"))
-  return {
-    heading:
-      todo.length === 1
-        ? `Push ${todo[0].title ?? todo[0].tip}?`
-        : `Push ${todo.length} PRs?`,
-    notes: updates
-      ? ["The commits that update open PRs say:", ask.message || FALLBACK_MESSAGE]
-      : [],
-    rows: rows.slice(0, SHOWN),
-    more: rows.length - Math.min(rows.length, SHOWN),
-    button: "Push",
-  }
+  const notes = updates
+    ? ["Message for the commits that update open PRs:", ask.message || FALLBACK_MESSAGE]
+    : []
+  return question(
+    "Push",
+    todo,
+    notes,
+    (e) => `${title(e)}: ${e.actions!.filter(isTodo).join(", ")}`,
+  )
+}
+
+/** jj spr's arguments for `ask`, on the stack file at `file` */
+function sprArgs(ask: SprAsk, file: string): string[] {
+  if (ask.command === "sync") return ["sync", file]
+  const upto = ask.tip === null ? [] : ["--upto", ask.tip]
+  if (ask.command === "land") return ["land", file, ...upto]
+  return ["submit", file, ...upto, "-m", ask.message || FALLBACK_MESSAGE]
 }
 
 /** Repos with a run waiting on its sheet or running, by repo dir */
 const busy = new Set<string>()
 
-/** `{ done, output }` from `jj spr submit` on the stack file next to
- * `pagePath`, served at `page`, as the page's `body` asks, once the person
- * confirms it in `confirm`; jj-spr's complaint, with a 500, if it fails */
+/** `{ done, output }` from jj spr on the stack file next to `pagePath`,
+ * served at `page`, as the page's `body` asks, once the person confirms it
+ * in `confirm`; jj-spr's complaint, with a 500, if it fails */
 export async function runSpr(
   pagePath: string,
   page: URL,
@@ -174,9 +212,12 @@ export async function runSpr(
   if (!root) return new Response(`${dir} isn't in a jj workspace`, { status: 500 })
   const repo = repoDir(root)
   if (busy.has(repo))
-    return new Response("jj spr is already waiting or running in this repo", {
-      status: 409,
-    })
+    return new Response(
+      "jj spr is already running or waiting for confirmation in this repo",
+      {
+        status: 409,
+      },
+    )
   busy.add(repo)
   try {
     const question = sprQuestion(ask, await readStatus(pagePath, spr, true))
@@ -184,12 +225,10 @@ export async function runSpr(
     if (yes === null)
       throw new Refused(
         409,
-        "Pushing needs this page in ah's window: open it with ah tool stack",
+        "Running jj spr needs this page in ah's window: open it with ah tool stack",
       )
     if (!yes) return Response.json({ done: false, output: "cancelled" })
-    const upto = ask.tip === null ? [] : ["--upto", ask.tip]
-    const message = ask.message || FALLBACK_MESSAGE
-    const out = await spr(root, "submit", join(dir, STACK_FILE), ...upto, "-m", message)
+    const out = await spr(root, ...sprArgs(ask, join(dir, STACK_FILE)))
     forgetGithub(pagePath)
     const output = [out.stdout, out.stderr].join("\n").trim()
     if (!out.success) return new Response(output || "jj spr failed", { status: 500 })

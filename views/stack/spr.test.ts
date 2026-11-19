@@ -67,23 +67,25 @@ function app(
   const ran: { cwd: string; args: string[] }[] = []
   const spr = async (cwd: string, ...args: string[]) => {
     ran.push({ cwd, args })
-    return args[0] === "submit" ? submit : ok(JSON.stringify(status))
+    return args[0] === "stack-file" ? ok(JSON.stringify(status)) : submit
   }
   const confirm = async (_page: URL, q: Question) => {
     asked.push(q)
     return await answer(q)
   }
   const routes = stackApp(async () => {}, confirm, spr)
-  const push = async (tip: string | null, message = "") => {
+  const run = async (command: string, tip: string | null, message = "") => {
     const req = new Request("http://127.0.0.1:7521/view/page/stack-1/_ah/spr", {
       method: "POST",
-      body: JSON.stringify({ tip, message }),
+      body: JSON.stringify({ command, tip, message }),
     })
     const res = (await routes.routes("_ah/spr", req, page, null))!
     return { status: res.status, text: await res.text() }
   }
-  const submits = () => ran.filter((r) => r.args[0] === "submit")
-  return { push, asked, ran, submits }
+  const push = (tip: string | null, message = "") => run("submit", tip, message)
+  /** What jj spr ran other than status */
+  const submits = () => ran.filter((r) => r.args[0] !== "stack-file")
+  return { run, push, asked, ran, submits }
 }
 
 test("Push shows what jj-spr would do, then runs submit up to the PR", async () => {
@@ -94,7 +96,7 @@ test("Push shows what jj-spr would do, then runs submit up to the PR", async () 
   // Newest first, leaving out three, which is up to date
   expect(asked[0]).toEqual({
     heading: "Push 2 PRs?",
-    notes: ["The commits that update open PRs say:", "Address review"],
+    notes: ["Message for the commits that update open PRs:", "Address review"],
     rows: [
       { id: "new", text: "Two: open a Pull Request" },
       { id: "#5", text: "One: push the changes, update the title and body" },
@@ -178,6 +180,40 @@ test("a second push while one's sheet is up is refused", async () => {
   expect((await push("one")).status).toBe(409)
   answer.resolve(false)
   expect((await first).status).toBe(200)
+})
+
+test("Land lands the PRs up to one, once they're all on GitHub", async () => {
+  const { run, asked, submits } = app(() => true)
+  expect(await run("land", "three")).toEqual({
+    status: 409,
+    text: "Two isn't on GitHub yet",
+  })
+  expect((await run("land", "one")).status).toBe(200)
+  expect(asked).toEqual([
+    {
+      heading: "Land One?",
+      notes: ["It's squash-merged on GitHub."],
+      rows: [{ id: "#5", text: "One" }],
+      more: 0,
+      button: "Land",
+    },
+  ])
+  expect(submits().map((r) => r.args)).toEqual([
+    ["land", join(notes, STACK_FILE), "--upto", "one"],
+  ])
+})
+
+test("Sync lists the PRs merged on GitHub, and runs sync", async () => {
+  const merged = { ...STATUS.entries[0], state: "merged" as const, actions: [] }
+  const status = { ...STATUS, entries: [merged, ...STATUS.entries.slice(1)] }
+  const { run, asked, submits } = app(() => true, { status })
+  expect((await run("sync", null)).status).toBe(200)
+  expect(asked[0]).toMatchObject({
+    heading: "Sync the stack?",
+    rows: [{ id: "#5", text: "One" }],
+    button: "Sync",
+  })
+  expect(submits().map((r) => r.args)).toEqual([["sync", join(notes, STACK_FILE)]])
 })
 
 test("a submit that fails answers 500 with jj-spr's output", async () => {

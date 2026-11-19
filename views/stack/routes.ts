@@ -1,7 +1,7 @@
 // A stack's page as a page app (views/page/app.ts): its PRs from jj, from
 // GitHub, and from jj-spr, its diff buttons, which open skepsis, its Body
-// buttons, its Push buttons (spr.ts), and the drafts of their messages
-// (message.ts), all under the page's _ah/; and a
+// buttons, its Push, Land, and Sync buttons (spr.ts), and the drafts of the
+// push messages (message.ts), all under the page's _ah/; and a
 // watch on its repo's operations, so the page reads its stack again after
 // each one, and whenever the stack file or a PR's body is saved.
 

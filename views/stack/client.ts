@@ -39,7 +39,7 @@
 
 import type { Changes, Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
-import type { SprEntry, SprStatus } from "./spr.ts"
+import type { SprCommand, SprEntry, SprStatus } from "./spr.ts"
 import { escapeHtml } from "../escape.ts"
 import { arrangeRows, isCollapsed, isTodo } from "./layout.ts"
 
@@ -162,12 +162,12 @@ function githubLead(gh: GithubPr): string {
 type RunResult = { ok: boolean; text: string }
 
 /** Runs of jj-spr from this page, by the tip of the PR they were clicked on,
- * or ALL for Push all: out, or how they ended, which shows until the user
- * dismisses it or another is clicked there. One cancelled in the sheet
- * leaves nothing. */
-const runs = new Map<string, "running" | RunResult>()
+ * or ALL for the buttons under the title: the command while it's out, or
+ * how it ended, which shows until the user dismisses it or another is
+ * clicked there. One cancelled in the sheet leaves nothing. */
+const runs = new Map<string, SprCommand | RunResult>()
 const ALL = "*"
-const running = (key: string) => runs.get(key) === "running"
+const running = (key: string) => typeof runs.get(key) === "string"
 
 /** In ah's own window, whose sheet a run is confirmed in */
 const inWindow = new URLSearchParams(location.search).get("in") === "window"
@@ -186,27 +186,38 @@ function needsPush(pr: Pr): boolean {
   return pr.pr === null ? pr.commits.length > 0 : pr.unpushed > 0
 }
 
-/** A Push button for `key`, a PR's tip or ALL, disabled while its run is
- * out */
-function pushButton(key: string, label: string, title: string): string {
+const RUNNING = { submit: "Pushing…", land: "Landing…", sync: "Syncing…" }
+
+/** A button that runs `command` for `key`, a PR's tip or ALL, disabled
+ * while a run for `key` is out */
+function sprButton(command: SprCommand, key: string, label: string, title: string): string {
+  const out = runs.get(key)
   const [text, tooltip] = !inWindow
     ? [
-        "Push in ah's window",
-        "Pushing is confirmed in ah's window for this page: open it with ah tool stack",
+        `${label} in ah's window`,
+        "jj spr runs are confirmed in ah's window for this page: open it with ah tool stack",
       ]
-    : running(key)
-      ? ["Pushing…", "Waiting for you to confirm in the window's sheet, then pushing"]
-      : [label, `${title}, after the window asks you`]
-  return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(key)}" title="${escapeHtml(tooltip)}"${running(key) || !inWindow ? " disabled" : ""}>${text}</button>`
+    : out === command
+      ? [RUNNING[command], "Waiting for you to confirm in the window's sheet, then running"]
+      : [label, `${title}, once you confirm in the window`]
+  return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-run="${command}" data-for="${escapeHtml(key)}" title="${escapeHtml(tooltip)}"${running(key) || !inWindow ? " disabled" : ""}>${text}</button>`
 }
 
 /** The Push button for one PR, which pushes the ones below it too */
 const prPushButton = (pr: Pr) =>
-  pushButton(
+  sprButton(
+    "submit",
     pr.tip,
     pr.pr === null ? "Push and create PR" : "Push",
-    `jj spr submit --upto ${pr.tip}: this PR and the ones below it`,
+    `jj spr submit --upto ${pr.tip}: push this PR and the ones below it`,
   )
+
+/** Whether the PRs up to the `n`th are open on GitHub with nothing to
+ * push, so jj spr land can land them */
+const landable = (n: number) =>
+  prRows
+    .filter((p) => p.n <= n && !p.merged)
+    .every((p) => statusOf(p.tip)?.state === "open" && !needsPush(p))
 
 /** How the last run from here for `key` went, if there was one */
 function runResult(key: string): string {
@@ -418,7 +429,16 @@ function prCard(pr: Pr, gh: GithubPr | undefined): string {
       )
     : ""
   const merged = pr.merged && !gh ? note("merged", "good") : ""
-  const meta = `<div class="pr-meta">${gh ? githubLead(gh) : ""}${body}${fresh}<span class="mono">${escapeHtml(pr.tip)}</span>${merged}${stack}${plannedNote(pr)}</div>
+  const land =
+    !pr.merged && landable(pr.n)
+      ? sprButton(
+          "land",
+          pr.tip,
+          "Land",
+          `jj spr land --upto ${pr.tip}: squash-merge this PR and the ones below it`,
+        )
+      : ""
+  const meta = `<div class="pr-meta">${gh ? githubLead(gh) : ""}${body}${fresh}${land}<span class="mono">${escapeHtml(pr.tip)}</span>${merged}${stack}${plannedNote(pr)}</div>
     ${problems(pr.tip)}${runResult(pr.tip)}`
   const bar = pushBar(pr)
   // Folded, the bar for its commits still to push stands in for them
@@ -454,14 +474,36 @@ function sharedCard(group: Shared): string {
   </section>`
 }
 
-/** Push all, with more than one PR, when any would change */
+/** The buttons for the whole stack: with more than one PR, Push all when
+ * any would change and Land all when all can land; and Sync once any has
+ * merged on GitHub that the file doesn't say has */
 function stackBar(prs: Pr[]): string {
   const live = prs.filter((pr) => !pr.merged)
-  const button =
-    live.length > 1 && live.some(needsPush)
-      ? `<div class="stack-actions">${messageField(Infinity, ALL)}${pushButton(ALL, "Push all", "jj spr submit: every PR in the stack")}</div>`
-      : ""
-  return button + runResult(ALL)
+  const several = live.length > 1
+  const buttons = [
+    several && live.some(needsPush)
+      ? messageField(Infinity, ALL) +
+        sprButton("submit", ALL, "Push all", "jj spr submit: push every PR in the stack")
+      : "",
+    several && landable(Infinity)
+      ? sprButton(
+          "land",
+          ALL,
+          "Land all",
+          "jj spr land: squash-merge every PR, bottom first",
+        )
+      : "",
+    // Merged on GitHub, but not yet in the file
+    live.some((pr) => statusOf(pr.tip)?.state === "merged")
+      ? sprButton(
+          "sync",
+          ALL,
+          "Sync",
+          "jj spr sync: abandon the merged changes, rebase the rest onto trunk, and mark those PRs merged",
+        )
+      : "",
+  ].join("")
+  return (buttons ? `<div class="stack-actions">${buttons}</div>` : "") + runResult(ALL)
 }
 
 // In localStorage, so a new window knows which PRs merged before gh answers
@@ -648,24 +690,29 @@ main.addEventListener("click", (e) => {
   redraw()
 })
 
-// A Push button: the server asks the user in a sheet, and runs jj-spr if
-// they say so. The stack redraws by itself after, since jj-spr writes the
-// stack file.
+// A Push, Land or Sync button: the server asks the user in a sheet, and
+// runs jj-spr if they say so. The stack redraws by itself after, since
+// jj-spr writes the stack file.
 main.addEventListener("click", async (e) => {
-  const key = (e.target as Element).closest<HTMLButtonElement>("button[data-push]")?.dataset
-    .push
-  if (!key || !threadUrl || running(key)) return
+  const button = (e.target as Element).closest<HTMLButtonElement>("button[data-run]")
+  const command = button?.dataset.run as SprCommand | undefined
+  const key = button?.dataset.for
+  if (!command || key === undefined || !threadUrl || running(key)) return
   const message =
     main.querySelector<HTMLInputElement>(`input[data-for="${CSS.escape(key)}"]`)?.value ??
     ""
-  runs.set(key, "running")
+  runs.set(key, command)
   redraw()
   let result: RunResult | null
   try {
     const res = await fetch(new URL("spr", threadUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tip: key === ALL ? null : key, message: message.trim() }),
+      body: JSON.stringify({
+        command,
+        tip: key === ALL ? null : key,
+        message: message.trim(),
+      }),
     })
     if (res.ok) {
       const { done, output }: { done: boolean; output: string } = await res.json()
@@ -677,7 +724,7 @@ main.addEventListener("click", async (e) => {
   if (result) runs.set(key, result)
   else runs.delete(key)
   redraw()
-  if (result?.ok) void loadRemote()
+  void loadRemote()
 })
 
 // A message field: what's typed is kept for redraws, and Enter pushes
@@ -686,9 +733,13 @@ main.addEventListener("input", (e) => {
   if (input.dataset.message !== undefined) typed.set(input.dataset.message, input.value)
 })
 main.addEventListener("keydown", (e) => {
-  const key = (e.target as HTMLElement).dataset.for
+  const key = e.target instanceof HTMLInputElement ? e.target.dataset.for : undefined
   if (e.key !== "Enter" || key === undefined) return
-  main.querySelector<HTMLButtonElement>(`button[data-push="${CSS.escape(key)}"]`)?.click()
+  main
+    .querySelector<HTMLButtonElement>(
+      `button[data-run="submit"][data-for="${CSS.escape(key)}"]`,
+    )
+    ?.click()
 })
 
 // A run's log, which the user is done with
@@ -715,8 +766,12 @@ async function get<T>(path: string): Promise<T> {
 }
 
 /** GitHub's side and jj-spr's, which nothing here hears change on GitHub,
- * so asked for again now and then while the page is in view */
+ * so asked for again now and then while the page is in view. Not jj-spr's
+ * while a run from here is going: halfway through, as after a PR opens but
+ * before the stack file has its number, status refuses on the stack. The
+ * run asks again when it ends. */
 async function loadRemote() {
+  const sprRunning = [...runs.keys()].some(running)
   await Promise.all([
     get<GithubPrs>("stack-github").then(
       (prs) => {
@@ -726,13 +781,14 @@ async function loadRemote() {
       },
       (e: Error) => (githubError = e.message),
     ),
-    get<SprStatus>("stack-status").then(
-      (s) => {
-        status = s
-        statusError = ""
-      },
-      (e: Error) => (statusError = e.message),
-    ),
+    sprRunning ||
+      get<SprStatus>("stack-status").then(
+        (s) => {
+          status = s
+          statusError = ""
+        },
+        (e: Error) => (statusError = e.message),
+      ),
   ])
   redraw()
 }
