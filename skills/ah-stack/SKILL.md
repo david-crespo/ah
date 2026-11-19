@@ -11,6 +11,11 @@ commit that opens to the commit's description and files. jj-spr owns the
 file and pushes the PRs. ah draws the page from the file, from jj, and from
 `jj spr stack-file status`.
 
+The jj-spr skill covers the stack file and jj-spr's commands: the format,
+changing a stack, what to do when a command refuses, and taking over a stack
+that was pushed with `jj git push`. Read it before writing or changing a
+stack file. This skill covers the page.
+
 Run every `ah` command as the whole Bash command, as the ah-page skill says (in
 Claude Code: no pipes, `&&`, redirects, or `$`), or it runs in the sandbox and
 fails.
@@ -54,29 +59,17 @@ so give a path when you know which one you want.
 }
 ```
 
-- `prs` is bottom first. A PR's commits run from its `tip` down to the next
-  tip below it, or to trunk. Commits above the top tip aren't in any PR.
-  The page numbers the PRs by place, so don't number titles.
-- `tip` is a local bookmark or a change ID.
-- `body` is a markdown file next to the stack file. Its `# ` heading on line 1
-  is the PR's title, and the rest is the PR's description. `title` is for an
-  entry with no body file, or one without a heading.
-- `title` and `notes` at the top are ah's: the page's heading, and
-  plain-text paragraphs (backticks for code) for context that belongs to no
-  one PR, such as a PR that's been tabled. What a PR does goes in its body.
-- jj-spr writes `pr`, `branch`, `synced`, `pushed`, and `merged`. Never write
-  or change them.
+`title` and `notes` at the top are ah's. jj-spr keeps them:
 
-There are no commands to add, move, or remove entries: edit the file. Then
-check it:
+- `title` is the page's heading.
+- `notes` are plain-text paragraphs (backticks for code) for context that
+  belongs to no one PR, such as a PR that's been tabled. What a PR does goes
+  in its body.
 
-```
-jj spr stack-file status .claude/notes/2026-11-05-versioned-docs-stack/stack.json
-```
-
-It lists every problem `jj spr submit` would refuse on, such as a commit
-with no description or an entry with no title, and what submit would do for
-each PR. The page shows the same on each PR.
+Everything under `prs` is jj-spr's format. The page numbers the PRs by
+place, so don't number titles. After editing the file, check it with
+`jj spr stack-file status <file>`. The page shows the same problems and
+planned actions on each PR.
 
 ## Bodies and commit summaries
 
