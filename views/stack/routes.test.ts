@@ -8,10 +8,7 @@ import { LiveReload } from "../page/files.ts"
 import { STACK_FILE } from "./data.ts"
 import { stackApp } from "./routes.ts"
 
-const app = stackApp(
-  async () => {},
-  async () => {},
-)
+const app = stackApp(async () => {})
 
 test("a stack's page is told its data changed, and to reload for anything else", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ah-live-")))
@@ -61,15 +58,10 @@ test("a stack in a workspace whose repo is gone logs instead of rejecting", asyn
   }
 })
 
-test("only a stack's page can open skepsis, and other pages aren't the app's", async () => {
+test("other pages aren't the app's", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-")))
   const page = join(root, "index.html")
   try {
-    const req = new Request("http://127.0.0.1/", {
-      method: "POST",
-      body: JSON.stringify({ rev: "@" }),
-    })
-    expect(await app.routes("_ah/skepsis", req, page, null)).toBeNull()
     expect(await app.watch!(page)).toBeNull()
   } finally {
     rmSync(root, { recursive: true })

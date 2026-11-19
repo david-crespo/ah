@@ -2,7 +2,7 @@
 // the API port: its own API reads the repo's files and sends to agents,
 // which the pages port is there to keep agents' html pages from doing. The
 // id is signed (subjects/id.ts) and holds the diff: the directory, the
-// revisions, and the stack page whose agent gets the comments, so there's no
+// revisions, and the page whose agent gets the comments (app.ts), so there's no
 // table of diffs to keep. Each diff's app (skepsis's createApp) is made on
 // the first request for its id and kept among the 16 used last; a forgotten
 // one's page keeps working, since its next request makes it again.
@@ -10,15 +10,7 @@
 import { type App, type AppOptions, createApp } from "@oxide/skepsis"
 import { redirect } from "../../platform/origin.ts"
 import { payloadOf, signedId } from "../../subjects/id.ts"
-import type { DiffRequest } from "../stack/skepsis.ts"
-
-/** A diff to review in `cwd`, the root of a jj workspace; comments go to
- * the agent the page at `page` is bound to */
-export interface DiffSpec {
-  cwd: string
-  diff: DiffRequest
-  page: string
-}
+import type { DiffSpec } from "./app.ts"
 
 /** Apps kept */
 const KEEP = 16

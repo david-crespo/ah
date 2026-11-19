@@ -35,8 +35,10 @@ import { Dashboard } from "./views/dashboard/routes.ts"
 import { DocBackend } from "./views/doc/routes.ts"
 import { PageBackend } from "./views/page/routes.ts"
 import { pageScripts } from "./views/page/upgrade.ts"
-import { type OpenDiff, stackApp } from "./views/stack/routes.ts"
+import { stackApp } from "./views/stack/routes.ts"
+import { diffApp, type OpenDiff } from "./views/skepsis/app.ts"
 import { SkepsisView } from "./views/skepsis/routes.ts"
+import { noteApp } from "./views/workspaces/app.ts"
 import { homeApp } from "./views/home/routes.ts"
 import { tool } from "./cli/tool.ts"
 import { message } from "./cli/message.ts"
@@ -214,15 +216,17 @@ async function serve(port: number) {
   const upgrades = new Upgrades([pageScripts])
   core.useUpgrades(upgrades, () => installProblems().filter((p) => !p.optional).length)
   const docBackend = new DocBackend(port, core.directory)
-  // A stack page's PR body, and the stacks and files a home page lists, open
-  // in a window, as `ah tool doc` or `ah tool page` would open them
+  // A stack page's PR body, the stacks and files a home page lists, and the
+  // notes a page's buttons ask for (views/workspaces/app.ts) open in a
+  // window, as `ah tool doc` or `ah tool page` would open them
   const openFile = async (path: string, agent: AgentId | null) => {
     const { files } = fileKind(path) === "page" ? pageBackend : docBackend
     const { url, views } = await files.bind(path, null, agent)
     await showPage("window", new URL(url, `http://127.0.0.1:${port}`), path, views)
   }
-  // A stack page's diff stats: the diff in skepsis, whose comments go to the
-  // agent the page is bound to when they're sent. Its URL is the same for
+  // A page's diff buttons, like a stack page's diff stats: the diff in
+  // skepsis, whose comments go to the agent the page is bound to when
+  // they're sent. Its URL is the same for
   // the same diff, so a second click brings the first window forward.
   const skepsisView = new SkepsisView((spec, text) =>
     core.sendTo(pageBackend.files.binding(spec.page), text, spec.cwd),
@@ -241,7 +245,12 @@ async function serve(port: number) {
     pagesPort,
     core.directory,
     core.trackers,
-    [stackApp(openFile, openDiff), homeApp(() => core.agents(), openFile)],
+    [
+      stackApp(openFile),
+      homeApp(() => core.agents(), openFile),
+      diffApp(openDiff),
+      noteApp(openFile),
+    ],
     upgrades,
   )
   const dashboardBackend = new Dashboard({

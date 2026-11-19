@@ -46,14 +46,7 @@ function app(answer: Output) {
     calls.push({ args, input })
     return answer
   }
-  const routes = stackApp(
-    async () => {},
-    async () => {},
-    undefined,
-    undefined,
-    undefined,
-    ai,
-  )
+  const routes = stackApp(async () => {}, undefined, undefined, undefined, ai)
   const draft = async (tip: string | null) => {
     const req = new Request("http://127.0.0.1:7521/view/page/stack-1/_ah/push-message", {
       method: "POST",

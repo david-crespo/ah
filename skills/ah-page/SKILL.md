@@ -77,6 +77,44 @@ skill's LAN proxy), so make it work at 390px wide:
   the first line: `align-self: flex-start; height: 1lh` with the icon
   centered in that box.
 
+## Diff and note buttons
+
+A page can open a jj diff in skepsis, or a note in its own window, without
+a round trip through you. It may open them in any workspace of the repo
+the page is in. For workspaces of other repos, list their roots as absolute
+paths in `workspaces.json` next to the page:
+
+```json
+{ "workspaces": ["/Users/me/jj-workspaces/other-repo-feature"] }
+```
+
+A button POSTs to a route under the page's `_ah/`, and the server
+opens a window:
+
+```js
+async function open(route, body) {
+  const s = document.querySelector("script[data-ah-thread]")
+  return await fetch(new URL(route, new URL(s.dataset.ahThread, location.href)), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+}
+// A diff: { cwd, rev }, or { cwd, from, to, interdiff: true }
+const res = await open("skepsis", { cwd, rev })
+// A note, as a path from cwd's .claude/notes: "doc" for a markdown or
+// AsciiDoc file, "page" for an HTML one
+const res = await open("doc", { cwd, file: "2026-11-05-plan.md" })
+if (!res.ok) button.title = await res.text()
+```
+
+ah adds that script tag after the page's own scripts run, so look it up on
+the click. Without a `cwd`, the request is for the page's own workspace. A
+`cwd` that's neither the root of a workspace of the page's repo nor in
+`workspaces.json` gets a 403.
+Comments sent from skepsis or from the note's window come to you like the
+page's other messages.
+
 ## Requests
 
 Comments arrive as messages: in Claude Code, framed by the harness as

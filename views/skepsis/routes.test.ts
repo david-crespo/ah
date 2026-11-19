@@ -4,7 +4,8 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import type { App, AppOptions } from "@oxide/skepsis"
 import { afterEach, beforeEach, expect, test } from "vitest"
-import { type DiffSpec, SkepsisView } from "./routes.ts"
+import type { DiffSpec } from "./app.ts"
+import { SkepsisView } from "./routes.ts"
 
 let dir: string
 beforeEach(() => {
