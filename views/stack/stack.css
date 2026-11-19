@@ -73,6 +73,32 @@ main .stack-actions button.push-button {
   padding: 0 10px;
   font-size: 12.5px;
 }
+/* The message for the commits a push adds to open PRs, as tall as the
+   button beside it */
+main input.push-message {
+  width: 32ch;
+  min-width: 0;
+  height: 16px;
+  margin-left: 8px;
+  padding: 0 5px;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 4px;
+}
+main .pr-meta input.push-message {
+  height: 20px;
+  margin-left: 0;
+  font-size: 12px;
+}
+main .stack-actions input.push-message {
+  width: 40ch;
+  height: 22px;
+  margin-left: 0;
+  font-size: 12.5px;
+  border-color: var(--line);
+}
 main .empty {
   color: var(--muted);
   font-style: italic;

@@ -20,8 +20,11 @@
 // with no tag for one only rebased. A PR that a push would change has a Push
 // button on that bar, or one by its Body button before it's on GitHub. Push
 // has the server run `jj spr submit --upto` the PR once the user confirms it
-// in a sheet on the page's window, and jj-spr's output shows on the PR. With
-// more than one PR, Push all by the title pushes them all. Outside ah's
+// in a sheet on the page's window, and jj-spr's output shows on the PR. When
+// the push adds commits to an open PR, a field by its button has their
+// message, which the server drafts with a quick model call (message.ts) and
+// the user can change; left blank, it's Update. With more than one PR, Push
+// all under the title pushes them all. Outside ah's
 // window, as in a browser tab, there's no sheet to confirm in, so the
 // buttons say so.
 //
@@ -288,7 +291,59 @@ function toPushText(pr: Pr): string {
 function pushBar(pr: Pr): string {
   if (pr.pr === null || !needsPush(pr)) return ""
   const below = pr.pushed && pr.unpushed < pr.commits.length
-  return `<span>${toPushText(pr)}</span>${prPushButton(pr)}${below ? '<span class="pushed">pushed ↓</span>' : ""}`
+  return `<span>${toPushText(pr)}</span>${messageField(pr.n, pr.tip)}${prPushButton(pr)}${below ? '<span class="pushed">pushed ↓</span>' : ""}`
+}
+
+/** The stack's PRs as last drawn, for what a push sends */
+let prRows: Pr[] = []
+/** Drafts of the update message, by what they're drafted from (draftKey),
+ * null while asked for */
+const drafts = new Map<string, string | null>()
+/** What the user typed in a message field, by the same key, so a redraw
+ * keeps it, and a new draft for new edits replaces it */
+const typed = new Map<string, string>()
+
+/** The message field for a push of the PRs up to the `n`th, by Push
+ * button `key`, when the push adds commits to an open PR: blank until a
+ * draft comes, which the server asks a model for, and Update when it's
+ * left blank */
+function messageField(n: number, key: string): string {
+  const updates = prRows.filter(
+    (p) =>
+      p.n <= n &&
+      p.pr !== null &&
+      !p.merged &&
+      (p.unpushed > 0 || !!statusOf(p.tip)?.actions?.includes("push the changes")),
+  )
+  if (!updates.length) return ""
+  // Each changed PR's pushed commit and its tip's now, as the server keeps
+  // drafts; without any, there's nothing to draft from
+  const from = updates
+    .filter((p) => p.unpushed)
+    .map((p) => `${p.pushed}:${p.commits[0].commit}`)
+    .join(" ")
+  if (from && !drafts.has(from)) void askDraft(from, key)
+  const value = typed.get(from) ?? drafts.get(from) ?? ""
+  return `<input type="text" class="push-message" data-message="${escapeHtml(from)}" data-for="${escapeHtml(key)}" value="${escapeHtml(value)}" placeholder="Update" aria-label="Message for the commits that update open PRs" title="Message for the commits that update open PRs">`
+}
+
+/** Ask the server for a draft of the message for Push button `key`'s
+ * push, made from `from` */
+async function askDraft(from: string, key: string) {
+  drafts.set(from, null)
+  let message = ""
+  try {
+    const res = await fetch(new URL("push-message", threadUrl!), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ tip: key === ALL ? null : key }),
+    })
+    if (res.ok) message = ((await res.json()) as { message: string }).message
+  } catch {
+    // The field stays blank, and the push says Update
+  }
+  drafts.set(from, message)
+  redraw()
 }
 
 /** The commits, with `bar` under the first `unpushed` of them, the newest,
@@ -351,8 +406,10 @@ function prCard(pr: Pr, gh: GithubPr | undefined): string {
   const body = pr.body
     ? `<button type="button" class="body-button" data-body="${escapeHtml(pr.tip)}" data-title="Open ${escapeHtml(pr.body)}">${PENCIL} Body</button>`
     : ""
-  // Before it's on GitHub, the button goes by Body
-  const fresh = pr.pr === null && needsPush(pr) ? prPushButton(pr) : ""
+  // Before it's on GitHub, the button goes by Body, with a message field
+  // if the push updates open PRs below it
+  const fresh =
+    pr.pr === null && needsPush(pr) ? messageField(pr.n, pr.tip) + prPushButton(pr) : ""
   const stack = gh?.stack
     ? note(
         `stack #${gh.stack.number}`,
@@ -402,7 +459,7 @@ function stackBar(prs: Pr[]): string {
   const live = prs.filter((pr) => !pr.merged)
   const button =
     live.length > 1 && live.some(needsPush)
-      ? `<div class="stack-actions">${pushButton(ALL, "Push all", "jj spr submit: every PR in the stack")}</div>`
+      ? `<div class="stack-actions">${messageField(Infinity, ALL)}${pushButton(ALL, "Push all", "jj spr submit: every PR in the stack")}</div>`
       : ""
   return button + runResult(ALL)
 }
@@ -443,7 +500,7 @@ function draw(stack: Stack, error = "") {
   const title = stack.title || pageTitle
   document.title = title
   const rows = arrangeRows(stack.rows, github)
-  const prs = rows.filter((r): r is Pr => "n" in r)
+  const prs = (prRows = rows.filter((r): r is Pr => "n" in r))
   const lanes = graphLanes(rows)
   // Problems with tips no entry has, as after a tip was renamed
   const stray = (status?.problems ?? []).filter(
@@ -470,7 +527,18 @@ function draw(stack: Stack, error = "") {
         : `<p class="empty">No PRs in stack.json yet</p>`
     }`
   if (html === drawn) return
+  // A message field being typed in keeps its focus and caret
+  const typing = document.activeElement
+  const field = typing instanceof HTMLInputElement ? typing.dataset.for : undefined
+  const caret = typing instanceof HTMLInputElement ? typing.selectionStart : null
   main.innerHTML = drawn = html
+  if (field !== undefined) {
+    const input = main.querySelector<HTMLInputElement>(
+      `input[data-for="${CSS.escape(field)}"]`,
+    )
+    input?.focus()
+    input?.setSelectionRange(caret, caret)
+  }
   paintButtons()
   drawGraph()
 }
@@ -587,6 +655,9 @@ main.addEventListener("click", async (e) => {
   const key = (e.target as Element).closest<HTMLButtonElement>("button[data-push]")?.dataset
     .push
   if (!key || !threadUrl || running(key)) return
+  const message =
+    main.querySelector<HTMLInputElement>(`input[data-for="${CSS.escape(key)}"]`)?.value ??
+    ""
   runs.set(key, "running")
   redraw()
   let result: RunResult | null
@@ -594,7 +665,7 @@ main.addEventListener("click", async (e) => {
     const res = await fetch(new URL("spr", threadUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ tip: key === ALL ? null : key, message: "" }),
+      body: JSON.stringify({ tip: key === ALL ? null : key, message: message.trim() }),
     })
     if (res.ok) {
       const { done, output }: { done: boolean; output: string } = await res.json()
@@ -607,6 +678,17 @@ main.addEventListener("click", async (e) => {
   else runs.delete(key)
   redraw()
   if (result?.ok) void loadRemote()
+})
+
+// A message field: what's typed is kept for redraws, and Enter pushes
+main.addEventListener("input", (e) => {
+  const input = e.target as HTMLInputElement
+  if (input.dataset.message !== undefined) typed.set(input.dataset.message, input.value)
+})
+main.addEventListener("keydown", (e) => {
+  const key = (e.target as HTMLElement).dataset.for
+  if (e.key !== "Enter" || key === undefined) return
+  main.querySelector<HTMLButtonElement>(`button[data-push="${CSS.escape(key)}"]`)?.click()
 })
 
 // A run's log, which the user is done with

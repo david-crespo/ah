@@ -1,6 +1,7 @@
 // A stack's page as a page app (views/page/app.ts): its PRs from jj, from
 // GitHub, and from jj-spr, its diff buttons, which open skepsis, its Body
-// buttons, and its Push buttons (spr.ts), all under the page's _ah/; and a
+// buttons, its Push buttons (spr.ts), and the drafts of their messages
+// (message.ts), all under the page's _ah/; and a
 // watch on its repo's operations, so the page reads its stack again after
 // each one, and whenever the stack file or a PR's body is saved.
 
@@ -12,6 +13,7 @@ import type { OpenFile, PageApp } from "../page/app.ts"
 import { noStore } from "../page/routes.ts"
 import { ensureBody, readStack, STACK_FILE, stackOpsDir } from "./data.ts"
 import { type GhRun, ghRun, readGithub } from "./github.ts"
+import { type AiRun, aiRun, draftMessage } from "./message.ts"
 import { diffArgs, openSkepsis } from "./skepsis.ts"
 import { readStatus, runSpr, type SprRun, sprRun } from "./spr.ts"
 
@@ -19,13 +21,14 @@ const json = (data: unknown) => Response.json(data, { headers: noStore })
 const failed = (e: Error) => new Response(e.message, { status: 500 })
 const done = () => new Response(null, { status: 204 })
 
-/** `openDoc` opens a PR's body. `confirm`, `spr` and `gh` are for tests,
- * which answer the sheet and stand in for jj-spr and gh. */
+/** `openDoc` opens a PR's body. `confirm`, `spr`, `gh` and `ai` are for
+ * tests, which answer the sheet and stand in for jj-spr, gh and ai. */
 export function stackApp(
   openDoc: OpenFile,
   confirm: Confirm = confirmInWindow,
   spr: SprRun = sprRun,
   gh: GhRun = ghRun,
+  ai: AiRun = aiRun,
 ): PageApp {
   return {
     async routes(sub, req, path, agent) {
@@ -52,6 +55,13 @@ export function stackApp(
         const page = new URL("..", req.url)
         const body: unknown = await req.json().catch(() => null)
         return await runSpr(path, page, body, confirm, spr).catch(failed)
+      }
+      if (sub === "_ah/push-message" && req.method === "POST") {
+        const { tip }: { tip?: unknown } = await req.json().catch(() => ({}))
+        if (tip !== null && typeof tip !== "string")
+          return new Response("bad tip", { status: 400 })
+        const message = (m: string) => json({ message: m })
+        return await draftMessage(path, tip, ai).then(message, failed)
       }
       return null
     },
