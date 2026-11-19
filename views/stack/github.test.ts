@@ -28,7 +28,7 @@ vi.mock("../../platform/proc.ts", async (importOriginal) => {
   }
 })
 
-test("readGithub asks gh once for the whole stack, and skips forks' PRs", async () => {
+test("readGithub asks gh once for the stack's PRs, by number", async () => {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-github-")))
   try {
     execFileSync("jj", ["git", "init"], { cwd: dir, stdio: "pipe" })
@@ -36,10 +36,8 @@ test("readGithub asks gh once for the whole stack, and skips forks' PRs", async 
       cwd: dir,
       stdio: "pipe",
     })
-    const prs = [
-      { n: 1, title: "One", bookmark: "one" },
-      { n: 2, title: "Two", bookmark: "two" },
-    ]
+    // two isn't on GitHub yet, and GitHub has no PR 9
+    const prs = [{ tip: "one", pr: 7 }, { tip: "two" }, { tip: "three", pr: 9 }]
     writeFileSync(join(dir, STACK_FILE), JSON.stringify({ title: "Stack", prs }))
     const pr = {
       number: 7,
@@ -47,9 +45,6 @@ test("readGithub asks gh once for the whole stack, and skips forks' PRs", async 
       state: "OPEN",
       isDraft: false,
       title: "One on GitHub",
-      baseRefName: "main",
-      headRefOid: "abcdef12",
-      isCrossRepository: false,
       reviewDecision: null,
       commits: {
         nodes: [
@@ -63,24 +58,19 @@ test("readGithub asks gh once for the whole stack, and skips forks' PRs", async 
         ],
       },
     }
-    // two's newest is a fork's, from a branch of the same name
-    const fork = { ...pr, number: 9, isCrossRepository: true }
-    const older = { ...pr, number: 5 }
     gh.calls = []
     gh.answer = (args) =>
       args[0] === "api"
-        ? JSON.stringify({
-            data: { repository: { h0: { nodes: [pr] }, h1: { nodes: [fork, older] } } },
-          })
+        ? JSON.stringify({ data: { repository: { p0: pr, p1: null } } })
         : "[]"
     const github = await readGithub(join(dir, "index.html"))
     expect(gh.calls).toHaveLength(1)
     expect(gh.calls[0]).toEqual(
-      expect.arrayContaining(["owner=o", "name=r", "h0=one", "h1=two"]),
+      expect.arrayContaining(["owner=o", "name=r", "-F", "p0=7", "p1=9"]),
     )
-    const { commits: _, isCrossRepository: __, ...rest } = pr
+    const { commits: _, ...rest } = pr
     const want = { ...rest, reviewDecision: "", checks: "pass", stack: null }
-    expect(github).toEqual({ one: want, two: { ...want, number: 5 } })
+    expect(github).toEqual({ one: want })
   } finally {
     rmSync(dir, { recursive: true })
   }
@@ -98,10 +88,10 @@ test("readGithub finds the repo from a workspace whose working copy is stale", a
     jj(dir, "workspace", "add", join(other, "ws"))
     writeFileSync(join(other, "ws", "file"), "added from the other workspace")
     jj(join(other, "ws"), "squash", "--into", "default@")
-    const prs = [{ n: 1, title: "One", bookmark: "one" }]
+    const prs = [{ tip: "one", pr: 1 }]
     writeFileSync(join(dir, STACK_FILE), JSON.stringify({ title: "Stack", prs }))
     gh.calls = []
-    gh.answer = () => JSON.stringify({ data: { repository: { h0: { nodes: [] } } } })
+    gh.answer = () => JSON.stringify({ data: { repository: { p0: null } } })
     expect(await readGithub(join(dir, "index.html"))).toEqual({})
     expect(gh.calls[0]).toEqual(expect.arrayContaining(["owner=o", "name=r"]))
   } finally {
@@ -114,7 +104,7 @@ test("readGithub has no PRs, and no error, for a repo with no GitHub remote", as
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-github-")))
   try {
     execFileSync("jj", ["git", "init"], { cwd: dir, stdio: "pipe" })
-    const prs = [{ n: 1, title: "One", bookmark: "one" }]
+    const prs = [{ tip: "one", pr: 1 }]
     writeFileSync(join(dir, STACK_FILE), JSON.stringify({ title: "Stack", prs }))
     expect(await readGithub(join(dir, "index.html"))).toEqual({})
   } finally {

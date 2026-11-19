@@ -15,16 +15,17 @@ export interface Output {
 }
 
 /**
- * Run `cmd` and wait for it. Never throws for a nonzero exit, only when the
- * command can't be started at all (e.g. it isn't on PATH).
+ * Run `cmd` and wait for it, with `input` on its stdin if given, which is
+ * then closed. Never throws for a nonzero exit, only when the command can't
+ * be started at all (e.g. it isn't on PATH).
  */
 export function run(
   cmd: string,
   args: string[],
-  options: ExecFileOptions = {},
+  { input, ...options }: ExecFileOptions & { input?: string } = {},
 ): Promise<Output> {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       cmd,
       args,
       { maxBuffer: 64 * 1024 * 1024, ...options, encoding: "utf8" },
@@ -34,6 +35,10 @@ export function run(
         resolve({ success: !error, code, stdout: String(stdout), stderr: String(stderr) })
       },
     )
+    // A child that exits without reading it is an EPIPE here, which would
+    // otherwise be unhandled
+    child.stdin?.on("error", () => {})
+    if (input !== undefined) child.stdin?.end(input)
   })
 }
 

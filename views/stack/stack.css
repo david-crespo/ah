@@ -48,6 +48,31 @@ main .error {
   color: var(--del);
   white-space: pre-wrap;
 }
+/* What jj spr would refuse on, in its own words */
+main .problem {
+  margin: 8px 0 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--del);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Push all, under the notes and lined up with the PR blocks */
+main .stack-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px 28px;
+}
+main .stack-actions + .push-log {
+  margin: -4px 0 12px 28px;
+}
+main .stack-actions button.push-button {
+  margin-left: 0;
+  height: 22px;
+  padding: 0 10px;
+  font-size: 12.5px;
+}
 main .empty {
   color: var(--muted);
   font-style: italic;
@@ -495,7 +520,7 @@ main button.push-button:disabled {
 main button.push-button.elsewhere {
   cursor: default;
 }
-/* What jj said about the PR's last push or fetch from here, with a button
+/* What jj-spr said about the last run from here, with a button
    that dismisses it in its corner */
 main .push-log {
   position: relative;
@@ -530,14 +555,6 @@ main .push-result.ok {
 }
 main .push-result.bad {
   color: var(--del);
-}
-main .push-result.cancelled {
-  color: var(--muted);
-}
-/* The PR a push of a new branch opened */
-main .push-pr {
-  margin: 6px 0 0;
-  font-size: 12px;
 }
 main .pr-head .short {
   margin-left: auto;

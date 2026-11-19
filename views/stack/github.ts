@@ -1,8 +1,8 @@
 // A stack's PRs as GitHub has them, which client.ts shows beside what jj has:
-// each bookmark's newest PR, from one GraphQL query through gh, with the
-// GitHub stack it's in, if any (GitHub's stacked PRs). Kept for a few
-// seconds, since the page asks on every jj operation and gh takes a second
-// or so.
+// each PR jj-spr has opened, by its number, from one GraphQL query through
+// gh, with the GitHub stack it's in, if any (GitHub's stacked PRs). Kept for
+// a few seconds, since the page asks on every jj operation and gh takes a
+// second or so.
 
 import { readFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
@@ -17,8 +17,6 @@ export interface GithubPr {
   state: "OPEN" | "CLOSED" | "MERGED"
   isDraft: boolean
   title: string
-  baseRefName: string
-  headRefOid: string
   /** APPROVED, CHANGES_REQUESTED, REVIEW_REQUIRED, or empty */
   reviewDecision: string
   /** The checks on its head, all together; null with none */
@@ -30,23 +28,22 @@ export interface GithubPr {
 
 export type Checks = "pass" | "fail" | "pending"
 
-/** Bookmark to its newest PR; a bookmark with no PR isn't in it */
+/** A PR by its entry's tip; an entry with no PR isn't in it */
 export type GithubPrs = Record<string, GithubPr>
 
 /** A PR's fields, and the checks on its head commit */
-const PR = `number url state isDraft title baseRefName headRefOid reviewDecision
-  isCrossRepository stack { number size } stackEntry { position } commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
+const PR = `number url state isDraft title reviewDecision
+  stack { number size } stackEntry { position } commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) {
     nodes { ... on CheckRun { status conclusion } ... on StatusContext { state } }
   } } } } }`
 
-/** Each of `count` heads' newest PRs, with an alias and a variable per
- * head: h0, h1, and so on. A few, since a head's name matches a fork's
- * branch of that name too. */
+/** The PRs numbered by `count` variables, with an alias and a variable for
+ * each: p0, p1, and so on */
 function prsQuery(count: number): string {
-  const heads = Array.from({ length: count }, (_, i) => `h${i}`)
-  return `query($owner: String!, $name: String!, ${heads.map((h) => `$${h}: String!`).join(", ")}) {
+  const prs = Array.from({ length: count }, (_, i) => `p${i}`)
+  return `query($owner: String!, $name: String!, ${prs.map((p) => `$${p}: Int!`).join(", ")}) {
   repository(owner: $owner, name: $name) {
-    ${heads.map((h) => `${h}: pullRequests(headRefName: $${h}, first: 5, orderBy: { field: CREATED_AT, direction: DESC }) { nodes { ${PR} } }`).join("\n    ")}
+    ${prs.map((p) => `${p}: pullRequest(number: $${p}) { ${PR} }`).join("\n    ")}
   }
 }`
 }
@@ -55,7 +52,6 @@ type PrNode = Omit<GithubPr, "checks" | "reviewDecision" | "stack"> & {
   reviewDecision: string | null
   stack?: { number: number; size: number } | null
   stackEntry?: { position: number } | null
-  isCrossRepository: boolean
   commits: {
     nodes: { commit: { statusCheckRollup: { contexts: { nodes: Check[] } } | null } }[]
   }
@@ -69,7 +65,7 @@ export const ghRun: GhRun = (...args) => run("gh", args)
 const TTL = 15_000
 const cache = new Map<string, { at: number; prs: Promise<GithubPrs> }>()
 
-/** The PRs for the stack.json next to `pagePath` */
+/** The PRs for the stack file next to `pagePath` */
 export function readGithub(pagePath: string, gh = ghRun): Promise<GithubPrs> {
   const hit = cache.get(pagePath)
   if (hit && Date.now() - hit.at < TTL) return hit.prs
@@ -82,24 +78,25 @@ export function readGithub(pagePath: string, gh = ghRun): Promise<GithubPrs> {
 
 let warnedNoGh = false
 
-/** Ask GitHub afresh next time for the page at `pagePath`, as after a push
- * from it, which moves a branch's head there and may open a PR */
+/** Ask GitHub afresh next time for the page at `pagePath`, as after jj-spr
+ * ran from it, which may have opened, moved, or merged PRs */
 export const forgetGithub = (pagePath: string) => cache.delete(pagePath)
 
-/** The PRs for the stack.json next to `pagePath`, asked for now */
-export async function fetchPrs(pagePath: string, gh = ghRun): Promise<GithubPrs> {
+/** The PRs for the stack file next to `pagePath`, asked for now */
+async function fetchPrs(pagePath: string, gh: GhRun): Promise<GithubPrs> {
   const dir = dirname(pagePath)
   const file = parseStackFile(await readFile(join(dir, STACK_FILE), "utf8"))
+  const opened = file.prs.filter((e) => e.pr !== undefined)
   const root = rootFinder()(dir)
   if (!root) throw new Error(`${dir} isn't in a jj workspace`)
   // By name, since a jj workspace other than the first has no .git for gh
   const repo = githubRepo(await jj(root, "git", "remote", "list"))
   // Nothing to show, as for PRs that aren't on GitHub yet
-  if (!repo || !file.prs.length) return {}
+  if (!repo || !opened.length) return {}
   const [owner, name] = repo.split("/")
-  const args = ["api", "graphql", "-f", `query=${prsQuery(file.prs.length)}`]
+  const args = ["api", "graphql", "-f", `query=${prsQuery(opened.length)}`]
   args.push("-f", `owner=${owner}`, "-f", `name=${name}`)
-  for (const [i, { bookmark }] of file.prs.entries()) args.push("-f", `h${i}=${bookmark}`)
+  for (const [i, { pr }] of opened.entries()) args.push("-F", `p${i}=${pr}`)
   const out = await gh(...args).catch((e: NodeJS.ErrnoException) => {
     if (e.code !== "ENOENT") throw e
     if (!warnedNoGh) console.error("ah: gh isn't installed, so stack pages show no PRs")
@@ -107,20 +104,18 @@ export async function fetchPrs(pagePath: string, gh = ghRun): Promise<GithubPrs>
     return null
   })
   if (!out) return {}
-  if (!out.success) throw new Error(out.stderr.trim() || "gh api graphql failed")
-  const heads: Record<string, { nodes: PrNode[] }> = JSON.parse(out.stdout).data.repository
+  // A number GitHub has no PR for is an error for its alias, with the rest
+  // still in data
+  const answer: { data?: { repository: Record<string, PrNode | null> } } = JSON.parse(
+    out.stdout || "{}",
+  )
+  if (!answer.data) throw new Error(out.stderr.trim() || "gh api graphql failed")
+  const prs = answer.data.repository
   return Object.fromEntries(
-    file.prs.flatMap(({ bookmark }, i) => {
-      const pr = heads[`h${i}`].nodes.find((pr) => !pr.isCrossRepository)
+    opened.flatMap(({ tip }, i) => {
+      const pr = prs[`p${i}`]
       if (!pr) return []
-      const {
-        commits,
-        reviewDecision,
-        stack,
-        stackEntry,
-        isCrossRepository: _,
-        ...rest
-      } = pr
+      const { commits, reviewDecision, stack, stackEntry, ...rest } = pr
       const checks = commits.nodes[0]?.commit.statusCheckRollup?.contexts.nodes ?? []
       const github: GithubPr = {
         ...rest,
@@ -128,7 +123,7 @@ export async function fetchPrs(pagePath: string, gh = ghRun): Promise<GithubPrs>
         checks: summarizeChecks(checks),
         stack: stack ? { ...stack, position: stackEntry?.position ?? 0 } : null,
       }
-      return [[bookmark, github]]
+      return [[tip, github]]
     }),
   )
 }

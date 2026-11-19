@@ -1,49 +1,44 @@
 /// <reference lib="dom" />
 
 // A stack's page, served as /stack.js on the pages port; the page (file.ts)
-// loads it and /stack.css. It draws the page's stack (data.ts, served
-// at _ah/stack) newest first, like jj log: each PR's title, its bookmark and
-// how it merges, its files collapsed under it, and a line per
-// commit that opens to its description and files. Once a PR is pushed, a line
-// under its newest commits marks the ones still to push, with a Push button
-// on it, and each of those says whether it's new or changed since the remote's
-// version, with no tag for one only rebased, as when a PR below gained a commit; a PR whose bookmark isn't on the remote yet has its Push button by
-// its Body button. Push has the server push the bookmark once the user
-// confirms it in a sheet on the page's window (push.ts), and jj's answer
-// shows on the PR. For a bookmark not on the remote yet, the button says
-// "Push and create PR", and the server opens its PR after the push, whose
-// link then shows with jj's answer. Outside ah's window, as in a browser tab, there's no
-// sheet to confirm in, so the button says so. Commits below a fork
-// that no PR's bookmark is on get a card of their own, shared by the PRs
-// above. A graph down the left joins the commits, like jj log's. Each diff
-// stat is a button that has the server open that diff in skepsis
-// (skepsis.ts). Until a PR is on GitHub, its Body button opens its body in a
-// doc page, starting the file if there isn't one. Once it is, GitHub has the
-// body, so the button gives way to a link to the PR, with GitHub's
-// title and where the PR stands there (github.ts, served at
-// _ah/stack-github, which comes after the stack since gh is slow). The stack
-// is read again, without a reload, when the server says its data changed:
-// on every jj operation, and when stack.json or a body is saved. Which
-// sections are open is kept across reloads and redraws, and after a reload
-// the last stack is drawn at once while the new one loads.
+// loads it and /stack.css. It draws the page's stack (data.ts, served at
+// _ah/stack) newest first, like jj log: each PR's title, its tip, its files
+// collapsed under it, and a line per commit that opens to its description
+// and files. Commits below a fork that no PR's tip is on get a card of their
+// own, shared by the PRs above. A graph down the left joins the commits, like
+// jj log's. Each diff stat is a button that has the server open that diff in
+// skepsis (skepsis.ts). A PR's Body button opens its body file in a doc page,
+// starting the file if there isn't one.
 //
+// Beside what jj has, the page shows what GitHub has (github.ts, served at
+// _ah/stack-github: a PR's link, state, checks, review, and GitHub stack)
+// and what jj-spr says (spr.ts, served at _ah/stack-status: what `jj spr
+// submit` would do for each PR, and the problems it would refuse on). Both
+// come after the stack, since they're slow. A PR jj-spr has pushed before,
+// whose commit as pushed is still here, has a bar under its newest commits
+// marking the ones still to push, each tagged new or changed since then,
+// with no tag for one only rebased. A PR that a push would change has a Push
+// button on that bar, or one by its Body button before it's on GitHub. Push
+// has the server run `jj spr submit --upto` the PR once the user confirms it
+// in a sheet on the page's window, and jj-spr's output shows on the PR. With
+// more than one PR, Push all by the title pushes them all. Outside ah's
+// window, as in a browser tab, there's no sheet to confirm in, so the
+// buttons say so.
+//
+// The stack is read again, without a reload, when the server says its data
+// changed: on every jj operation, and when the stack file or a body is
+// saved. Which sections are open is kept across reloads and redraws, and
+// after a reload the last stack is drawn at once while the new one loads.
 // Any PR's card folds to one line: its title, its state on GitHub and its
 // diff stat. A merged one starts folded, and the user's own choice wins and
-// is kept. A PR whose bookmark is gone but which GitHub has merged or closed
-// goes with the PRs with no commits of their own (layout.ts). GitHub's side
-// from the last load is kept too, so neither waits on gh after a reload.
+// is kept. GitHub's side from the last load is kept too, so neither waits on
+// gh after a reload.
 
 import type { Changes, Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
+import type { SprEntry, SprStatus } from "./spr.ts"
 import { escapeHtml } from "../escape.ts"
-import {
-  arrangeRows,
-  doneOnGithub,
-  isCollapsed,
-  prBelow,
-  type RunResult,
-  settledRuns,
-} from "./layout.ts"
+import { arrangeRows, isCollapsed, isTodo } from "./layout.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -51,6 +46,8 @@ const threadUrl = (() => {
 })()
 
 const main = document.querySelector("main")!
+/** The page's own title, for a stack file with none */
+const pageTitle = document.title
 
 /** Escaped, with `code` in backticks */
 const prose = (s: string) => escapeHtml(s).replace(/`([^`]+)`/g, "<code>$1</code>")
@@ -133,20 +130,14 @@ const REVIEWS: Record<string, [string, string, string]> = {
 const note = (text: string, cls: string, title = "") =>
   `<span class="gh-note ${cls}"${title ? ` title="${escapeHtml(title)}"` : ""}>${escapeHtml(text)}</span>`
 
-/** The PR's link on GitHub, with its state */
-function githubLink(gh: GithubPr): string {
+/** The PR's link on GitHub, with its state, and while it's open, its
+ * checks and review */
+function githubLead(gh: GithubPr): string {
   const state = gh.state === "OPEN" && gh.isDraft ? "draft" : gh.state.toLowerCase()
-  return `<a class="gh-pr ${state}" href="${escapeHtml(gh.url)}" target="_blank" rel="noreferrer">#${gh.number} ${STATES[state as keyof typeof STATES]}</a>`
-}
-
-/** The PR's link and where it stands on GitHub, with what doesn't match
- * here: its head, saying which side moved, and its base, which should be the
- * PR below it or trunk. The link, checks, and review lead the meta line, and
- * the rest follows the bookmark. */
-function githubMeta(pr: Pr, gh: GithubPr, base: string): [string, string] {
-  const link = githubLink(gh)
-  if (gh.state !== "OPEN") return [link, ""]
-  const lead = [link]
+  const lead = [
+    `<a class="gh-pr ${state}" href="${escapeHtml(gh.url)}" target="_blank" rel="noreferrer">#${gh.number} ${STATES[state as keyof typeof STATES]}</a>`,
+  ]
+  if (gh.state !== "OPEN") return lead.join("")
   if (gh.checks) {
     const title = CHECKS[gh.checks]
     lead.push(
@@ -160,103 +151,79 @@ function githubMeta(pr: Pr, gh: GithubPr, base: string): [string, string] {
       `<span class="gh-note gh-review ${cls}" title="Review on GitHub: ${text}"><svg viewBox="0 0 24 24" aria-label="${text}">${icon}</svg></span>`,
     )
   }
-  const notes: string[] = []
-  // From a cache an older ah wrote, it has no stack
-  if (gh.stack) {
-    const { number, size, position } = gh.stack
-    notes.push(
-      note(
-        `stack #${number}`,
-        "",
-        `In GitHub stack #${number}, ${position} of ${size} from the bottom, counting merged PRs`,
-      ),
-    )
-  }
-  const tip = pr.commits[0]?.commit
-  const head = gh.headRefOid
-  if (tip && !head.startsWith(tip)) {
-    const where = `${tip} here, ${head.slice(0, 8)} on GitHub`
-    // Pushed as it was last fetched, so the change is here, and the line in
-    // the commit list shows it unless the bookmark only moved back. Otherwise
-    // GitHub has something newer, like a rebase after the PR below merged.
-    // Whether it's new commits or a rewrite can't be told until a fetch
-    // brings its head, and then the commit list shows which.
-    if (!pr.pushed || !head.startsWith(pr.pushed))
-      notes.push(
-        note("GitHub's branch moved since the last fetch", "warn", where),
-        fetchButton(pr),
-      )
-    else if (!pr.unpushed) notes.push(note("not pushed", "warn", where))
-  }
-  if (base && gh.baseRefName !== base)
-    notes.push(note(`base is ${gh.baseRefName} on GitHub, ${base} here`, "warn"))
-  return [lead.join(""), notes.join("")]
+  return lead.join("")
 }
 
-/** Pushes and fetches from this page, by the bookmark of the PR they were
- * clicked on: out, or how they ended, which shows on the PR until GitHub's
- * side shows the PR after it (settledRuns), the user dismisses it, or another
- * is clicked there */
-const runs = new Map<string, "pushing" | "fetching" | RunResult>()
-const running = (bookmark: string) => typeof runs.get(bookmark) === "string"
+/** How a run of jj-spr from the page ended: whether it worked, and its
+ * output */
+type RunResult = { ok: boolean; text: string }
 
-/** In ah's own window, whose sheet a push is confirmed in */
+/** Runs of jj-spr from this page, by the tip of the PR they were clicked on,
+ * or ALL for Push all: out, or how they ended, which shows until the user
+ * dismisses it or another is clicked there. One cancelled in the sheet
+ * leaves nothing. */
+const runs = new Map<string, "running" | RunResult>()
+const ALL = "*"
+const running = (key: string) => runs.get(key) === "running"
+
+/** In ah's own window, whose sheet a run is confirmed in */
 const inWindow = new URLSearchParams(location.search).get("in") === "window"
 
-/** The Push button for `pr`, disabled while its push is out; for a bookmark
- * that's `fresh` on the remote, it creates the PR too */
-function pushButton(pr: Pr, fresh = false): string {
-  const busy = runs.get(pr.bookmark) === "pushing"
-  const [label, title] = !inWindow
+/** What jj-spr says of the PR with `tip`, once it has answered */
+const statusOf = (tip: string): SprEntry | undefined =>
+  status?.entries.find((e) => e.tip === tip)
+
+/** Whether a push would do something for `pr`: what jj-spr says it would,
+ * or until it answers, whether it isn't on GitHub yet or has commits still
+ * to push */
+function needsPush(pr: Pr): boolean {
+  if (pr.merged) return false
+  const actions = statusOf(pr.tip)?.actions
+  if (actions) return actions.some(isTodo)
+  return pr.pr === null ? pr.commits.length > 0 : pr.unpushed > 0
+}
+
+/** A Push button for `key`, a PR's tip or ALL, disabled while its run is
+ * out */
+function pushButton(key: string, label: string, title: string): string {
+  const [text, tooltip] = !inWindow
     ? [
         "Push in ah's window",
         "Pushing is confirmed in ah's window for this page: open it with ah tool stack",
       ]
-    : busy
+    : running(key)
       ? ["Pushing…", "Waiting for you to confirm in the window's sheet, then pushing"]
-      : fresh
-        ? [
-            "Push and create PR",
-            `Push ${pr.bookmark} and open its PR, after the window asks you`,
-          ]
-        : pr.rewrites
-          ? [
-              "Force push",
-              `Push ${pr.bookmark}, rewriting what's pushed, after the window asks you`,
-            ]
-          : ["Push", `Push ${pr.bookmark}, after the window asks you`]
-  return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(pr.bookmark)}" title="${escapeHtml(title)}"${running(pr.bookmark) || !inWindow ? " disabled" : ""}>${label}</button>`
+      : [label, `${title}, after the window asks you`]
+  return `<button type="button" class="push-button${inWindow ? "" : " elsewhere"}" data-push="${escapeHtml(key)}" title="${escapeHtml(tooltip)}"${running(key) || !inWindow ? " disabled" : ""}>${text}</button>`
 }
 
-/** The Fetch button by a note that GitHub has `pr`'s branch somewhere the
- * last fetch didn't bring */
-function fetchButton(pr: Pr): string {
-  const busy = runs.get(pr.bookmark) === "fetching"
-  return `<button type="button" class="push-button" data-fetch="${escapeHtml(pr.bookmark)}" title="jj git fetch, which sends nothing"${running(pr.bookmark) ? " disabled" : ""}>${busy ? "Fetching…" : "Fetch"}</button>`
-}
+/** The Push button for one PR, which pushes the ones below it too */
+const prPushButton = (pr: Pr) =>
+  pushButton(
+    pr.tip,
+    pr.pr === null ? "Push and create PR" : "Push",
+    `jj spr submit --upto ${pr.tip}: this PR and the ones below it`,
+  )
 
-/** How the PR's last push or fetch from this page went, if there was one */
-function runResult(pr: Pr): string {
-  const result = runs.get(pr.bookmark)
+/** How the last run from here for `key` went, if there was one */
+function runResult(key: string): string {
+  const result = runs.get(key)
   if (!result || typeof result === "string") return ""
-  const opened = result.pr
-    ? `<p class="push-pr">Opened <a href="${escapeHtml(result.pr)}" target="_blank" rel="noopener">${escapeHtml(result.pr)}</a></p>`
-    : result.prError
-      ? `<pre class="push-result bad">The PR didn't open, so it's still to create: ${escapeHtml(result.prError)}</pre>`
-      : ""
-  const stacked = result.stackError
-    ? `<pre class="push-result bad">${escapeHtml(result.stackError)}</pre>`
-    : result.stack
-      ? `<p class="push-pr">${escapeHtml(result.stack)}</p>`
-      : ""
   return `<div class="push-log">
-      <button type="button" class="dismiss" data-dismiss="${escapeHtml(pr.bookmark)}" title="Dismiss" aria-label="Dismiss">×</button>
-      <pre class="push-result ${result.how}">${escapeHtml(result.text)}</pre>${opened}${stacked}
+      <button type="button" class="dismiss" data-dismiss="${escapeHtml(key)}" title="Dismiss" aria-label="Dismiss">×</button>
+      <pre class="push-result ${result.ok ? "ok" : "bad"}">${escapeHtml(result.text)}</pre>
     </div>`
 }
 
-/** How a commit still to push differs from what the remote has: new, only
- * rebased, or changed */
+/** jj-spr's problems with `tips`, or with the whole file for null */
+const problems = (tip: string | null) =>
+  (status?.problems ?? [])
+    .filter((p) => p.tip === tip)
+    .map((p) => `<pre class="problem">${escapeHtml(p.message)}</pre>`)
+    .join("")
+
+/** How a commit still to push differs from what jj-spr last pushed: new,
+ * only rebased, or changed */
 function pushKind(c: Commit): "new" | "rebased" | "changed" {
   const r = c.rewrite
   return !r ? "new" : r.add || r.del || r.reworded ? "changed" : "rebased"
@@ -277,19 +244,18 @@ function changedTag(
   return `<button type="button" class="push-tag changed" data-diff="${data}" data-title="${title}">${text}${lines}</button>`
 }
 
-/** A commit's tag for how it differs from what the remote has, with none
- * for one only rebased, since there's nothing in it to look at */
+/** A commit's tag for how it differs from what was pushed, with none for
+ * one only rebased, since there's nothing in it to look at */
 function pushTag(c: Commit): string {
   const kind = pushKind(c)
-  if (kind === "new")
-    return '<span class="push-tag" title="Not on the remote yet">new</span>'
+  if (kind === "new") return '<span class="push-tag" title="Not pushed yet">new</span>'
   if (kind === "rebased") return ""
   const { from, ...changes } = c.rewrite!
   return changedTag({ from, to: c.commit }, changes, "Open what changed in skepsis")
 }
 
-/** A PR's tag for how its commits differ from the remote's, apart from moving
- * onto new parents. A new commit's description makes the interdiff's
+/** A PR's tag for how its commits differ from what was pushed, apart from
+ * moving onto new parents. A new commit's description makes the interdiff's
  * descriptions differ, so it's only "reworded" when no lines changed. */
 function prTag({ from, to, add, del, reworded }: NonNullable<Pr["interdiff"]>): string {
   if (!add && !del && !reworded) return ""
@@ -300,10 +266,15 @@ function prTag({ from, to, add, del, reworded }: NonNullable<Pr["interdiff"]>): 
   )
 }
 
-/** The bar's text: how many to push, and how many are new or changed
- * unless all are new. The rest were only rebased. */
-function toPushText(commits: Commit[]): string {
-  const kinds = commits.map(pushKind)
+/** The bar's text for `pr`: how many commits to push, and how many are new
+ * or changed unless all are new, the rest only rebased; or with none known,
+ * what jj-spr would do */
+function toPushText(pr: Pr): string {
+  const kinds = pr.commits.slice(0, pr.unpushed).map(pushKind)
+  if (!kinds.length)
+    return statusOf(pr.tip)?.actions?.includes("push the changes")
+      ? "↑ changes to push"
+      : "↑ to update on GitHub"
   const count = (k: string) => kinds.filter((x) => x === k).length
   if (count("new") === kinds.length) return `↑ ${kinds.length} to push`
   if (count("rebased") === kinds.length) return `↑ ${kinds.length} to push, unchanged`
@@ -313,10 +284,17 @@ function toPushText(commits: Commit[]): string {
   return `↑ ${kinds.length} to push: ${parts.join(", ")}`
 }
 
-/** The commits, with a line under the first `unpushed` of them, the newest,
- * when there are any, with `button` on it. Unless those are all new, each
- * says how it differs from what the remote has. */
-function commitList(commits: Commit[], unpushed = 0, button = ""): string {
+/** The bar for a PR on GitHub with something to push, or nothing */
+function pushBar(pr: Pr): string {
+  if (pr.pr === null || !needsPush(pr)) return ""
+  const below = pr.pushed && pr.unpushed < pr.commits.length
+  return `<span>${toPushText(pr)}</span>${prPushButton(pr)}${below ? '<span class="pushed">pushed ↓</span>' : ""}`
+}
+
+/** The commits, with `bar` under the first `unpushed` of them, the newest,
+ * when there is one. Unless those are all new, each says how it differs
+ * from what was pushed. */
+function commitList(commits: Commit[], unpushed = 0, bar = ""): string {
   const toPush = commits.slice(0, unpushed)
   const tagged = toPush.some((c) => c.rewrite)
   const items = commits.map((c, i) => {
@@ -325,7 +303,7 @@ function commitList(commits: Commit[], unpushed = 0, button = ""): string {
     const tag = tagged && i < unpushed
     return `<li><details class="commit" ${openAttr(`c-${c.change}`)}>
       <summary>
-        <span class="mono cid" title="${c.change} @ ${c.commit}">${escapeHtml(c.short)}</span>
+        <span class="mono cid" title="${c.change} @ ${c.commit.slice(0, 8)}">${escapeHtml(c.short)}</span>
         <span class="title">${escapeHtml(title || "(no description)")}</span>
         ${tag ? pushTag(c) : ""}
         ${stat(c.files, { rev: c.change })}
@@ -336,73 +314,82 @@ function commitList(commits: Commit[], unpushed = 0, button = ""): string {
       </div>
     </details></li>`
   })
-  if (unpushed)
-    items.splice(
-      unpushed,
-      0,
-      `<li class="to-push"><span>${toPushText(toPush)}</span>${button}${unpushed < commits.length ? '<span class="pushed">pushed ↓</span>' : ""}</li>`,
-    )
+  if (bar) items.splice(unpushed, 0, `<li class="to-push">${bar}</li>`)
   return `<ol class="commits">${items.join("")}</ol>`
 }
 
 // Lucide's chevron-right, turned down when the card is open
 const CHEVRON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>`
 
-function prCard(pr: Pr, gh: GithubPr | undefined, base: string): string {
+/** What submit would do for `pr` that its buttons and bar don't say */
+function plannedNote(pr: Pr): string {
+  const said = ["push the changes", "open a Pull Request"]
+  const rest = (statusOf(pr.tip)?.actions ?? []).filter(
+    (a) => !a.startsWith("nothing") && !said.includes(a),
+  )
+  return rest.length ? note(`jj spr submit will ${rest.join(", ")}`, "warn") : ""
+}
+
+function prCard(pr: Pr, gh: GithubPr | undefined): string {
   const files = pr.files.length
   // Like a merged PR whose commits left the stack: nothing to unfold
   const empty = !files && !pr.commits.length
-  const collapsed = empty || isCollapsed(folds[pr.bookmark], gh)
-  const title = escapeHtml(gh?.title ?? pr.title)
+  const collapsed = empty || isCollapsed(folds[pr.tip], pr, gh)
+  const title = escapeHtml(pr.title || statusOf(pr.tip)?.title || "(no title)")
   // A dot on the graph for its commits, which aren't drawn, or for a merged
   // PR whose commits have left the stack, so it still has its place on the line
   const dot = collapsed ? " dot" : ""
   const fold = empty
     ? ""
-    : `<button type="button" class="fold" data-fold="${escapeHtml(pr.bookmark)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>`
+    : `<button type="button" class="fold" data-fold="${escapeHtml(pr.tip)}" aria-expanded="${!collapsed}" title="${collapsed ? "Show" : "Fold"} this PR">${CHEVRON}</button>`
   const head = `<div class="pr-head${dot}">
       ${fold}
       <h2><span class="n">${pr.n}.</span> ${title}</h2>
       ${pr.interdiff ? prTag(pr.interdiff) : ""}
       ${pr.diff ? stat(pr.files, pr.diff) : ""}
     </div>`
-  // Before a first push, all of them are to push, which goes without saying
-  const unpushed = pr.pushed ? pr.unpushed : 0
-  // Its bookmark is new on the remote, so the button goes by Body
-  const fresh = !pr.pushed && pr.commits.length > 0
-  const [ghLead, ghNotes] = gh ? githubMeta(pr, gh, base) : ["", ""]
-  const meta = `<div class="pr-meta">${ghLead}${gh ? "" : `<button type="button" class="body-button" data-body="${escapeHtml(pr.bookmark)}" title="Open the PR body">${PENCIL} Body</button>`}${fresh ? pushButton(pr, true) : ""}<span><span class="mono">${escapeHtml(pr.bookmark)}</span>${pr.merge ? ` · ${escapeHtml(pr.merge)}` : ""}</span>${pr.missing && !doneOnGithub(gh) ? note("no bookmark yet", "warn") : ""}${ghNotes}</div>
-    ${runResult(pr)}`
+  const body = pr.body
+    ? `<button type="button" class="body-button" data-body="${escapeHtml(pr.tip)}" data-title="Open ${escapeHtml(pr.body)}">${PENCIL} Body</button>`
+    : ""
+  // Before it's on GitHub, the button goes by Body
+  const fresh = pr.pr === null && needsPush(pr) ? prPushButton(pr) : ""
+  const stack = gh?.stack
+    ? note(
+        `stack #${gh.stack.number}`,
+        "",
+        `In GitHub stack #${gh.stack.number}, ${gh.stack.position} of ${gh.stack.size} from the bottom, counting merged PRs`,
+      )
+    : ""
+  const merged = pr.merged && !gh ? note("merged", "good") : ""
+  const meta = `<div class="pr-meta">${gh ? githubLead(gh) : ""}${body}${fresh}<span class="mono">${escapeHtml(pr.tip)}</span>${merged}${stack}${plannedNote(pr)}</div>
+    ${problems(pr.tip)}${runResult(pr.tip)}`
+  const bar = pushBar(pr)
   // Folded, the bar for its commits still to push stands in for them
-  if (collapsed) {
-    const bar = unpushed
-      ? `<div class="to-push"><span>${toPushText(pr.commits.slice(0, unpushed))}</span>${pushButton(pr)}</div>`
-      : ""
-    return `<section class="pr collapsed">${head}${meta}${bar}</section>`
-  }
+  if (collapsed)
+    return `<section class="pr collapsed">${head}${meta}${bar ? `<div class="to-push">${bar}</div>` : ""}</section>`
   return `<section class="pr">
     ${head}
     ${meta}
     ${
       files
-        ? `<details class="more" ${openAttr(`pr-${pr.bookmark}`)}>
+        ? `<details class="more" ${openAttr(`pr-${pr.tip}`)}>
       <summary>${files} file${files === 1 ? "" : "s"}</summary>
       ${fileList(pr.files)}
     </details>`
         : ""
     }
-    ${commitList(pr.commits, unpushed, unpushed ? pushButton(pr) : "")}
+    ${commitList(pr.commits, pr.unpushed, bar)}
   </section>`
 }
 
-/** Commits below a fork with no PR's bookmark on them, so each PR above
- * would include them on GitHub */
+/** Commits below a fork with no PR's tip on them, so each PR above would
+ * include them on GitHub */
 function sharedCard(group: Shared): string {
   const { prs } = group
-  const bookmark = group.head !== group.commits[0].change
+  const named = group.head !== group.commits[0].change
   return `<section class="pr shared">
     <div class="pr-head">
-      <h2>${bookmark ? `<span class="mono">${escapeHtml(group.head)}</span>` : "No bookmark"}</h2>
+      <h2>${named ? `<span class="mono">${escapeHtml(group.head)}</span>` : "No bookmark"}</h2>
       ${group.diff ? stat(group.files, group.diff) : ""}
     </div>
     <div class="pr-meta">${note(`shared by PRs ${prs.slice(0, -1).join(", ")} and ${prs.at(-1)}`, "warn")}</div>
@@ -410,13 +397,25 @@ function sharedCard(group: Shared): string {
   </section>`
 }
 
+/** Push all, with more than one PR, when any would change */
+function stackBar(prs: Pr[]): string {
+  const live = prs.filter((pr) => !pr.merged)
+  const button =
+    live.length > 1 && live.some(needsPush)
+      ? `<div class="stack-actions">${pushButton(ALL, "Push all", "jj spr submit: every PR in the stack")}</div>`
+      : ""
+  return button + runResult(ALL)
+}
+
 // In localStorage, so a new window knows which PRs merged before gh answers
 const githubKey = `ah-stack-github:${location.pathname}`
 let github = read<GithubPrs>(localStorage, githubKey) ?? {}
-/** By bookmark, whether the user folded the PR (true) or opened it */
+/** By tip, whether the user folded the PR (true) or opened it */
 const foldsKey = `ah-stack-folds:${location.pathname}`
 const folds = read<Record<string, boolean>>(localStorage, foldsKey) ?? {}
 let githubError = ""
+let status: SprStatus | null = null
+let statusError = ""
 let drawn = ""
 
 /** Each row's lane in the graph, like jj log's: the lane on its way down to
@@ -441,28 +440,29 @@ function graphLanes(rows: Group[]): { lane: number; join: number | null }[] {
 }
 
 function draw(stack: Stack, error = "") {
-  document.title = stack.title
+  const title = stack.title || pageTitle
+  document.title = title
   const rows = arrangeRows(stack.rows, github)
+  const prs = rows.filter((r): r is Pr => "n" in r)
   const lanes = graphLanes(rows)
-  // On GitHub, the PR below it, or trunk once that one has merged, since
-  // GitHub then retargets this one
-  const base = (pr: Pr) => {
-    const below = prBelow(rows, pr)
-    return below && github[below.bookmark]?.state !== "MERGED"
-      ? below.bookmark
-      : stack.trunk
-  }
+  // Problems with tips no entry has, as after a tip was renamed
+  const stray = (status?.problems ?? []).filter(
+    (p) => p.tip !== null && !prs.some((pr) => pr.tip === p.tip),
+  )
   const html = `
-    <h1>${escapeHtml(stack.title)}</h1>
+    <h1>${escapeHtml(title)}</h1>
     ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
     ${githubError ? `<p class="error">GitHub: ${escapeHtml(githubError)}</p>` : ""}
+    ${statusError ? `<p class="error">jj spr: ${escapeHtml(statusError)}</p>` : ""}
+    ${problems(null)}${stray.map((p) => `<pre class="problem">${escapeHtml(p.message)}</pre>`).join("")}
     <div class="notes">${stack.notes.map((n) => `<p>${prose(n)}</p>`).join("")}</div>
+    ${stackBar(prs)}
     ${
       rows.length
         ? `<div class="prs"><svg class="graph"></svg>${rows
             .map((row, i) => {
               const { lane, join } = lanes[i]
-              return `<div class="row" style="--lane: ${lane}" data-lane="${lane}"${join === null ? "" : ` data-join="${join}"`}>${"n" in row ? prCard(row, github[row.bookmark], base(row)) : sharedCard(row)}</div>`
+              return `<div class="row" style="--lane: ${lane}" data-lane="${lane}"${join === null ? "" : ` data-join="${join}"`}>${"n" in row ? prCard(row, github[row.tip]) : sharedCard(row)}</div>`
             })
             .join(
               "",
@@ -559,7 +559,7 @@ main.addEventListener("click", async (e) => {
     const res = await fetch(new URL(diff ? "skepsis" : "pr-body", threadUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: diff ?? JSON.stringify({ bookmark: body }),
+      body: diff ?? JSON.stringify({ tip: body }),
     })
     if (!res.ok) error = (await res.text()) || `${res.status}`
   } catch (e) {
@@ -572,71 +572,58 @@ main.addEventListener("click", async (e) => {
 
 // A PR's fold button, whose choice is kept over the default
 main.addEventListener("click", (e) => {
-  const bookmark = (e.target as Element).closest<HTMLElement>("button[data-fold]")?.dataset
-    .fold
-  if (!bookmark) return
-  folds[bookmark] = !isCollapsed(folds[bookmark], github[bookmark])
+  const tip = (e.target as Element).closest<HTMLElement>("button[data-fold]")?.dataset.fold
+  const pr = current?.rows.find((r): r is Pr => "n" in r && r.tip === tip)
+  if (!tip || !pr) return
+  folds[tip] = !isCollapsed(folds[tip], pr, github[tip])
   write(localStorage, foldsKey, folds)
   redraw()
 })
 
-// A Push or Fetch button. For Push, the server asks the user in a sheet,
-// and pushes if they say so. The stack redraws by itself after either, since
-// both are jj operations.
+// A Push button: the server asks the user in a sheet, and runs jj-spr if
+// they say so. The stack redraws by itself after, since jj-spr writes the
+// stack file.
 main.addEventListener("click", async (e) => {
-  const button = (e.target as Element).closest<HTMLButtonElement>(
-    "button[data-push], button[data-fetch]",
-  )
-  const fetching = button?.dataset.fetch !== undefined
-  const bookmark = button?.dataset.push ?? button?.dataset.fetch
-  if (!bookmark || !threadUrl || running(bookmark)) return
-  runs.set(bookmark, fetching ? "fetching" : "pushing")
+  const key = (e.target as Element).closest<HTMLButtonElement>("button[data-push]")?.dataset
+    .push
+  if (!key || !threadUrl || running(key)) return
+  runs.set(key, "running")
   redraw()
-  let result: Omit<RunResult, "at">
+  let result: RunResult | null
   try {
-    const res = await fetch(new URL(fetching ? "fetch" : "push", threadUrl), {
+    const res = await fetch(new URL("spr", threadUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bookmark }),
+      body: JSON.stringify({ tip: key === ALL ? null : key, message: "" }),
     })
     if (res.ok) {
-      // A fetch answers only its output
-      const {
-        pushed = true,
-        output,
-        ...rest
-      }: { pushed?: boolean; output: string } & Pick<
-        RunResult,
-        "pr" | "prError" | "stack" | "stackError"
-      > = await res.json()
-      result = { how: pushed ? "ok" : "cancelled", text: output, ...rest }
-    } else result = { how: "bad", text: (await res.text()) || `${res.status}` }
+      const { done, output }: { done: boolean; output: string } = await res.json()
+      result = done ? { ok: true, text: output } : null
+    } else result = { ok: false, text: (await res.text()) || `${res.status}` }
   } catch (e) {
-    result = { how: "bad", text: String(e) }
+    result = { ok: false, text: String(e) }
   }
-  runs.set(bookmark, { ...result, at: Date.now() })
+  if (result) runs.set(key, result)
+  else runs.delete(key)
   redraw()
-  // GitHub has the branch's new head now, and maybe a new PR, which then
-  // shows in place of the Body and Push buttons, and the log goes
-  if (result.how !== "bad") void loadGithub()
+  if (result?.ok) void loadRemote()
 })
 
 // A run's log, which the user is done with
 main.addEventListener("click", (e) => {
-  const bookmark = (e.target as Element).closest<HTMLElement>("button[data-dismiss]")
-    ?.dataset.dismiss
-  if (!bookmark || running(bookmark)) return
-  runs.delete(bookmark)
+  const key = (e.target as Element).closest<HTMLElement>("button[data-dismiss]")?.dataset
+    .dismiss
+  if (!key || running(key)) return
+  runs.delete(key)
   redraw()
 })
 
 // Named for the shape of Stack, so a tab never draws one from an older ah
-const cacheKey = `ah-stack-rows:${location.pathname}`
+const cacheKey = `ah-stack-rows-spr:${location.pathname}`
 const cached = read<Stack>(sessionStorage, cacheKey)
 let current: Stack | null = cached
 let currentError = ""
-const redraw = () =>
-  draw(current ?? { title: document.title, notes: [], trunk: "", rows: [] }, currentError)
+const redraw = () => draw(current ?? { title: "", notes: [], rows: [] }, currentError)
 if (cached) redraw()
 
 async function get<T>(path: string): Promise<T> {
@@ -645,26 +632,34 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T
 }
 
-/** GitHub's side, which nothing here hears change, so asked for again now
- * and then while the page is in view */
-async function loadGithub() {
-  const asked = Date.now()
-  try {
-    github = await get<GithubPrs>("stack-github")
-    githubError = ""
-    write(localStorage, githubKey, github)
-    for (const bookmark of settledRuns(runs, github, asked)) runs.delete(bookmark)
-  } catch (e) {
-    githubError = (e as Error).message
-  }
+/** GitHub's side and jj-spr's, which nothing here hears change on GitHub,
+ * so asked for again now and then while the page is in view */
+async function loadRemote() {
+  await Promise.all([
+    get<GithubPrs>("stack-github").then(
+      (prs) => {
+        github = prs
+        githubError = ""
+        write(localStorage, githubKey, github)
+      },
+      (e: Error) => (githubError = e.message),
+    ),
+    get<SprStatus>("stack-status").then(
+      (s) => {
+        status = s
+        statusError = ""
+      },
+      (e: Error) => (statusError = e.message),
+    ),
+  ])
   redraw()
 }
 
 let loading = false
 let dirty = false
 
-/** The stack, then GitHub's side, which takes longer. One load at a time;
- * asks during one make one more. */
+/** The stack, then GitHub's and jj-spr's side, which take longer. One load
+ * at a time; asks during one make one more. */
 async function load() {
   if (loading) {
     dirty = true
@@ -682,7 +677,7 @@ async function load() {
         currentError = (e as Error).message
       }
       redraw()
-      await loadGithub()
+      await loadRemote()
     } while (dirty)
   } finally {
     loading = false
@@ -691,9 +686,9 @@ async function load() {
 
 if (threadUrl) {
   void load()
-  // The server says when stack.json, a body or the repo's commits change
+  // The server says when the stack file, a body or the repo's commits change
   document.addEventListener("ah-data", () => void load())
   setInterval(() => {
-    if (document.visibilityState === "visible") void loadGithub()
+    if (document.visibilityState === "visible") void loadRemote()
   }, 60_000)
 }

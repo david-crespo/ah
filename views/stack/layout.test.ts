@@ -1,15 +1,15 @@
 import { expect, test } from "vitest"
 import type { Pr, Shared } from "./data.ts"
 import type { GithubPr } from "./github.ts"
-import { arrangeRows, isCollapsed, type RunResult, settledRuns } from "./layout.ts"
+import { arrangeRows, isCollapsed, isTodo } from "./layout.ts"
 
 const gh = (state: GithubPr["state"]) => ({ state }) as GithubPr
 const pr = (n: number, rest: Partial<Pr> = {}) =>
-  ({ n, bookmark: `b${n}`, missing: false, commits: [], ...rest }) as Pr
+  ({ n, tip: `b${n}`, missing: false, merged: false, commits: [], ...rest }) as Pr
 const commit = { change: "c" } as Pr["commits"][number]
 const shared = { head: "s", commits: [commit] } as Shared
 
-test("a PR whose bookmark is gone goes last once GitHub has merged or closed it", () => {
+test("a PR whose tip is gone goes last once GitHub has merged or closed it", () => {
   // As data.ts orders them: missing first, then the graph, then PRs with no
   // commits of their own
   const rows = [
@@ -28,33 +28,20 @@ test("a PR whose bookmark is gone goes last once GitHub has merged or closed it"
 })
 
 test("a merged PR starts collapsed, and the user's choice wins either way", () => {
-  expect(isCollapsed(undefined, gh("MERGED"))).toBe(true)
-  expect(isCollapsed(undefined, gh("OPEN"))).toBe(false)
-  expect(isCollapsed(undefined, gh("CLOSED"))).toBe(false)
-  expect(isCollapsed(undefined, undefined)).toBe(false)
-  expect(isCollapsed(false, gh("MERGED"))).toBe(false)
-  expect(isCollapsed(true, gh("OPEN"))).toBe(true)
+  const open = pr(1)
+  expect(isCollapsed(undefined, open, gh("MERGED"))).toBe(true)
+  expect(isCollapsed(undefined, open, gh("OPEN"))).toBe(false)
+  expect(isCollapsed(undefined, open, gh("CLOSED"))).toBe(false)
+  expect(isCollapsed(undefined, open, undefined)).toBe(false)
+  // Marked merged by jj spr sync, before GitHub answers
+  expect(isCollapsed(undefined, pr(1, { merged: true }), undefined)).toBe(true)
+  expect(isCollapsed(false, open, gh("MERGED"))).toBe(false)
+  expect(isCollapsed(true, open, gh("OPEN"))).toBe(true)
 })
 
-test("a run's log goes once GitHub has the PR, unless it failed", () => {
-  const run = (how: RunResult["how"], extra: Partial<RunResult> = {}): RunResult => ({
-    how,
-    text: "",
-    at: 10,
-    ...extra,
-  })
-  const runs = new Map<string, "pushing" | RunResult>([
-    ["pushed", run("ok", { pr: "https://github.com/o/r/pull/1" })],
-    ["no-pr-yet", run("ok")],
-    ["pr-failed", run("ok", { prError: "gh: no auth" })],
-    ["stack-failed", run("ok", { stackError: "422" })],
-    ["failed", run("bad")],
-    ["cancelled", run("cancelled")],
-    ["out", "pushing"],
-  ])
-  const gh = { number: 1 } as GithubPr
-  const github = { pushed: gh, "pr-failed": gh, "stack-failed": gh, failed: gh, out: gh }
-  expect(settledRuns(runs, github, 11)).toEqual(["pushed", "cancelled"])
-  // A load asked before the run ended doesn't show what it did
-  expect(settledRuns(runs, github, 9)).toEqual([])
+test("isTodo: anything submit would do but nothing and keeping GitHub's edit", () => {
+  expect(isTodo("push the changes")).toBe(true)
+  expect(isTodo("retarget it from a to main")).toBe(true)
+  expect(isTodo("nothing: it is up to date")).toBe(false)
+  expect(isTodo("keep the title edited on GitHub")).toBe(false)
 })

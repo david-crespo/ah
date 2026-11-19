@@ -1,7 +1,8 @@
 // A stack's files, which `ah tool stack` writes from the templates here: the
-// page, only a frame that loads stack.js and stack.css, and the stack.json
-// next to it that the agent fills in (data.ts). One directory per
-// stack, since a page reloads on any change in its directory.
+// page, only a frame that loads stack.js and stack.css, and unless `jj spr
+// stack-file init` wrote it first, the stack.json next to it for the agent
+// to fill in (data.ts). One directory per stack, since a page reloads on any
+// change in its directory.
 
 import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs"
 import { join } from "node:path"
