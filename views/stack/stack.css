@@ -42,9 +42,10 @@ main h1 {
   margin: 0 0 4px;
 }
 main .notes {
-  margin: 12px 0 20px;
+  margin: 12px 0 20px 28px;
 }
 main .error {
+  margin-left: 28px;
   color: var(--del);
   white-space: pre-wrap;
 }
