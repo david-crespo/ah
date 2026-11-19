@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Workstream</title>
+    <style>
+      :root {
+        --bg: #fbfbfa;
+        --fg: #1d1f21;
+        --muted: #6b6f75;
+        --faint: #9a9ea4;
+        --card: #ffffff;
+        --border: #e3e4e6;
+        --hover: #f3f4f5;
+        --code: #f1f2f3;
+        --accent: #2f6fd0;
+        --add: #1f8a4c;
+        --del: #c23b3b;
+        --ready: #1f8a4c;
+        --ready-bg: #e5f4ea;
+        --running: #2f6fd0;
+        --running-bg: #e6eefb;
+        --parked: #6b6f75;
+        --parked-bg: #eeeff1;
+        --done: #7a5bc2;
+        --done-bg: #efe9fa;
+        --open: #a86a00;
+        --open-bg: #fbf1dd;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #17181a;
+          --fg: #e4e5e7;
+          --muted: #9a9ea4;
+          --faint: #6b6f75;
+          --card: #1e2022;
+          --border: #2e3134;
+          --hover: #26292c;
+          --code: #2a2d30;
+          --accent: #7aa7ef;
+          --add: #5cc98a;
+          --del: #ef7b7b;
+          --ready: #5cc98a;
+          --ready-bg: #1d3326;
+          --running: #7aa7ef;
+          --running-bg: #1d2a40;
+          --parked: #9a9ea4;
+          --parked-bg: #2a2d30;
+          --done: #b49cf0;
+          --done-bg: #2c2540;
+          --open: #e6b45c;
+          --open-bg: #3a2f1a;
+        }
+      }
+      html {
+        background: var(--bg);
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          15px/1.5 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 96px;
+      }
+      main a,
+      main a:visited {
+        color: var(--accent);
+      }
+      main h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+      }
+      main h2 {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 28px 0 8px;
+      }
+      main .sub {
+        color: var(--muted);
+        margin: 0 0 16px;
+      }
+      main code {
+        font:
+          12.5px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        background: var(--code);
+        padding: 1px 4px;
+        border-radius: 4px;
+      }
+      main .mono {
+        font:
+          12.5px ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      main .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 12px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      main .toolbar {
+        display: flex;
+        gap: 8px;
+        margin: 12px 0 0;
+        flex-wrap: wrap;
+      }
+
+      main details.item {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin: 8px 0;
+      }
+      main details.item > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 10px 12px;
+        display: grid;
+        align-items: baseline;
+        grid-template-columns: 10px 5.2em minmax(0, 1fr) auto 52px 84px;
+        column-gap: 4px;
+      }
+      main details.item > summary > .pill {
+        justify-self: start;
+      }
+      main details.item > summary > .pill.questions {
+        grid-column: 4;
+        justify-self: end;
+      }
+      main details.item > summary > .revs {
+        grid-column: 5;
+        justify-self: end;
+      }
+      main details.item > summary > .stat {
+        grid-column: 6;
+        justify-self: end;
+      }
+      main details.item > summary::-webkit-details-marker {
+        display: none;
+      }
+      main details.item > summary:hover {
+        background: var(--hover);
+        border-radius: 8px;
+      }
+      main .chev {
+        color: var(--faint);
+        width: 10px;
+        flex: none;
+        transition: transform 0.15s;
+        align-self: flex-start;
+        height: 1lh;
+        display: flex;
+        align-items: center;
+      }
+      main details[open] > summary .chev {
+        transform: rotate(90deg);
+      }
+      main .item-title {
+        font-weight: 600;
+        flex: 1;
+        min-width: 0;
+      }
+      main .item-meta {
+        color: var(--muted);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      main .pill {
+        font-size: 11.5px;
+        font-weight: 600;
+        padding: 1px 8px;
+        border-radius: 99px;
+        white-space: nowrap;
+        color: var(--parked);
+        background: var(--parked-bg);
+      }
+      main .pill.ready {
+        color: var(--ready);
+        background: var(--ready-bg);
+      }
+      main .pill.running {
+        color: var(--running);
+        background: var(--running-bg);
+      }
+      main .pill.done,
+      main .pill.notes {
+        color: var(--done);
+        background: var(--done-bg);
+      }
+      main .pill.questions {
+        color: var(--open);
+        background: var(--open-bg);
+      }
+      main .body {
+        padding: 0 12px 12px 32px;
+      }
+      main .summary {
+        margin: 0 0 10px;
+      }
+      main .base {
+        color: var(--muted);
+        font-size: 13px;
+        margin: -6px 0 10px;
+      }
+      main .section-label {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted);
+        margin: 12px 0 4px;
+      }
+      main ul.plain {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      main ul.plain > li {
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+        padding: 3px 0;
+        flex-wrap: wrap;
+      }
+      main .open-q li::before {
+        content: "?";
+        color: var(--open);
+        font-weight: 700;
+        margin-right: 6px;
+      }
+      main .open-q {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      main .open-q li {
+        padding: 2px 0;
+      }
+
+      main details.commit {
+        border-top: 1px solid var(--border);
+      }
+      main details.commit:first-child {
+        border-top: none;
+      }
+      main details.commit > summary {
+        list-style: none;
+        cursor: pointer;
+        padding: 5px 0;
+        display: flex;
+        gap: 8px;
+        align-items: baseline;
+      }
+      main details.commit > summary::-webkit-details-marker {
+        display: none;
+      }
+      main .change {
+        color: var(--accent);
+      }
+      main .ctitle {
+        flex: 1;
+        min-width: 0;
+      }
+      main .ctitle.nodesc {
+        color: var(--muted);
+        font-style: italic;
+      }
+      main .stat {
+        font:
+          12px ui-monospace,
+          Menlo,
+          monospace;
+        white-space: nowrap;
+      }
+      main .add {
+        color: var(--add);
+      }
+      main .del {
+        color: var(--del);
+      }
+      main .cbody {
+        white-space: pre-wrap;
+        color: var(--fg);
+        font-size: 13.5px;
+        margin: 2px 0 6px 18px;
+      }
+      main .files {
+        margin: 4px 0 8px 18px;
+        font:
+          12px ui-monospace,
+          Menlo,
+          monospace;
+        color: var(--muted);
+      }
+      main .files div {
+        overflow-wrap: anywhere;
+      }
+      main .wc {
+        font-size: 11px;
+        color: var(--faint);
+      }
+
+      main button.act {
+        font:
+          12px -apple-system,
+          sans-serif;
+        color: var(--accent);
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 1px 8px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      main button.act:hover {
+        background: var(--hover);
+      }
+      main button.act.failed {
+        color: var(--del);
+        border-color: var(--del);
+      }
+      /* A diff stat that opens its diff in skepsis */
+      main button.stat {
+        color: inherit;
+        background: none;
+        border: 0;
+        border-radius: 4px;
+        margin: -1px -6px;
+        padding: 1px 6px;
+        cursor: pointer;
+      }
+      main button.stat:hover {
+        background: var(--code);
+      }
+      main button.stat.failed {
+        outline: 1px solid var(--del);
+      }
+      main button.stat:disabled {
+        opacity: 0.5;
+        cursor: progress;
+      }
+      main button.act:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      main .missing {
+        color: var(--faint);
+        font-size: 13px;
+      }
+      main .doc-title {
+        flex: 1;
+        min-width: 0;
+      }
+      main .doc-file {
+        color: var(--faint);
+        font-size: 12px;
+      }
+      main .err {
+        color: var(--del);
+        font-size: 13px;
+      }
+      @media (max-width: 520px) {
+        main .item-meta,
+        main details.item > summary > .stat {
+          display: none;
+        }
+        main details.item > summary {
+          grid-template-columns: 10px 5.2em minmax(0, 1fr) auto;
+        }
+        main .body {
+          padding-left: 12px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1 id="title">Workstream</h1>
+      <p class="sub">
+        <span id="subtitle"></span> A diff stat (+/−) opens that diff in skepsis. Open opens
+        a note or PR draft in its own window.
+      </p>
+      <div class="legend" id="legend"></div>
+      <div class="toolbar">
+        <button class="act" id="expand">Expand all</button>
+        <button class="act" id="collapse">Collapse all</button>
+      </div>
+      <div id="groups"></div>
+    </main>
+    <script>
+      // Draws data.json, which gen.ts writes from work.json and jj
+
+      // ah adds its script tag after this one runs, so look it up on each click.
+      const ahThreadUrl = () => {
+        const s = document.querySelector("script[data-ah-thread]")
+        return s?.dataset.ahThread ? new URL(s.dataset.ahThread, location.href) : null
+      }
+
+      // Opens a diff in skepsis ("skepsis") or a note in its own window ("doc" or
+      // "page") through ah, which checks cwd against workspaces.json
+      async function openIn(route, body, button) {
+        const threadUrl = ahThreadUrl()
+        if (!threadUrl) {
+          button.classList.add("failed")
+          button.title = "Not opened through ah"
+          return
+        }
+        button.disabled = true
+        try {
+          const res = await fetch(new URL(route, threadUrl), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          })
+          if (!res.ok) throw new Error((await res.text()) || `${res.status}`)
+          button.classList.remove("failed")
+          button.title = route === "skepsis" ? "Open in skepsis" : ""
+        } catch (e) {
+          button.classList.add("failed")
+          button.title = e.message
+        }
+        button.disabled = false
+      }
+
+      const h = (tag, attrs = {}, ...kids) => {
+        const el = document.createElement(tag)
+        for (const [k, v] of Object.entries(attrs)) {
+          if (k === "class") el.className = v
+          else if (k === "text") el.textContent = v
+          else if (k.startsWith("on")) el.addEventListener(k.slice(2), v)
+          else el.setAttribute(k, v)
+        }
+        for (const kid of kids.flat()) if (kid != null) el.append(kid)
+        return el
+      }
+
+      // Backticks in summaries become <code>
+      function rich(text) {
+        const frag = document.createDocumentFragment()
+        text.split(/(`[^`]+`)/).forEach((part) => {
+          if (part.startsWith("`") && part.endsWith("`"))
+            frag.append(h("code", { text: part.slice(1, -1) }))
+          else frag.append(part)
+        })
+        return frag
+      }
+
+      const tilde = (path) => path.replace(/^\/(Users|home)\/[^/]+(?=\/|$)/, "~")
+
+      // Opens `file`, a path from the notes directory of the page's own workspace,
+      // which is where ah looks without a cwd
+      const openButton = (file) =>
+        h("button", {
+          class: "act",
+          text: "Open",
+          onclick: (e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            openIn(/\.html?$/i.test(file) ? "page" : "doc", { file }, e.currentTarget)
+          },
+        })
+
+      // Lines added and removed; with `diff`, a button that opens that diff
+      const stat = (a, r, diff) => {
+        const counts = [
+          h("span", { class: "add", text: `+${a}` }),
+          " ",
+          h("span", { class: "del", text: `−${r}` }),
+        ]
+        if (!diff) return h("span", { class: "stat" }, counts)
+        const open = (e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          openIn("skepsis", diff, e.currentTarget)
+        }
+        return h(
+          "button",
+          { class: "stat", title: "Open in skepsis", onclick: open },
+          counts,
+        )
+      }
+
+      // The statuses with a color, in legend order. Any other status gets a gray pill.
+      const STATUS = {
+        ready: "waiting on your review",
+        running: "an agent is working on it",
+        parked: "kept for reference",
+        done: "finished",
+        notes: "notes, no code",
+      }
+
+      // Remember which cards are open across reloads
+      const openKey = `workstream-open:${location.pathname}`
+      const opened = new Set(
+        (() => {
+          try {
+            return JSON.parse(localStorage.getItem(openKey)) || []
+          } catch {
+            return []
+          }
+        })(),
+      )
+      const saveOpen = () => {
+        try {
+          localStorage.setItem(openKey, JSON.stringify([...opened]))
+        } catch {}
+      }
+      const remember = (d, key) => {
+        if (opened.has(key)) d.open = true
+        d.addEventListener("toggle", () => {
+          d.open ? opened.add(key) : opened.delete(key)
+          saveOpen()
+        })
+        return d
+      }
+
+      function commitRow(item, c) {
+        const files = h(
+          "div",
+          { class: "files" },
+          c.files.map((f) => h("div", {}, `${f.path} `, stat(f.added, f.removed))),
+        )
+        return remember(
+          h(
+            "details",
+            { class: "commit" },
+            h(
+              "summary",
+              {},
+              h("span", { class: "chev", text: "›" }),
+              h("span", { class: "mono change", text: c.change }),
+              h("span", {
+                class: c.title ? "ctitle" : "ctitle nodesc",
+                text: c.title || "(no description)",
+              }),
+              c.workingCopy ? h("span", { class: "wc", text: "@" }) : null,
+              stat(c.added, c.removed, { cwd: item.workspace, rev: c.change }),
+            ),
+            c.body ? h("div", { class: "cbody", text: c.body }) : null,
+            files,
+          ),
+          `${item.title}/${c.change}`,
+        )
+      }
+
+      function itemCard(item) {
+        const commits = item.commits
+        const added = commits.reduce((n, c) => n + c.added, 0)
+        const removed = commits.reduce((n, c) => n + c.removed, 0)
+        const open = item.open || []
+        const summary = h(
+          "summary",
+          {},
+          h("span", { class: "chev", text: "›" }),
+          h("span", {
+            class: `pill ${item.status in STATUS ? item.status : ""}`,
+            text: item.status,
+          }),
+          h("span", { class: "item-title" }, rich(item.title)),
+          open.length
+            ? h("span", { class: "pill questions", text: `${open.length} ?` })
+            : null,
+          ...(commits.length
+            ? [
+                h("span", {
+                  class: "item-meta revs",
+                  text: `${commits.length} rev${commits.length > 1 ? "s" : ""}`,
+                }),
+                stat(added, removed, {
+                  cwd: item.workspace,
+                  from: `${commits[commits.length - 1].change}-`,
+                  to: commits[0].change,
+                }),
+              ]
+            : []),
+        )
+
+        const body = h("div", { class: "body" })
+        if (item.summary) body.append(h("p", { class: "summary" }, rich(item.summary)))
+        const where = [item.repo, item.base].filter(Boolean).join(", ")
+        if (item.workspace)
+          body.append(
+            h(
+              "p",
+              { class: "base" },
+              where ? `${where} · ` : "",
+              h("span", { class: "mono", text: tilde(item.workspace) }),
+            ),
+          )
+        if (item.error) body.append(h("p", { class: "err", text: item.error }))
+
+        if (open.length) {
+          body.append(h("div", { class: "section-label", text: "Open questions" }))
+          body.append(
+            h(
+              "ul",
+              { class: "open-q" },
+              open.map((q) => h("li", {}, rich(q))),
+            ),
+          )
+        }
+        if (item.prs.length) {
+          body.append(h("div", { class: "section-label", text: "Draft PR bodies" }))
+          body.append(
+            h(
+              "ul",
+              { class: "plain" },
+              item.prs.map((p) =>
+                h(
+                  "li",
+                  {},
+                  h(
+                    "span",
+                    { class: "doc-title" },
+                    p.title ??
+                      h("span", { class: "missing", text: `${p.slug}: being drafted` }),
+                  ),
+                  p.title ? openButton(p.file) : null,
+                ),
+              ),
+            ),
+          )
+        }
+        if (item.notes.length) {
+          body.append(h("div", { class: "section-label", text: "Notes" }))
+          body.append(
+            h(
+              "ul",
+              { class: "plain" },
+              item.notes.map((n) =>
+                h(
+                  "li",
+                  {},
+                  h(
+                    "span",
+                    { class: "doc-title" },
+                    n.title,
+                    " ",
+                    h("span", { class: "doc-file", text: n.file }),
+                  ),
+                  openButton(n.file),
+                ),
+              ),
+            ),
+          )
+        }
+        if (commits.length) {
+          body.append(
+            h("div", { class: "section-label", text: "Revs, newest first" }),
+            h(
+              "div",
+              {},
+              commits.map((c) => commitRow(item, c)),
+            ),
+          )
+        }
+        return remember(h("details", { class: "item" }, summary, body), item.title)
+      }
+
+      async function render() {
+        const data = await (await fetch("data.json", { cache: "no-store" })).json()
+        document.title = data.title
+        document.getElementById("title").textContent = data.title
+        const asOf = new Date(data.generated).toLocaleString([], {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+        document.getElementById("subtitle").textContent =
+          `${data.subtitle ? `${data.subtitle} ` : ""}Revs as of ${asOf}.`
+        const items = data.groups.flatMap((g) => g.items)
+        const legend = Object.entries(STATUS)
+          .filter(([s]) => items.some((i) => i.status === s))
+          .map(([s, meaning]) =>
+            h("span", {}, h("span", { class: `pill ${s}`, text: s }), ` ${meaning}`),
+          )
+        if (items.some((i) => i.open?.length))
+          legend.push(
+            h(
+              "span",
+              {},
+              h("span", { class: "pill questions", text: "?" }),
+              " open questions",
+            ),
+          )
+        document.getElementById("legend").replaceChildren(...legend)
+        document
+          .getElementById("groups")
+          .replaceChildren(
+            ...data.groups.flatMap((g) => [
+              h("h2", { text: g.title }),
+              ...g.items.map(itemCard),
+            ]),
+          )
+      }
+      render()
+      document.getElementById("expand").onclick = () =>
+        document.querySelectorAll("details.item").forEach((d) => (d.open = true))
+      document.getElementById("collapse").onclick = () =>
+        document.querySelectorAll("details").forEach((d) => (d.open = false))
+    </script>
+  </body>
+</html>
