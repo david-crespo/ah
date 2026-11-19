@@ -1,159 +1,132 @@
 ---
 name: ah-stack
-description: "Show a stack of PRs as a page: each PR's commits and diff stats, newest first, with buttons that open any commit's or PR's diff in skepsis and a Push button the user clicks to push a PR. Use when the user asks for a stack page, or wants to see how a stack of jj bookmarks splits into PRs."
+description: "Show a jj-spr stack file as a page: each PR's commits and diff stats, newest first, with buttons that open any commit's or PR's diff in skepsis and Push, Land, and Sync buttons the user clicks to run jj-spr. Use when the user asks for a stack page, or wants to see how a stack of jj changes splits into PRs."
 ---
 
 # Stack pages
 
-A stack page shows a stack of PRs the way the user reviews one: newest first,
-like `jj log`, each PR with its bookmark, its files, and a line per commit
-that opens to the commit's description and files. ah draws it from jj, and
-you write only what jj doesn't know.
+A stack page shows a jj-spr stack file the way the user reviews a stack:
+newest first, like `jj log`, each PR with its tip, its files, and a line per
+commit that opens to the commit's description and files. jj-spr owns the
+file and pushes the PRs. ah draws the page from the file, from jj, and from
+`jj spr stack-file status`.
 
 Run every `ah` command as the whole Bash command, as the ah-page skill says (in
-Claude Code: no pipes, `&&`, redirects or `$`), or it runs in the sandbox and
+Claude Code: no pipes, `&&`, redirects, or `$`), or it runs in the sandbox and
 fails.
 
 ## Starting one
+
+A stack lives in a directory of its own,
+`.claude/notes/<YYYY-MM-DD>-<slug>-stack/`, which jj ignores. Make the stack
+file first, from the tip of each PR, bottom to top:
+
+```
+jj spr stack-file init .claude/notes/2026-11-05-versioned-docs-stack/stack.json --tips 'vdocs-release-data | vdocs-routes | kxqzwmvtnlop'
+```
+
+Each tip has to be an ancestor of the next. Each becomes an entry with the
+change's bookmark if it has exactly one, else its change ID, and a title from
+its description. Then open the page:
 
 ```
 ah tool stack .claude/notes/2026-11-05-versioned-docs-stack/index.html --title 'Versioned docs stack'
 ```
 
-A new stack goes in `.claude/notes/<YYYY-MM-DD>-<slug>-stack/index.html`, in a
-directory of its own. ah writes the page and a `stack.json` next to it, opens
-it in a window, and binds it to this session. Run the same command without
-`--title` to open an existing one.
+ah writes `index.html` next to the stack file, opens it in a window, and
+binds it to this session. Without a stack file there, it writes an empty one
+to fill in. Run the same command without `--title` to open an existing page.
+With no file, it looks for stack pages in this workspace's `.claude/notes`:
+it opens the only one, or with several, the user picks one in the terminal,
+so give a path when you know which one you want.
 
-To reopen a stack without remembering its path, run `ah tool stack` with no
-file. It looks in this workspace's `.claude/notes` and opens the most recently
-changed stack page; with several, the user picks one in the terminal, so run
-it with a path when you know which one you want.
-
-## stack.json
+## The stack file
 
 ```json
 {
   "title": "Versioned docs stack",
-  "notes": ["The schema change in 2 has to be live before 5 can deploy."],
+  "notes": ["The schema change in 2 has to be live before 3 can deploy."],
   "prs": [
-    {
-      "n": 1,
-      "title": "Track system releases",
-      "bookmark": "vdocs-release-data"
-    }
+    { "tip": "vdocs-release-data", "body": "vdocs-release-data.md" },
+    { "tip": "vdocs-routes", "body": "vdocs-routes.md" },
+    { "tip": "kxqzwmvtnlop", "title": "Serve docs by release" }
   ]
 }
 ```
 
-- `n` is the PR's place in the stack, and the page shows it as `1.`, so don't
-  number titles or bookmarks. Keep the numbers in stack order. When a PR is
-  inserted or moved and no PR above that place has been pushed, renumber the
-  ones above it, and update the numbers that `merge` and `notes` refer to.
-  Once a PR above has been pushed, people know it by its number, so leave the
-  numbers alone and give the new PR the next free one.
-- Don't list commits or bases. ah takes each PR's commits from the graph: the
-  bookmark's ancestors down to the nearest other PR's bookmark, a fork, or
-  trunk. Commits below a fork that no PR's bookmark is on get a card of their
-  own, shared by the PRs above, since each of them would include those
-  commits on GitHub. The page draws the graph the way `jj log` does.
-- `merge` is optional: a few words on how the PR merges, shown after its
-  bookmark. Leave it out unless it says something the graph and GitHub
-  don't, such as a PR on a side branch that has to merge before one on the
-  main line. Never use it to restate the stack's order or what's pushed.
-- `notes` is a list of plain-text strings, each one paragraph, with backticks
-  for code. Use them for what only the page knows, such as a PR that's been
-  tabled. What a PR does goes in its body.
-- A PR can be listed before its bookmark exists; the page shows it with "no
-  bookmark yet" until it does. Keep a PR listed after it merges, even once a
-  fetch deletes its bookmark: GitHub still knows it by its branch, so the
-  page puts it with the other PRs that have no commits of their own.
-- Each PR's card folds to one line (its title, its state on GitHub and its
-  diff stat). Merged PRs start folded; the user's own choice wins and is
-  kept.
-- The page redraws when `stack.json` or a PR's body changes and when a jj
-  operation lands, so rewriting commits or moving bookmarks shows up on its
-  own.
+- `prs` is bottom first. A PR's commits run from its `tip` down to the next
+  tip below it, or to trunk. Commits above the top tip aren't in any PR.
+  The page numbers the PRs by place, so don't number titles.
+- `tip` is a local bookmark or a change ID.
+- `body` is a markdown file next to the stack file. Its `# ` heading on line 1
+  is the PR's title, and the rest is the PR's description. `title` is for an
+  entry with no body file, or one without a heading.
+- `title` and `notes` at the top are ah's: the page's heading, and
+  plain-text paragraphs (backticks for code) for context that belongs to no
+  one PR, such as a PR that's been tabled. What a PR does goes in its body.
+- jj-spr writes `pr`, `branch`, `synced`, `pushed`, and `merged`. Never write
+  or change them.
 
-## Commit summaries
+There are no commands to add, move, or remove entries: edit the file. Then
+check it:
 
-A commit's summary is its description's body, under the title line. The page
-unwraps hard-wrapped lines and keeps paragraphs. Write each one when you make
-the commit (`jj describe`), and after restructuring the stack (squashing,
-splitting, moving changes between commits), reread each changed commit's
+```
+jj spr stack-file status .claude/notes/2026-11-05-versioned-docs-stack/stack.json
+```
+
+It lists every problem `jj spr submit` would refuse on, such as a commit
+with no description or an entry with no title, and what submit would do for
+each PR. The page shows the same on each PR.
+
+## Bodies and commit summaries
+
+Write each PR's body before the user pushes it: set its `body` key and write
+the file. The page's Body button on a PR with a `body` key opens the file in
+a doc page bound to the same agent, starting it with just the title if it
+doesn't exist. Comments on it come to you as the ah-doc skill describes.
+Later pushes send the file's changes to GitHub.
+
+A commit's summary on the page is its description's body, under the title
+line. Write it when you make the commit (`jj describe`). After squashing,
+splitting, or moving changes between commits, reread each changed commit's
 diff and update its body to match.
 
-## The diff buttons
+## The page
 
-Each diff stat (`+12 −3`) on a PR or commit is a button. Clicking it has the
-server open that diff in skepsis: `-r <change>` for a commit,
-`--from <base> --to <bookmark>` for a PR. A commit's "changed" tag is a
-button too, for `--interdiff --from <the remote's version> --to <commit>`:
-what changed in it, apart from moving onto new parents. A pushed PR with
-commits to push has one by its diff stat for the whole PR: `jj interdiff`
-from its commits on the remote to its commits here, which needs a jj with
-range support in interdiff (newer than 0.47). Comments sent from skepsis come to
-the agent the page is bound to as messages; treat them as the user's. A
-second click on the same diff brings its page back rather than starting
-another. The server runs skepsis with `AH_SKEPSIS` from its environment
-(like `node /Users/me/skepsis/cli.ts`: an absolute path, since it runs
-without a shell to expand `~`), else `skepsis` on PATH; if a button outlines
-red, its tooltip says why.
+The page redraws when the stack file or a body changes and after each jj
+operation. Merged PRs start folded to one line. When the user folds or
+unfolds a PR, the page keeps that choice. Once a PR is on GitHub, the page
+shows its state, checks, review, and GitHub stack, and it reads them again
+every minute while it's in view.
 
-## Pushing
+Each diff stat (`+12 −3`) on a PR or commit is a button that opens that diff
+in skepsis. After a push, the commits changed since are tagged new or
+changed, and a changed PR has a tag by its diff stat. A changed tag opens the
+interdiff: what changed apart from moving onto new parents. Comments sent from
+skepsis come to the agent the page is bound to as messages; treat them as the
+user's. The server runs skepsis with `AH_SKEPSIS` from its environment (an
+absolute command like `node /Users/me/skepsis/cli.ts`), else `skepsis` on
+PATH. If a button has a red outline, its tooltip has the error.
 
-A PR with commits still to push has a Push button on the bar that marks
-them, and a PR whose bookmark isn't on the remote yet has one by its Body
-button. When the remote has an earlier version of any of them, each is
-tagged new or changed (by `jj interdiff`, with its lines, or reworded), and
-the bar counts them. One with no tag was only moved onto new parents, as when
-a PR below gained a commit. Clicking it has ah's window for the page show a sheet listing the
-commits the push would send; only clicking Push there runs
-`jj git push --bookmark` for that PR, and jj's answer shows on the PR. The
-sheet is native, so a page's script can't click it, and only ah's window can
-show it: in a browser tab the button says to push from the window.
+## Pushing, landing, and syncing
 
-For a bookmark that isn't on the remote yet, the button says "Push and
-create PR": once the push works, the server opens the PR with
-`gh pr create`. Its title is the heading on line 1 of the PR's body file
-(else its `title` in stack.json) and its description the rest of the file.
-Its base is the bookmark of the PR it's built on in the graph if that PR is
-open on GitHub, else trunk. The sheet shows the title and base first, and
-says if the description is empty, so write the body before the user
-pushes. If the PR fails to open, the push stands and the page shows why;
-open the PR by hand then.
+A PR that a push would change has a Push button, which runs
+`jj spr submit <file> --upto <tip>` for it and the PRs below it. Push all,
+under the title, runs it for the whole stack. When the push adds commits to
+open PRs, a field by the button has their message, drafted from what changed
+since the last push. Left blank, it's "Update". A PR has Land
+(`jj spr land --upto`) once it and the PRs below it are open on GitHub with
+nothing to push. Land all shows once every PR is. Once GitHub has merged a PR
+that the stack file doesn't mark merged, Sync runs `jj spr sync`, which
+abandons the merged changes, rebases the rest onto trunk, and marks those PRs
+merged.
 
-A PR opened into the PR below it also joins that PR's GitHub stack
-(GitHub's stacked PRs), on top, when that PR is its stack's top. If the PR
-below is in no stack, the push makes one of the open PRs under the new one,
-down to the one on trunk, and the new one. The sheet says which, or why it
-joins none, and in a repo without stacks it does neither. If the stack
-fails to change, the PR stands and the page says why. A bookmark already on the remote opens no PR. When the remote's
-bookmark isn't an ancestor of the local one, as after a rebase or an edit,
-the button reads Force push and the sheet says how many commits there it
-replaces; jj refuses it if the remote moved since the last fetch. Pushing from the
-page is the user's action: never call the page's push route yourself. When
-the user asks you to push, push from your shell as usual, or point them at
-the button.
+Clicking a button opens a native sheet in ah's window for the page with what
+the command will do. Only confirming there runs it, and jj-spr's output shows
+on the page. In a browser tab, the buttons are disabled, since only ah's
+window can show the sheet.
 
-## PR bodies
-
-A PR's GitHub description is drafted in `<bookmark>.md` next to `stack.json`
-(each `/` in the bookmark as `--`), with the PR title as a `#` heading on line 1. Once the file has that heading,
-the page shows it as the PR's title in place of the one in `stack.json`. Each
-PR has a Body button that opens its file in a doc page bound to the same agent
-as the stack page, starting the file with just the title if there isn't one.
-Comments on it come to you as the ah-doc skill describes.
-
-## GitHub
-
-Once a bookmark has a PR on GitHub, the page shows it from `gh`: a link
-with its state (draft, open, merged, closed), its title from GitHub, and,
-while it's open, its checks and review, then its GitHub stack (`stack
-#945`, with its place in the tooltip). It flags a PR whose branch on GitHub
-moved since the last fetch, with a Fetch button that runs `jj git fetch` in
-the repo (it sends nothing, so it isn't confirmed), and one whose base on
-GitHub isn't the PR below it, or trunk for the bottom one. Commits still to push are marked in
-the commit list, not on this line. GitHub has the body from then on, so the Body
-button goes away. The page asks GitHub again every minute while it's in
-view.
+These are the user's actions. Never call the page's routes for them. When the
+user asks you to push, run `jj spr submit <file> [--upto <tip>] -m '<message>'`
+from your shell, or point them at the button. Push a stack file's PRs only
+through jj spr with the file, never with `jj spr diff` or `jj git push`.
