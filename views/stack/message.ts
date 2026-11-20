@@ -1,11 +1,13 @@
-// A draft of the message for the commits jj-spr adds to update open PRs,
-// which a Push button sends as `jj spr submit -m`, served at the page's
+// A draft of the message for the commits jjack adds to update open PRs,
+// which a Push button sends as `jjack submit`'s message, served at the page's
 // _ah/push-message. A quick model call through the `ai` CLI writes it from
-// the interdiff of each PR the push sends that changed since jj-spr last
-// pushed it, and it's kept by what it was drafted from: each such PR's
-// pushed commit and its tip's commit now. The page asks for it and fills the
-// message field in when it comes, so nothing waits on it, and "Update" is
-// the answer on any failure or after DRAFT_TIMEOUT.
+// the interdiff of each PR the push sends that changed since jjack last
+// pushed it. It's kept by what it was drafted from: each such PR's pushed
+// commit and its tip's commit now. The page asks for it and fills the message
+// field in when it comes, so nothing waits on it. The answer is empty when no
+// PR changed, on any failure, and after DRAFT_TIMEOUT. That leaves the field
+// blank, so jjack picks the message: Update, or Merge … when the update is a
+// merge.
 
 import { homedir } from "node:os"
 import { dirname, join } from "node:path"
@@ -14,7 +16,6 @@ import { sanitizeTitle } from "../../core/summary.ts"
 import { jj } from "../../platform/jj.ts"
 import { type Output, run } from "../../platform/proc.ts"
 import { type Pr, readStack } from "./data.ts"
-import { FALLBACK_MESSAGE } from "./spr.ts"
 
 const DRAFT_TIMEOUT = 15_000
 /** Of each PR's interdiff, which can be long */
@@ -33,8 +34,7 @@ Below, for each pull request the update goes to, is its interdiff: how its chang
 const drafts = new Map<string, Promise<string>>()
 
 /** The draft for a push of the stack's PRs up to the one with `tip`, or of
- * all of them for null. With none changed since jj-spr pushed it, it's
- * "Rebase" if one was only rebased, else "Update". */
+ * all of them for null. Empty when none changed since jjack pushed it. */
 export async function draftMessage(
   pagePath: string,
   tip: string | null,
@@ -44,11 +44,14 @@ export async function draftMessage(
     .filter((r): r is Pr => "n" in r)
     .sort((a, b) => a.n - b.n)
   const upto = tip === null ? prs.length : (prs.find((p) => p.tip === tip)?.n ?? 0)
-  const moved = prs.filter((p) => p.n <= upto && p.pr !== null && p.interdiff)
-  const changed = moved.filter(
-    (p) => p.interdiff!.add || p.interdiff!.del || p.interdiff!.reworded,
+  const changed = prs.filter(
+    (p) =>
+      p.n <= upto &&
+      p.pr !== null &&
+      p.interdiff &&
+      (p.interdiff.add || p.interdiff.del || p.interdiff.reworded),
   )
-  if (!changed.length) return moved.length ? "Rebase" : FALLBACK_MESSAGE
+  if (!changed.length) return ""
   const key = changed.map((p) => `${p.pushed}:${p.commits[0].commit}`).join(" ")
   let draft = drafts.get(key)
   if (!draft) {
@@ -57,7 +60,7 @@ export async function draftMessage(
   }
   const message = await draft
   // A failure isn't kept, so the next ask tries again
-  if (message === FALLBACK_MESSAGE) drafts.delete(key)
+  if (!message) drafts.delete(key)
   return message
 }
 
@@ -80,8 +83,8 @@ async function draftFrom(pagePath: string, prs: Pr[], ai: AiRun): Promise<string
     const message = sanitizeTitle(line ?? "")
       .replace(/^["'`“]+|["'`”]+$/g, "")
       .replace(/\.$/, "")
-    return message || FALLBACK_MESSAGE
+    return message
   } catch {
-    return FALLBACK_MESSAGE
+    return ""
   }
 }

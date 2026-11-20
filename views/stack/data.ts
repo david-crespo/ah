@@ -1,42 +1,34 @@
 // A stack page's data, which client.ts draws: the PRs in the stack file
-// next to the page, filled in from jj. The file is jj-spr's (`jj spr
-// stack-file`): each entry's tip, a local bookmark or a change ID, its body
-// file and title, and what jj-spr writes as it pushes, which ah only reads.
-// ah's own keys are the file's title and notes, which jj-spr keeps. The rest
-// comes from the graph. Commits above trunk are grouped by which PRs' tips
-// have them. A PR's own are the ones its tip's commit is grouped with: no PR
-// below it has them. Any other group is commits below a fork that no PR's tip
-// is on, which the PRs above share.
+// next to the page, filled in from jj. The file is jjack's, parsed by jjack:
+// each entry's tip, a local bookmark or a change ID, its body file and title,
+// and what jjack writes as it pushes, which ah only reads. ah's own keys are
+// the file's title and notes, which jjack keeps. The rest comes from the
+// graph. Commits above trunk are grouped by which PRs' tips have them. A PR's
+// own are the ones its tip's commit is grouped with: no PR below it has them.
+// Any other group is commits below a fork that no PR's tip is on, which the
+// PRs above share.
 
 import { existsSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join } from "node:path"
+import {
+  type Entry,
+  entryText,
+  openLocalContext,
+  parseStackFile as parseJjackFile,
+  resolveStack,
+} from "jjack"
 import { rootFinder } from "../../core/workspace.ts"
 import { jj, opHeadsDir } from "../../platform/jj.ts"
-import { isRecord, isString } from "../../platform/guards.ts"
+import { isString } from "../../platform/guards.ts"
 
 export const STACK_FILE = "stack.json"
 
-/** An entry in the stack file: what the agent writes (tip, body, title),
- * and what jj-spr writes as it pushes (pr, branch, pushed, merged, and
- * synced, which ah has no use for) */
-export interface StackEntry {
-  tip: string
-  /** A markdown file, relative to the stack file, whose `# ` heading on
-   * line 1 is the title */
-  body?: string
-  title?: string
-  pr?: number
-  branch?: string
-  /** The tip's commit when jj-spr last pushed it */
-  pushed?: string
-  merged?: boolean
-}
-
+/** jjack's entries, with ah's keys */
 export interface StackFile {
   title?: string
   notes?: string[]
-  prs: StackEntry[]
+  prs: Entry[]
 }
 
 /** A file's change: A, M, D, R or C, and its lines added and removed */
@@ -54,7 +46,7 @@ export interface Commit {
   commit: string
   description: string
   files: FileStat[]
-  /** On a PR's commit still to push, when what jj-spr last pushed has an
+  /** On a PR's commit still to push, when what jjack last pushed has an
    * earlier version of it: what changed since */
   rewrite?: Rewrite
 }
@@ -93,18 +85,19 @@ export interface Pr extends Group {
   /** Its place in the stack, from 1 at the bottom */
   n: number
   tip: string
-  /** Its body's heading, else its title in the file */
+  /** Its title as jjack pushes it: its body file's heading, else its title
+   * in the file */
   title: string
   /** Its body file, relative to the stack file */
   body: string | null
-  /** Its number on GitHub, once jj-spr has opened it */
+  /** Its number on GitHub, once jjack has opened it */
   pr: number | null
-  /** jj-spr has marked it merged, and leaves it out */
+  /** jjack has marked it merged, and leaves it out */
   merged: boolean
   /** Its tip is neither a bookmark on one commit nor a change ID of one, so
    * it has no commits */
   missing: boolean
-  /** The tip's commit when jj-spr last pushed it, while that's still here */
+  /** The tip's commit when jjack last pushed it, while that's still here */
   pushed: string | null
   /** How many of its commits aren't among the pushed commit's ancestors:
    * none without one. Ancestors of a pushed commit are pushed too, so these
@@ -132,29 +125,21 @@ export interface Stack {
   rows: (Pr | Shared)[]
 }
 
+/** A stack file's text, parsed by jjack, with ah's keys from the ones
+ * jjack doesn't know */
 export function parseStackFile(text: string): StackFile {
-  const file: unknown = JSON.parse(text)
-  if (!isRecord(file) || !Array.isArray(file.prs))
-    throw new Error(`${STACK_FILE} needs a list of prs`)
-  if (file.title !== undefined && !isString(file.title))
+  let file: ReturnType<typeof parseJjackFile>
+  try {
+    file = parseJjackFile(text)
+  } catch (e) {
+    throw new Error(`${STACK_FILE}: ${(e as Error).message}`)
+  }
+  const { title, notes } = file.other
+  if (title !== undefined && !isString(title))
     throw new Error(`the title in ${STACK_FILE} must be a string`)
-  if (
-    file.notes !== undefined &&
-    !(Array.isArray(file.notes) && file.notes.every(isString))
-  )
+  if (notes !== undefined && !(Array.isArray(notes) && notes.every(isString)))
     throw new Error(`notes in ${STACK_FILE} must be a list of strings`)
-  const is = (v: unknown, type: string) => v === undefined || typeof v === type
-  const isEntry = (e: unknown) =>
-    isRecord(e) &&
-    isString(e.tip) &&
-    ["body", "title", "branch", "pushed"].every((key) => is(e[key], "string")) &&
-    is(e.pr, "number") &&
-    is(e.merged, "boolean")
-  if (!file.prs.every(isEntry))
-    throw new Error(
-      `each PR in ${STACK_FILE} needs a tip, with body, title, branch and pushed as strings, pr a number, and merged true or false`,
-    )
-  return file as unknown as StackFile
+  return { title, notes, prs: file.prs }
 }
 
 // One JSON object per commit, with each file's line counts
@@ -190,91 +175,64 @@ export async function readStack(pagePath: string): Promise<Stack> {
   const key = `${(await readdir(await opHeadsDir(root))).join()}\n${text}`
   let hit = stacks.get(pagePath)
   if (hit?.key !== key) {
-    const stack = readCommits(file, root)
+    const stack = readCommits(file, root, join(dir, STACK_FILE))
     hit = { key, stack }
     stacks.set(pagePath, hit)
     // A failure shouldn't stick
     stack.catch(() => stacks.delete(pagePath))
   }
   const stack = await hit.stack
-  // A body's heading wins over the file's title, as it does for jj-spr
-  const rows = stack.rows.map(async (row) =>
-    "n" in row ? { ...row, title: (await heading(dir, row.body)) || row.title } : row,
-  )
+  // Each title as jjack pushes it, read from the bodies each time. When jjack
+  // has none, as when a body can't be read, the title key stands in so the
+  // page still draws.
+  const rows = stack.rows.map(async (row) => {
+    if (!("n" in row)) return row
+    const entry = file.prs[row.n - 1]
+    const title = await entryText(entry, dir).then(
+      ({ text }) => text.title,
+      () => entry.title ?? "",
+    )
+    return { ...row, title }
+  })
   return { ...stack, rows: await Promise.all(rows) }
 }
 
-/** Each entry's tip as jj-spr resolves it, a local bookmark on one commit
- * else a change ID of one: its commit, or null for one that's neither or a
- * merged one, which jj-spr leaves out, and the revset the page names it by.
- * And its pushed commit, while that's still here. */
-async function resolveTips(root: string, prs: StackEntry[]) {
-  const isChange = (tip: string) => /^[k-z]+$/.test(tip)
-  const isCommit = (id: string | undefined): id is string =>
-    !!id && /^[0-9a-f]{4,40}$/.test(id)
-  const revsets = prs.flatMap((e) =>
-    e.merged
-      ? []
-      : [
-          `bookmarks(exact:${JSON.stringify(e.tip)})`,
-          ...(isChange(e.tip) ? [`change_id(${e.tip})`] : []),
-          ...(isCommit(e.pushed) ? [`present(${e.pushed})`] : []),
-        ],
-  )
-  const out = revsets.length
-    ? await jj(root, "log", "--no-graph", "-r", revsets.join(" | "), "-T", COMMIT_LINE)
-    : ""
-  const commits = out
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [commit, change, bookmarks] = line.split("\t")
-      return { commit, change, bookmarks: bookmarks.split(" ") }
-    })
-  return prs.map((e) => {
-    const marked = commits.filter((c) => c.bookmarks.includes(e.tip))
-    const found = marked.length
-      ? marked
-      : isChange(e.tip)
-        ? commits.filter((c) => c.change.startsWith(e.tip))
-        : []
-    const pushed = isCommit(e.pushed)
-      ? (commits.find((c) => c.commit.startsWith(e.pushed!))?.commit ?? null)
-      : null
-    return {
-      commit: !e.merged && found.length === 1 ? found[0].commit : null,
-      rev: marked.length ? JSON.stringify(e.tip) : e.tip,
-      pushed,
-    }
+/** `file`, the stack file at `path`, filled in from the repo at `root` */
+async function readCommits(file: StackFile, root: string, path: string): Promise<Stack> {
+  // Each entry's tip as jjack resolves it, with no call to GitHub: its
+  // commit, or null for one that doesn't resolve or a merged one, the revset
+  // the page has for it, and its pushed commit while that's still here
+  const local = await resolveStack(await openLocalContext(root), path)
+  const entries = file.prs.map((entry, i) => {
+    const { commit, tipKind, pushed } = local.entries[i]
+    const rev = tipKind === "bookmark" ? JSON.stringify(entry.tip) : entry.tip
+    return { entry, n: i + 1, commit, rev, pushed }
   })
-}
-
-async function readCommits(file: StackFile, root: string): Promise<Stack> {
-  const resolved = await resolveTips(root, file.prs)
-  const entries = file.prs.map((entry, i) => ({ entry, n: i + 1, ...resolved[i] }))
+  // The branch jjack's PRs target, such as (main@origin)
+  const trunk = `(${local.trunk})`
+  /** By commit, its earlier version in what jjack last pushed for its PR:
+   * itself when it's pushed, and null for a new one. Only for the commits
+   * of PRs whose tips are in a line, which are all jjack pushes. */
+  const earlier = new Map(
+    local.entries.flatMap((e) => e.members.map((m) => [m.commit, m.pushedCommit] as const)),
+  )
   const live = entries.filter((e) => e.commit !== null)
-  // The PRs for which a commit is in the revset `of` gives, as "1 2 "
-  const prsWith = (of: (e: (typeof live)[number]) => string | null) =>
-    live
-      .map((e) => {
-        const revset = of(e)
-        return revset ? `if(self.contained_in(${JSON.stringify(revset)}), "${e.n} ")` : `""`
-      })
-      .join(" ++ ")
-  // Each commit above trunk that a PR has, led by the PRs that have it, the
-  // PRs whose pushed commit has it, and its bookmarks
+  // The PRs that have a commit, as "1 2 "
+  const prsWith = live
+    .map((e) => `if(self.contained_in("::${e.commit}"), "${e.n} ")`)
+    .join(" ++ ")
+  // Each commit above trunk that a PR has, led by the PRs that have it and
+  // its bookmarks
   const log = live.length
     ? await jj(
         root,
         "log",
         "--no-graph",
         "-r",
-        `::(${live.map((e) => e.commit).join(" | ")}) ~ ::trunk()`,
+        `::(${live.map((e) => e.commit).join(" | ")}) ~ ::${trunk}`,
         "-T",
         [
-          prsWith((e) => `::${e.commit}`),
-          `"\\t"`,
-          prsWith((e) => e.pushed && `::${e.pushed}`),
+          prsWith,
           `"\\t"`,
           `local_bookmarks.map(|b| b.name()).join(" ")`,
           `"\\t"`,
@@ -285,13 +243,10 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
   type Found = { prs: number[]; bookmarks: string; commits: Commit[] }
   // Keyed by which PRs have them, with the bookmarks on the newest
   const groups = new Map<string, Found>()
-  /** By commit ID, the PRs whose pushed commit has it */
-  const pushedIn = new Map<string, string[]>()
   for (const line of log.split("\n").filter(Boolean)) {
-    const [prs, pushed, bookmarks, json] = line.split("\t")
+    const [prs, bookmarks, json] = line.split("\t")
     const c: Commit = JSON.parse(json)
     for (const f of c.files) f.status = letter(f.status)
-    pushedIn.set(c.commit, pushed.split(" "))
     if (!groups.has(prs))
       groups.set(prs, { prs: prs.trim().split(" ").map(Number), bookmarks, commits: [] })
     groups.get(prs)!.commits.push(c)
@@ -346,36 +301,15 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
       reworded: diff.includes("diff --git a/JJ-COMMIT-DESCRIPTION "),
     }
   }
-  /** `commits`, with a rewrite on each of `unpushed` that the commit jj-spr
-   * last pushed has an earlier version of, found by its change ID */
-  const withRewrites = async (pushed: string, commits: Commit[], unpushed: Commit[]) => {
-    if (!unpushed.length) return commits
-    const log = await jj(
-      root,
-      "log",
-      "--no-graph",
-      "-r",
-      `::${pushed} ~ ::trunk()`,
-      "-T",
-      `change_id.short(8) ++ " " ++ commit_id ++ "\\n"`,
-    )
-    const earlier = new Map(
-      log
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => line.split(" ") as [string, string]),
-    )
-    const rewrite = async (c: Commit): Promise<Rewrite | undefined> => {
-      const was = earlier.get(c.change)
-      return was ? { from: was, ...(await changes(was, c.commit)) } : undefined
-    }
-    return Promise.all(
+  /** `commits`, with a rewrite on each of `unpushed` that what jjack last
+   * pushed has an earlier version of */
+  const withRewrites = (commits: Commit[], unpushed: Commit[]) =>
+    Promise.all(
       commits.map(async (c) => {
-        const r = unpushed.includes(c) ? await rewrite(c) : undefined
-        return r ? { ...c, rewrite: r } : c
+        const was = unpushed.includes(c) ? earlier.get(c.commit) : null
+        return was ? { ...c, rewrite: { from: was, ...(await changes(was, c.commit)) } } : c
       }),
     )
-  }
 
   // Each row with the PRs that have its commits, which are the ones built on
   // it: none for a PR with no commits of its own
@@ -402,18 +336,18 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     const own = [...groups.values()].find((g) => owner(g) === e)
     const commits = own?.commits ?? []
     const unpushed = pushed
-      ? commits.filter((c) => !pushedIn.get(c.commit)!.includes(String(n)))
+      ? commits.filter((c) => earlier.has(c.commit) && earlier.get(c.commit) !== c.commit)
       : []
     const [measured, rewritten] = await Promise.all([
       own && measure(own.commits, e.rev),
-      pushed ? withRewrites(pushed, commits, unpushed) : commits,
+      unpushed.length ? withRewrites(commits, unpushed) : commits,
     ])
     Object.assign(row, measured, { commits: rewritten, unpushed: unpushed.length })
     // Its commits as pushed: the pushed commit's ancestors that aren't
     // trunk's, its base's now, or the PR below's as that was pushed. Without
     // spaces, which skepsis's arguments can't have.
     if (pushed && unpushed.length && measured) {
-      const below = ["trunk()", measured.diff.from]
+      const below = [trunk, measured.diff.from]
       const under = entries[n - 2]?.pushed
       if (under) below.push(under)
       const revs = {
@@ -462,13 +396,6 @@ async function readCommits(file: StackFile, root: string): Promise<Stack> {
     notes: file.notes ?? [],
     rows: [...outside(true), ...above((row) => !heads.has(row.base)), ...outside(false)],
   }
-}
-
-/** The heading on line 1 of the body file at `body`, relative to `dir`, or
- * empty without one */
-async function heading(dir: string, body: string | null): Promise<string> {
-  const text = body ? await readFile(join(dir, body), "utf8").catch(() => "") : ""
-  return text.match(/^# (.*)/)?.[1].trim() ?? ""
 }
 
 /** The body file of the stack's PR with `tip`, started with its title as a

@@ -1,21 +1,24 @@
 ---
 name: ah-stack
-description: "Show a jj-spr stack file as a page: each PR's commits and diff stats, newest first, with buttons that open any commit's or PR's diff in skepsis and Push, Land, and Sync buttons the user clicks to run jj-spr. Use when the user asks for a stack page, or wants to see how a stack of jj changes splits into PRs."
+description: "Show a jjack stack file as a page: each PR's commits and diff stats, newest first, with buttons that open any commit's or PR's diff in skepsis and Push, Land, and Sync buttons the user clicks to run jjack. Use when the user asks for a stack page, or wants to see how a stack of jj changes splits into PRs."
 ---
 
 # Stack pages
 
-A stack page shows a jj-spr stack file the way the user reviews a stack:
+A stack page shows a jjack stack file the way the user reviews a stack:
 newest first, like `jj log`, each PR with its tip, its files, and a line per
-commit that opens to the commit's description and files. jj-spr owns the
+commit that opens to the commit's description and files. jjack owns the
 file and pushes the PRs. ah draws the page from the file, from jj, and from
-`jj spr stack-file status`.
+jjack's status for the file.
 
-Upstream jj-spr has no stack files. Build `jj spr` from the `stackfile`
-branch of https://github.com/david-crespo/jj-spr, which also has the jj-spr
-skill, at `skills/jj-spr`.
+ah's server imports jjack as a library, so the page's buttons work without
+the `jjack` command. You run `jjack` from your shell, so it has to be
+installed, from https://github.com/david-crespo/jjack. The jjack skill is at
+`skills/jjack` in that repository. jjack reads and writes the stack file
+format of jj-spr, the tool ah used before, so a stack file from jj-spr works
+as it is.
 
-The jj-spr skill covers the stack file and jj-spr's commands: the format,
+The jjack skill covers the stack file and jjack's commands: the format,
 changing a stack, what to do when a command refuses, and taking over a stack
 that was pushed with `jj git push`. Read it before writing or changing a
 stack file. This skill covers the page.
@@ -31,7 +34,7 @@ A stack lives in a directory of its own,
 file first, from the tip of each PR, bottom to top:
 
 ```
-jj spr stack-file init .claude/notes/2026-11-05-versioned-docs-stack/stack.json --tips 'vdocs-release-data | vdocs-routes | kxqzwmvtnlop'
+jjack init .claude/notes/2026-11-05-versioned-docs-stack/stack.json --tips 'vdocs-release-data | vdocs-routes | kxqzwmvtnlop'
 ```
 
 Each tip has to be an ancestor of the next. Each becomes an entry with the
@@ -63,17 +66,17 @@ so give a path when you know which one you want.
 }
 ```
 
-`title` and `notes` at the top are ah's. jj-spr keeps them:
+`title` and `notes` at the top are ah's. jjack keeps them:
 
 - `title` is the page's heading.
 - `notes` are plain-text paragraphs (backticks for code) for context that
   belongs to no one PR, such as a PR that's been tabled. What a PR does goes
   in its body.
 
-Everything under `prs` is jj-spr's format. The page numbers the PRs by
+Everything under `prs` is jjack's format. The page numbers the PRs by
 place, so don't number titles. After editing the file, check it with
-`jj spr stack-file status <file>`. The page shows the same problems and
-planned actions on each PR.
+`jjack status <file>`. The page shows the same problems and planned actions
+on each PR.
 
 ## Bodies and commit summaries
 
@@ -107,23 +110,29 @@ outline, its tooltip has the error.
 
 ## Pushing, landing, and syncing
 
-A PR that a push would change has a Push button, which runs
-`jj spr submit <file> --upto <tip>` for it and the PRs below it. Push all,
-under the title, runs it for the whole stack. When the push adds commits to
-open PRs, a field by the button has their message, drafted from what changed
-since the last push. Left blank, it's "Update". A PR has Land
-(`jj spr land --upto`) once it and the PRs below it are open on GitHub with
-nothing to push. Land all shows once every PR is. Once GitHub has merged a PR
-that the stack file doesn't mark merged, Sync runs `jj spr sync`, which
-abandons the merged changes, rebases the rest onto trunk, and marks those PRs
-merged.
+A PR that a push would change has a Push button, which does what
+`jjack submit <file> --upto <tip>` does, for it and the PRs below it. Push
+all, under the title, pushes the whole stack. When the push adds commits to
+open PRs, a field by the button has the message for each update's last
+commit, drafted from what changed since the last push. When the field is
+blank, that message is "Update", or "Merge …" when the update merges the
+main branch or the PR below.
 
-Clicking a button opens a native sheet in ah's window for the page with what
-the command will do. Only confirming there runs it, and jj-spr's output shows
-on the page. In a browser tab, the buttons are disabled, since only ah's
-window can show the sheet.
+A PR has Land (`jjack land --upto`) once it and the PRs below it are open on
+GitHub with nothing to push. Land all shows once every PR is. Land
+squash-merges the PRs, bottom first, then syncs: it abandons the merged
+changes, rebases the rest onto trunk, and marks those PRs merged in the
+stack file. Sync (`jjack sync`) shows when a PR has merged on GitHub and
+isn't marked merged in the stack file, as when it was merged some other way
+or a land's sync stopped. It runs that sync alone.
+
+Clicking a button opens a native sheet in ah's window for the page, listing
+what the command will do. Only confirming there runs it. jjack's log then
+shows on the page. In a browser tab, the buttons are disabled, since only ah's window
+can show the sheet.
 
 These are the user's actions. Never call the page's routes for them. When the
-user asks you to push, run `jj spr submit <file> [--upto <tip>] -m '<message>'`
-from your shell, or point them at the button. Push a stack file's PRs only
-through jj spr with the file, never with `jj spr diff` or `jj git push`.
+user asks you to push, run `jjack submit <file> [--upto <tip>] [-m '<message>']`
+from your shell, as the jjack skill describes, or point them at the button.
+Push a stack file's PRs only through jjack with the file, never with
+`jjack submit -r` or `jj git push`.

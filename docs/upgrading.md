@@ -10,6 +10,12 @@ There are three kinds:
 
 A session starting in a workspace with old files, or on a machine with setup problems, is told to run `ah doctor` and to offer the user the changes rather than make them unasked.
 
+## Stack pages on jjack
+
+Stack pages use [jjack](https://github.com/david-crespo/jjack) as a library in place of the `jj spr` command. Clone it next to ah's checkout, at `../jjack`, and run `npm install` in ah's before restarting the server. Stack files and jj config need no changes. jjack reads and writes jj-spr's stack file format, and each `jjack.*` config key falls back to the key jj-spr reads. Land now runs the sync itself after merging. Sync is still there for PRs merged some other way and for a land whose sync stopped.
+
+**Setup.** The ah-stack skill refers to the jjack skill, at `skills/jjack` in jjack's checkout, in place of the jj-spr skill. The server needs no `jjack` command, but agents run it from their shell. jjack's README has how to install it. `ah doctor` checks for neither the command nor the skill.
+
 ## skepsis hosted in the server
 
 A stack page's diff buttons open skepsis in the server, at `/view/skepsis/<id>/` on the API port, rather than starting a separate skepsis process. ah no longer reads `AH_SKEPSIS`, so remove it from the server's environment. skepsis windows that were open show a 404 or a closed connection after the restart; click the diff stat again.

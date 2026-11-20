@@ -1,5 +1,5 @@
 // A stack's PRs as GitHub has them, which client.ts shows beside what jj has:
-// each PR jj-spr has opened, by its number, from one GraphQL query through
+// each PR jjack has opened, by its number, from one GraphQL query through
 // gh, with the GitHub stack it's in, if any (GitHub's stacked PRs). Kept for
 // a few seconds, since the page asks on every jj operation and gh takes a
 // second or so.
@@ -78,7 +78,7 @@ export function readGithub(pagePath: string, gh = ghRun): Promise<GithubPrs> {
 
 let warnedNoGh = false
 
-/** Ask GitHub afresh next time for the page at `pagePath`, as after jj-spr
+/** Ask GitHub afresh next time for the page at `pagePath`, as after jjack
  * ran from it, which may have opened, moved, or merged PRs */
 export const forgetGithub = (pagePath: string) => cache.delete(pagePath)
 

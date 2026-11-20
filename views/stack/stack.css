@@ -49,7 +49,7 @@ main .error {
   color: var(--del);
   white-space: pre-wrap;
 }
-/* What jj spr would refuse on, in its own words */
+/* What jjack would refuse on, in its own words */
 main .problem {
   margin: 8px 0 0;
   font: inherit;
@@ -547,7 +547,7 @@ main button.push-button:disabled {
 main button.push-button.elsewhere {
   cursor: default;
 }
-/* What jj-spr said about the last run from here, with a button
+/* What jjack said about the last run from here, with a button
    that dismisses it in its corner */
 main .push-log {
   position: relative;

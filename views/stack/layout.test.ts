@@ -1,7 +1,7 @@
 import { expect, test } from "vitest"
 import type { Pr, Shared } from "./data.ts"
 import type { GithubPr } from "./github.ts"
-import { arrangeRows, isCollapsed, isTodo } from "./layout.ts"
+import { arrangeRows, isCollapsed } from "./layout.ts"
 
 const gh = (state: GithubPr["state"]) => ({ state }) as GithubPr
 const pr = (n: number, rest: Partial<Pr> = {}) =>
@@ -33,15 +33,8 @@ test("a merged PR starts collapsed, and the user's choice wins either way", () =
   expect(isCollapsed(undefined, open, gh("OPEN"))).toBe(false)
   expect(isCollapsed(undefined, open, gh("CLOSED"))).toBe(false)
   expect(isCollapsed(undefined, open, undefined)).toBe(false)
-  // Marked merged by jj spr sync, before GitHub answers
+  // Marked merged by jjack sync, before GitHub answers
   expect(isCollapsed(undefined, pr(1, { merged: true }), undefined)).toBe(true)
   expect(isCollapsed(false, open, gh("MERGED"))).toBe(false)
   expect(isCollapsed(true, open, gh("OPEN"))).toBe(true)
-})
-
-test("isTodo: anything submit would do but nothing and keeping GitHub's edit", () => {
-  expect(isTodo("push the changes")).toBe(true)
-  expect(isTodo("retarget it from a to main")).toBe(true)
-  expect(isTodo("nothing: it is up to date")).toBe(false)
-  expect(isTodo("keep the title edited on GitHub")).toBe(false)
 })

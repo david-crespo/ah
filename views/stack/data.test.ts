@@ -9,6 +9,7 @@ import {
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { Entry } from "jjack"
 import { expect, test } from "vitest"
 import {
   ensureBody,
@@ -18,9 +19,11 @@ import {
   readStack,
   type Shared,
   type Stack,
-  type StackEntry,
   STACK_FILE,
 } from "./data.ts"
+
+/** An entry as a test writes it */
+type Written = Omit<Entry, "other">
 
 const prs = (stack: Stack) => stack.rows.filter((r): r is Pr => "n" in r)
 
@@ -56,7 +59,7 @@ test("parseGitDiff counts each file's lines and reads its status", () => {
   ])
 })
 
-test("parseStackFile reads jj-spr's format, with ah's title and notes", () => {
+test("parseStackFile reads jjack's format, with ah's title and notes", () => {
   const ok = JSON.stringify({
     title: "S",
     notes: ["n"],
@@ -65,16 +68,38 @@ test("parseStackFile reads jj-spr's format, with ah's title and notes", () => {
       { tip: "kxqzwmvt", title: "T", merged: true },
     ],
   })
-  expect(parseStackFile(ok)).toEqual(JSON.parse(ok))
-  // As jj-spr's init writes it, with no title
-  expect(parseStackFile('{"prs": [{"tip": "a"}]}')).toEqual({ prs: [{ tip: "a" }] })
-  expect(() => parseStackFile('{"title": "S"}')).toThrow("a list of prs")
-  expect(() => parseStackFile('{"prs": [{"title": "T"}]}')).toThrow("needs a tip")
-  expect(() => parseStackFile('{"prs": [{"tip": "a", "pr": "5"}]}')).toThrow("pr a number")
+  expect(parseStackFile(ok)).toEqual({
+    title: "S",
+    notes: ["n"],
+    prs: [
+      // Keys jjack doesn't know are kept apart
+      {
+        tip: "a",
+        body: "a.md",
+        pr: 5,
+        synced: "x",
+        pushed: "ab12",
+        other: { branch: "spr/a" },
+      },
+      { tip: "kxqzwmvt", title: "T", merged: true, other: {} },
+    ],
+  })
+  // As `jjack init` writes it, with no title for the stack
+  expect(parseStackFile('{"prs": [{"tip": "a"}]}')).toEqual({
+    prs: [{ tip: "a", other: {} }],
+  })
+  // jjack's complaints, about stack.json
+  expect(() => parseStackFile('{"title": "S"}')).toThrow("stack.json: missing field `prs`")
+  expect(() => parseStackFile('{"prs": [{"title": "T"}]}')).toThrow(
+    "stack.json: entry 1: missing or invalid field `tip`",
+  )
+  expect(() => parseStackFile('{"prs": [{"tip": "a", "pr": "5"}]}')).toThrow("`pr` must be")
   expect(() => parseStackFile('{"notes": [1], "prs": []}')).toThrow("notes")
+  expect(() => parseStackFile('{"title": 1, "prs": []}')).toThrow("title")
 })
 
-/** A new jj repo for a test, its commits made one file each */
+/** A new jj repo for a test, with main pushed to origin, its commits made
+ * one file each */
 function testRepo() {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ah-stack-")))
   const jj = (...args: string[]) =>
@@ -83,6 +108,12 @@ function testRepo() {
       stdio: "pipe",
     }).toString()
   jj("git", "init")
+  // jjack's trunk is main on origin. The remote is in .jj, which jj ignores.
+  execFileSync("git", ["init", "--bare", "--quiet", join(dir, ".jj", "remote.git")])
+  jj("git", "remote", "add", "origin", join(dir, ".jj", "remote.git"))
+  jj("commit", "-m", "Base")
+  jj("bookmark", "create", "main", "-r", "@-")
+  jj("git", "push", "--bookmark", "main")
   const notes = join(dir, "notes")
   return {
     dir,
@@ -100,7 +131,7 @@ function testRepo() {
     /** The stack of `entries`, or of PRs on these tips. Its files are
      * written each time, since `jj new` on a commit without them removes
      * them. */
-    async stack(...entries: (string | StackEntry)[]) {
+    async stack(...entries: (string | Written)[]) {
       mkdirSync(notes, { recursive: true })
       const prs = entries.map((e) => (typeof e === "string" ? { tip: e, title: "T" } : e))
       writeFileSync(join(notes, STACK_FILE), JSON.stringify({ title: "S", prs }))
@@ -126,7 +157,7 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     mkdirSync(repo.notes)
     writeFileSync(join(repo.notes, "two.md"), "# Two, from the body\n\nText\n")
     writeFileSync(join(repo.notes, "three.md"), "Text\n")
-    const file: StackEntry[] = [
+    const file: Written[] = [
       { tip: "one", title: "PR 1" },
       { tip: "two", title: "PR 2", body: "two.md" },
       { tip: three, title: "PR 3", body: "three.md" },
@@ -142,7 +173,6 @@ test("readStack takes each PR's commits and base from the graph", async () => {
       commits: p.commits.map((c) => c.description.split("\n")[0]),
       files: p.files.map((f) => `${f.status} ${f.path} +${f.add}`),
     }))
-    const base = prs(stack)[2].base
     expect(summary).toEqual([
       {
         n: 3,
@@ -161,8 +191,8 @@ test("readStack takes each PR's commits and base from the graph", async () => {
       },
       {
         n: 1,
-        base: expect.stringMatching(/^[k-z]{8}$/),
-        diff: { from: base, to: '"one"' },
+        base: "main",
+        diff: { from: '"main"', to: '"one"' },
         commits: ["Add b", "Add a"],
         files: ["A a.txt +1", "A b.txt +1"],
       },
@@ -183,14 +213,21 @@ test("readStack takes each PR's commits and base from the graph", async () => {
     expect(prs(edited)[1].commits[0].description).toBe("Add c, edited\n")
 
     // A PR whose tip isn't there yet has no commits and comes first; a
-    // merged one, which jj-spr leaves out, comes last; and the rest are as
+    // merged one, which jjack leaves out, comes last; and the rest are as
     // they were
     const more = await repo.stack(
       { tip: "zero", title: "PR 0", pr: 4, merged: true },
       ...file,
-      { tip: "four", title: "PR 4" },
+      // A body that isn't there leaves the title key
+      { tip: "four", title: "PR 4", body: "four.md" },
     )
-    expect(more.rows[0]).toMatchObject({ n: 5, missing: true, diff: null, commits: [] })
+    expect(more.rows[0]).toMatchObject({
+      n: 5,
+      title: "PR 4",
+      missing: true,
+      diff: null,
+      commits: [],
+    })
     expect(more.rows.at(-1)).toMatchObject({ n: 1, merged: true, missing: false, pr: 4 })
     const renumbered = (rows: Stack["rows"]) => rows.map((r) => ("n" in r ? r.tip : r))
     expect(renumbered(more.rows.slice(1, -1))).toEqual(renumbered(edited.rows))
@@ -218,7 +255,6 @@ test("readStack shows commits below a fork with no PR's tip as shared", async ()
     // ○ w
     // ○ s
     // ○ a one
-    const root = repo.jj("log", "--no-graph", "-r", "root()", "-T", "change_id.short(8)")
     repo.commit("a")
     repo.jj("bookmark", "create", "one", "-r", "@-")
     repo.commit("s")
@@ -237,7 +273,7 @@ test("readStack shows commits below a fork with no PR's tip as shared", async ()
       { n: 3, base: w, commits: ["Add u", "Add t"] },
       { n: 2, base: w, commits: ["Add k"] },
       { shared: [2, 3], head: w, base: "one", commits: ["Add w", "Add s"] },
-      { n: 1, base: root, commits: ["Add a"] },
+      { n: 1, base: "main", commits: ["Add a"] },
     ])
     const shared = stack.rows[3] as Shared
     expect(shared.diff).toEqual({ from: '"one"', to: w })
@@ -263,7 +299,7 @@ test("readStack shows commits below a fork with no PR's tip as shared", async ()
   }
 })
 
-test("readStack tags what changed since jj-spr's pushed commit, and nothing without one", async () => {
+test("readStack tags what changed since jjack's pushed commit, and nothing without one", async () => {
   const repo = testRepo()
   try {
     repo.commit("a")
@@ -272,7 +308,7 @@ test("readStack tags what changed since jj-spr's pushed commit, and nothing with
     const c = repo.commit("c")
     const d = repo.commit("d")
     repo.jj("bookmark", "create", "two", "-r", "@-")
-    // As jj-spr last pushed them
+    // As jjack last pushed them
     const pushed = { one: repo.commitId("one"), two: repo.commitId("two") }
     // A commit on one moves two's up; then c changes a line and d its
     // description
@@ -338,7 +374,6 @@ test("readStack shares the commits below a PR that forks inside another", async 
     // ├─╯
     // ○ b
     // ○ a
-    const root = repo.jj("log", "--no-graph", "-r", "root()", "-T", "change_id.short(8)")
     repo.commit("a")
     const b = repo.commit("b")
     repo.commit("c")
@@ -356,7 +391,7 @@ test("readStack shares the commits below a PR that forks inside another", async 
       { n: 3, base: "one", commits: ["Add f"] },
       { n: 1, base: b, commits: ["Add d", "Add c"] },
       { n: 2, base: b, commits: ["Add e"] },
-      { shared: [1, 2], head: b, base: root, commits: ["Add b", "Add a"] },
+      { shared: [1, 2], head: b, base: "main", commits: ["Add b", "Add a"] },
     ])
   } finally {
     rmSync(repo.dir, { recursive: true })

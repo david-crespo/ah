@@ -12,19 +12,21 @@
 //
 // Beside what jj has, the page shows what GitHub has (github.ts, served at
 // _ah/stack-github: a PR's link, state, checks, review, and GitHub stack)
-// and what jj-spr says (spr.ts, served at _ah/stack-status: what `jj spr
+// and what jjack says (jjack.ts, served at _ah/stack-status: what `jjack
 // submit` would do for each PR, and the problems it would refuse on). Both
-// come after the stack, since they're slow. A PR jj-spr has pushed before,
+// come after the stack, since they're slow. A PR jjack has pushed before,
 // whose commit as pushed is still here, has a bar under its newest commits
 // marking the ones still to push, each tagged new or changed since then,
 // with no tag for one only rebased. A PR that a push would change has a Push
 // button on that bar, or one by its Body button before it's on GitHub. Push
-// has the server run `jj spr submit --upto` the PR once the user confirms it
-// in a sheet on the page's window, and jj-spr's output shows on the PR. When
-// the push adds commits to an open PR, a field by its button has their
-// message, which the server drafts with a quick model call (message.ts) and
-// the user can change; left blank, it's Update. With more than one PR, Push
-// all under the title pushes them all. Outside ah's
+// has the server show what `jjack submit --upto` the PR would do in a sheet
+// on the page's window, then run it once the user confirms there. jjack's
+// output shows on the PR. When the push adds commits to an open PR, a field
+// by its button has their message, which the server drafts with a quick
+// model call (message.ts) and the user can change. Left blank, jjack picks
+// the message: Update, or Merge … when the update is a merge. With more than
+// one PR, Push all under the title pushes them all. Land and Sync go through
+// the same sheet, and Land syncs once its PRs have landed. Outside ah's
 // window, as in a browser tab, there's no sheet to confirm in, so the
 // buttons say so.
 //
@@ -38,10 +40,11 @@
 // gh after a reload.
 
 import type { Changes, Commit, FileStat, Group, Pr, Shared, Stack } from "./data.ts"
+import type { Status, StatusEntry } from "jjack"
 import type { GithubPr, GithubPrs } from "./github.ts"
-import type { SprCommand, SprEntry, SprStatus } from "./spr.ts"
+import type { Command } from "./jjack.ts"
 import { escapeHtml } from "../escape.ts"
-import { arrangeRows, isCollapsed, isTodo } from "./layout.ts"
+import { arrangeRows, isCollapsed } from "./layout.ts"
 
 const threadUrl = (() => {
   const script = document.querySelector<HTMLScriptElement>("script[data-ah-thread]")
@@ -157,32 +160,33 @@ function githubLead(gh: GithubPr): string {
   return lead.join("")
 }
 
-/** How a run of jj-spr from the page ended: whether it worked, and its
+/** How a run of jjack from the page ended: whether it worked, and its
  * output */
 type RunResult = { ok: boolean; text: string }
 
-/** Runs of jj-spr from this page, by the tip of the PR they were clicked on,
+/** Runs of jjack from this page, by the tip of the PR they were clicked on,
  * or ALL for the buttons under the title: the command while it's out, or
  * how it ended, which shows until the user dismisses it or another is
  * clicked there. One cancelled in the sheet leaves nothing. */
-const runs = new Map<string, SprCommand | RunResult>()
+const runs = new Map<string, Command | RunResult>()
 const ALL = "*"
 const running = (key: string) => typeof runs.get(key) === "string"
 
 /** In ah's own window, whose sheet a run is confirmed in */
 const inWindow = new URLSearchParams(location.search).get("in") === "window"
 
-/** What jj-spr says of the PR with `tip`, once it has answered */
-const statusOf = (tip: string): SprEntry | undefined =>
+/** What jjack says of the PR with `tip`, once it has answered */
+const statusOf = (tip: string): StatusEntry | undefined =>
   status?.entries.find((e) => e.tip === tip)
 
-/** Whether a push would do something for `pr`: what jj-spr says it would,
- * or until it answers, whether it isn't on GitHub yet or has commits still
- * to push */
+/** Whether a push would do something for `pr`: whether jjack has actions
+ * for it, which it has none of for a PR a problem keeps it from planning.
+ * Until it answers, whether the PR isn't on GitHub yet or has commits still
+ * to push. */
 function needsPush(pr: Pr): boolean {
   if (pr.merged) return false
-  const actions = statusOf(pr.tip)?.actions
-  if (actions) return actions.some(isTodo)
+  const entry = statusOf(pr.tip)
+  if (entry) return !!entry.actions?.length
   return pr.pr === null ? pr.commits.length > 0 : pr.unpushed > 0
 }
 
@@ -190,12 +194,12 @@ const RUNNING = { submit: "Pushing…", land: "Landing…", sync: "Syncing…" }
 
 /** A button that runs `command` for `key`, a PR's tip or ALL, disabled
  * while a run for `key` is out */
-function sprButton(command: SprCommand, key: string, label: string, title: string): string {
+function runButton(command: Command, key: string, label: string, title: string): string {
   const out = runs.get(key)
   const [text, tooltip] = !inWindow
     ? [
         `${label} in ah's window`,
-        "jj spr runs are confirmed in ah's window for this page: open it with ah tool stack",
+        "jjack runs are confirmed in ah's window for this page: open it with ah tool stack",
       ]
     : out === command
       ? [RUNNING[command], "Waiting for you to confirm in the window's sheet, then running"]
@@ -205,15 +209,15 @@ function sprButton(command: SprCommand, key: string, label: string, title: strin
 
 /** The Push button for one PR, which pushes the ones below it too */
 const prPushButton = (pr: Pr) =>
-  sprButton(
+  runButton(
     "submit",
     pr.tip,
     pr.pr === null ? "Push and create PR" : "Push",
-    `jj spr submit --upto ${pr.tip}: push this PR and the ones below it`,
+    `jjack submit stack.json --upto ${pr.tip}: push this PR and the ones below it`,
   )
 
 /** Whether the PRs up to the `n`th are open on GitHub with nothing to
- * push, so jj spr land can land them */
+ * push, so jjack land can land them */
 const landable = (n: number) =>
   prRows
     .filter((p) => p.n <= n && !p.merged)
@@ -229,14 +233,14 @@ function runResult(key: string): string {
     </div>`
 }
 
-/** jj-spr's problems with `tips`, or with the whole file for null */
+/** jjack's problems with `tip`, or with the whole file for null */
 const problems = (tip: string | null) =>
   (status?.problems ?? [])
     .filter((p) => p.tip === tip)
     .map((p) => `<pre class="problem">${escapeHtml(p.message)}</pre>`)
     .join("")
 
-/** How a commit still to push differs from what jj-spr last pushed: new,
+/** How a commit still to push differs from what jjack last pushed: new,
  * only rebased, or changed */
 function pushKind(c: Commit): "new" | "rebased" | "changed" {
   const r = c.rewrite
@@ -282,11 +286,11 @@ function prTag({ from, to, add, del, reworded }: NonNullable<Pr["interdiff"]>): 
 
 /** The bar's text for `pr`: how many commits to push, and how many are new
  * or changed unless all are new, the rest only rebased; or with none known,
- * what jj-spr would do */
+ * what jjack would do */
 function toPushText(pr: Pr): string {
   const kinds = pr.commits.slice(0, pr.unpushed).map(pushKind)
   if (!kinds.length)
-    return statusOf(pr.tip)?.actions?.includes("push the changes")
+    return statusOf(pr.tip)?.actions?.some((a) => a.kind === "push")
       ? "↑ changes to push"
       : "↑ to update on GitHub"
   const count = (k: string) => kinds.filter((x) => x === k).length
@@ -316,15 +320,16 @@ const typed = new Map<string, string>()
 
 /** The message field for a push of the PRs up to the `n`th, by Push
  * button `key`, when the push adds commits to an open PR: blank until a
- * draft comes, which the server asks a model for, and Update when it's
- * left blank */
+ * draft comes, which the server asks a model for. Left blank, jjack picks
+ * the message: Update, or Merge … when the update is a merge. */
 function messageField(n: number, key: string): string {
   const updates = prRows.filter(
     (p) =>
       p.n <= n &&
       p.pr !== null &&
       !p.merged &&
-      (p.unpushed > 0 || !!statusOf(p.tip)?.actions?.includes("push the changes")),
+      (p.unpushed > 0 ||
+        !!statusOf(p.tip)?.actions?.some((a) => a.kind === "push" || a.kind === "merge")),
   )
   if (!updates.length) return ""
   // Each changed PR's pushed commit and its tip's now, as the server keeps
@@ -335,7 +340,7 @@ function messageField(n: number, key: string): string {
     .join(" ")
   if (from && !drafts.has(from)) void askDraft(from, key)
   const value = typed.get(from) ?? drafts.get(from) ?? ""
-  return `<input type="text" class="push-message" data-message="${escapeHtml(from)}" data-for="${escapeHtml(key)}" value="${escapeHtml(value)}" placeholder="Update" aria-label="Message for the commits that update open PRs" title="Message for the commits that update open PRs">`
+  return `<input type="text" class="push-message" data-message="${escapeHtml(from)}" data-for="${escapeHtml(key)}" value="${escapeHtml(value)}" placeholder="Update" aria-label="Message for the commits that update open PRs" title="Message for the commits that update open PRs. Left blank, it's Update, or Merge … when the update is a merge.">`
 }
 
 /** Ask the server for a draft of the message for Push button `key`'s
@@ -351,7 +356,7 @@ async function askDraft(from: string, key: string) {
     })
     if (res.ok) message = ((await res.json()) as { message: string }).message
   } catch {
-    // The field stays blank, and the push says Update
+    // The field stays blank, so jjack picks the message
   }
   drafts.set(from, message)
   redraw()
@@ -389,11 +394,12 @@ const CHEVRON = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-
 
 /** What submit would do for `pr` that its buttons and bar don't say */
 function plannedNote(pr: Pr): string {
-  const said = ["push the changes", "open a Pull Request"]
-  const rest = (statusOf(pr.tip)?.actions ?? []).filter(
-    (a) => !a.startsWith("nothing") && !said.includes(a),
-  )
-  return rest.length ? note(`jj spr submit will ${rest.join(", ")}`, "warn") : ""
+  const entry = statusOf(pr.tip)
+  const rest = (entry?.actions ?? [])
+    .filter((a) => a.kind !== "push" && a.kind !== "open")
+    .map((a) => a.text)
+  if (entry?.keptFromGithub) rest.push(`keep the ${entry.keptFromGithub} edited on GitHub`)
+  return rest.length ? note(`jjack submit will ${rest.join(", ")}`, "warn") : ""
 }
 
 function prCard(pr: Pr, gh: GithubPr | undefined): string {
@@ -431,11 +437,11 @@ function prCard(pr: Pr, gh: GithubPr | undefined): string {
   const merged = pr.merged && !gh ? note("merged", "good") : ""
   const land =
     !pr.merged && landable(pr.n)
-      ? sprButton(
+      ? runButton(
           "land",
           pr.tip,
           "Land",
-          `jj spr land --upto ${pr.tip}: squash-merge this PR and the ones below it`,
+          `jjack land stack.json --upto ${pr.tip}: squash-merge this PR and the ones below it, then sync the stack`,
         )
       : ""
   const meta = `<div class="pr-meta">${gh ? githubLead(gh) : ""}${body}${fresh}${land}<span class="mono">${escapeHtml(pr.tip)}</span>${merged}${stack}${plannedNote(pr)}</div>
@@ -483,23 +489,28 @@ function stackBar(prs: Pr[]): string {
   const buttons = [
     several && live.some(needsPush)
       ? messageField(Infinity, ALL) +
-        sprButton("submit", ALL, "Push all", "jj spr submit: push every PR in the stack")
+        runButton(
+          "submit",
+          ALL,
+          "Push all",
+          "jjack submit stack.json: push every PR in the stack",
+        )
       : "",
     several && landable(Infinity)
-      ? sprButton(
+      ? runButton(
           "land",
           ALL,
           "Land all",
-          "jj spr land: squash-merge every PR, bottom first",
+          "jjack land stack.json: squash-merge every PR, bottom first, then sync the stack",
         )
       : "",
     // Merged on GitHub, but not yet in the file
     live.some((pr) => statusOf(pr.tip)?.state === "merged")
-      ? sprButton(
+      ? runButton(
           "sync",
           ALL,
           "Sync",
-          "jj spr sync: abandon the merged changes, rebase the rest onto trunk, and mark those PRs merged",
+          "jjack sync stack.json: abandon the merged changes, rebase the rest onto trunk, and mark those PRs merged",
         )
       : "",
   ].join("")
@@ -513,7 +524,7 @@ let github = read<GithubPrs>(localStorage, githubKey) ?? {}
 const foldsKey = `ah-stack-folds:${location.pathname}`
 const folds = read<Record<string, boolean>>(localStorage, foldsKey) ?? {}
 let githubError = ""
-let status: SprStatus | null = null
+let status: Status | null = null
 let statusError = ""
 let drawn = ""
 
@@ -552,7 +563,7 @@ function draw(stack: Stack, error = "") {
     <h1>${escapeHtml(title)}</h1>
     ${error ? `<p class="error">${escapeHtml(error)}</p>` : ""}
     ${githubError ? `<p class="error">GitHub: ${escapeHtml(githubError)}</p>` : ""}
-    ${statusError ? `<p class="error">jj spr: ${escapeHtml(statusError)}</p>` : ""}
+    ${statusError ? `<p class="error">jjack: ${escapeHtml(statusError)}</p>` : ""}
     ${problems(null)}${stray.map((p) => `<pre class="problem">${escapeHtml(p.message)}</pre>`).join("")}
     <div class="notes">${stack.notes.map((n) => `<p>${prose(n)}</p>`).join("")}</div>
     ${stackBar(prs)}
@@ -690,12 +701,12 @@ main.addEventListener("click", (e) => {
   redraw()
 })
 
-// A Push, Land or Sync button: the server asks the user in a sheet, and
-// runs jj-spr if they say so. The stack redraws by itself after, since
-// jj-spr writes the stack file.
+// A Push, Land, or Sync button: the server asks the user in a sheet, and
+// runs jjack if they say so. The stack redraws by itself after, since jjack
+// writes the stack file.
 main.addEventListener("click", async (e) => {
   const button = (e.target as Element).closest<HTMLButtonElement>("button[data-run]")
-  const command = button?.dataset.run as SprCommand | undefined
+  const command = button?.dataset.run as Command | undefined
   const key = button?.dataset.for
   if (!command || key === undefined || !threadUrl || running(key)) return
   const message =
@@ -705,7 +716,7 @@ main.addEventListener("click", async (e) => {
   redraw()
   let result: RunResult | null
   try {
-    const res = await fetch(new URL("spr", threadUrl), {
+    const res = await fetch(new URL("jjack", threadUrl), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -752,7 +763,7 @@ main.addEventListener("click", (e) => {
 })
 
 // Named for the shape of Stack, so a tab never draws one from an older ah
-const cacheKey = `ah-stack-rows-spr:${location.pathname}`
+const cacheKey = `ah-stack-rows-jjack:${location.pathname}`
 const cached = read<Stack>(sessionStorage, cacheKey)
 let current: Stack | null = cached
 let currentError = ""
@@ -765,13 +776,13 @@ async function get<T>(path: string): Promise<T> {
   return (await res.json()) as T
 }
 
-/** GitHub's side and jj-spr's, which nothing here hears change on GitHub,
- * so asked for again now and then while the page is in view. Not jj-spr's
+/** GitHub's side and jjack's, which nothing here hears change on GitHub,
+ * so asked for again now and then while the page is in view. Not jjack's
  * while a run from here is going: halfway through, as after a PR opens but
  * before the stack file has its number, status refuses on the stack. The
  * run asks again when it ends. */
 async function loadRemote() {
-  const sprRunning = [...runs.keys()].some(running)
+  const anyRunning = [...runs.keys()].some(running)
   await Promise.all([
     get<GithubPrs>("stack-github").then(
       (prs) => {
@@ -781,8 +792,8 @@ async function loadRemote() {
       },
       (e: Error) => (githubError = e.message),
     ),
-    sprRunning ||
-      get<SprStatus>("stack-status").then(
+    anyRunning ||
+      get<Status>("stack-status").then(
         (s) => {
           status = s
           statusError = ""
@@ -796,7 +807,7 @@ async function loadRemote() {
 let loading = false
 let dirty = false
 
-/** The stack, then GitHub's and jj-spr's side, which take longer. One load
+/** The stack, then GitHub's and jjack's side, which take longer. One load
  * at a time; asks during one make one more. */
 async function load() {
   if (loading) {

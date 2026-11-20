@@ -1,7 +1,7 @@
-// What a stack page (client.ts) does with GitHub's and jj-spr's side once it
-// has them: where a PR goes whose tip is gone because it merged, which PRs
-// start collapsed, and which of jj-spr's planned actions are something to
-// do. Kept apart from the page's drawing so it can be tested without a DOM.
+// What a stack page (client.ts) does with GitHub's and jjack's side once it
+// has them: where a PR goes whose tip is gone because it merged, and which
+// PRs start collapsed. Kept apart from the page's drawing so it can be
+// tested without a DOM.
 
 import type { Pr, Shared } from "./data.ts"
 import type { GithubPr, GithubPrs } from "./github.ts"
@@ -30,8 +30,3 @@ export const isCollapsed = (
   pr: Pr,
   gh: GithubPr | undefined,
 ) => choice ?? (pr.merged || gh?.state === "MERGED")
-
-/** Whether `jj spr submit` has something to do, in an action as `jj spr
- * stack-file status` words it */
-export const isTodo = (action: string) =>
-  !action.startsWith("nothing") && !action.startsWith("keep ")

@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process"
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { Entry } from "jjack"
 import { afterAll, beforeAll, expect, test } from "vitest"
 import type { Output } from "../../platform/proc.ts"
-import { STACK_FILE, type StackEntry } from "./data.ts"
+import { STACK_FILE } from "./data.ts"
 import { stackApp } from "./routes.ts"
 
 let root: string
@@ -15,7 +16,7 @@ const jj = (...args: string[]) =>
     stdio: "pipe",
   }).toString()
 const commitId = (rev: string) => jj("log", "--no-graph", "-r", rev, "-T", "commit_id")
-const write = (prs: StackEntry[]) =>
+const write = (prs: Omit<Entry, "other">[]) =>
   writeFileSync(join(root, "notes", STACK_FILE), JSON.stringify({ prs }))
 
 beforeAll(() => {
@@ -24,6 +25,13 @@ beforeAll(() => {
   // So that checking out a commit leaves the stack file alone
   writeFileSync(join(root, ".gitignore"), "notes/\n")
   jj("commit", "-m", "Ignore notes")
+  // jjack's trunk is main on origin, at that commit. The remote is in notes,
+  // which jj ignores here.
+  mkdirSync(join(root, "notes"))
+  execFileSync("git", ["init", "--bare", "--quiet", join(root, "notes", "remote.git")])
+  jj("git", "remote", "add", "origin", join(root, "notes", "remote.git"))
+  jj("bookmark", "create", "main", "-r", "@-")
+  jj("git", "push", "--bookmark", "main")
   for (const [name, bookmark] of [
     ["a", "one"],
     ["b", "two"],
@@ -32,7 +40,6 @@ beforeAll(() => {
     jj("commit", "-m", `Add ${name}`)
     jj("bookmark", "create", bookmark, "-r", "@-")
   }
-  mkdirSync(join(root, "notes"))
   page = join(root, "notes", "index.html")
 })
 
@@ -61,7 +68,7 @@ function app(answer: Output) {
 
 const said = (stdout: string): Output => ({ success: true, code: 0, stdout, stderr: "" })
 
-test("the draft comes from the interdiff since jj-spr's push, and is kept", async () => {
+test("the draft comes from the interdiff since jjack's push, and is kept", async () => {
   const pushed = { one: commitId("one"), two: commitId("two") }
   write([
     { tip: "one", pr: 1, pushed: pushed.one },
@@ -72,8 +79,8 @@ test("the draft comes from the interdiff since jj-spr's push, and is kept", asyn
   writeFileSync(join(root, "b.txt"), "B, louder\n")
   jj("new")
   const { draft, calls } = app(said('"Make b louder."\n'))
-  // Nothing to draft from up to one, so no call
-  expect(await draft("one")).toBe("Update")
+  // Nothing to draft from up to one, so no call, and jjack picks the message
+  expect(await draft("one")).toBe("")
   expect(calls).toEqual([])
   expect(await draft("two")).toBe("Make b louder")
   expect(calls).toHaveLength(1)
@@ -87,26 +94,20 @@ test("the draft comes from the interdiff since jj-spr's push, and is kept", asyn
   expect(calls).toHaveLength(1)
 })
 
-test("a failed or empty draft is Update, and isn't kept", async () => {
+test("a failed or empty draft is empty, and isn't kept", async () => {
   const pushed = commitId("two")
   write([{ tip: "one" }, { tip: "two", pr: 2, pushed }])
   jj("edit", "two")
   writeFileSync(join(root, "b.txt"), "B, louder still\n")
   jj("new")
   const failed = app({ success: false, code: null, stdout: "", stderr: "" })
-  expect(await failed.draft("two")).toBe("Update")
+  expect(await failed.draft("two")).toBe("")
   const empty = app(said("\n"))
-  expect(await empty.draft("two")).toBe("Update")
+  expect(await empty.draft("two")).toBe("")
   expect([failed.calls.length, empty.calls.length]).toEqual([1, 1])
 })
 
-test("PRs only rebased since their push draft Rebase, with no call", async () => {
-  // trunk is main on origin, at the first commit
-  // In notes, which jj ignores here
-  execFileSync("git", ["init", "--bare", "--quiet", join(root, "notes", "remote.git")])
-  jj("git", "remote", "add", "origin", join(root, "notes", "remote.git"))
-  jj("bookmark", "create", "main", "-r", "root()+")
-  jj("git", "push", "--bookmark", "main")
+test("PRs only rebased since their push draft nothing, with no call", async () => {
   write([
     { tip: "one", pr: 1, pushed: commitId("one") },
     { tip: "two", pr: 2, pushed: commitId("two") },
@@ -119,6 +120,6 @@ test("PRs only rebased since their push draft Rebase, with no call", async () =>
   jj("git", "push", "--bookmark", "main")
   jj("rebase", "-b", "two", "-d", "main")
   const { draft, calls } = app(said("Never asked"))
-  expect(await draft("two")).toBe("Rebase")
+  expect(await draft("two")).toBe("")
   expect(calls).toEqual([])
 })

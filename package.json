@@ -47,6 +47,7 @@
     "commander": "^15.0.0",
     "diff": "^9.0.0",
     "happy-dom": "^21.0.4",
+    "jjack": "file:../jjack",
     "markdown-exit": "^1.3.0",
     "markdown-it-footnote": "^4.0.0",
     "markdown-it-task-lists": "^2.1.1",
