@@ -26,7 +26,7 @@ import { innermostBlocks, lines, showDiff } from "./diff_view.ts"
 import { asciidocBlocks, renderAsciidoc } from "./asciidoc.ts"
 import type { DocFormat } from "./doc.ts"
 import type { ThreadSnapshot } from "../../subjects/thread/events.ts"
-import { splice } from "./splice.ts"
+import { editedLines } from "./merge.ts"
 
 /** What the doc socket sends: the text, the file's thread, and the
  * file closing */
@@ -286,14 +286,7 @@ export class AhMarkdown extends HTMLElement {
 
   #apply(text: string) {
     if (this.#text !== null && text !== this.#text) {
-      const { start, insert } = splice(this.#text, text)
-      const lineOf = (offset: number) => text.slice(0, offset).split("\n").length - 1
-      // pure deletions still flash the block they happened in
-      this.#pendingFlash.push({
-        start: lineOf(start),
-        end: lineOf(start + insert.length) + 1,
-        inserted: insert,
-      })
+      this.#pendingFlash.push(...editedLines(this.#text, text))
     }
     this.#text = text
     void this.#render()

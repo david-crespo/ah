@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest"
-import { AGENT, lineChanges, MINE, mergeDisk, pick } from "./merge.ts"
+import { AGENT, editedLines, lineChanges, MINE, mergeDisk, pick } from "./merge.ts"
 
 const apply = (text: string, changes: ReturnType<typeof lineChanges>) => {
   let out = ""
@@ -442,6 +442,26 @@ describe("lineChanges", () => {
     expect(lineChanges("one\ntwo\nthree\n", "one\n2\nthree\n")).toEqual([
       { from: 4, to: 7, insert: "2" },
     ])
+  })
+})
+
+describe("editedLines", () => {
+  const list = "Intro.\n\n1. one\n2. two\n3. three\n\nAfter.\n"
+
+  test("an edit within a line is the words it put in", () => {
+    expect(editedLines(list, list.replace("two", "two more"))).toEqual([
+      { start: 3, end: 4, inserted: " more" },
+    ])
+  })
+
+  test("adding a list item doesn't count the items it renumbered", () => {
+    const after = list.replace("2. two\n3. three", "2. new\n3. two\n4. three")
+    expect(editedLines(list, after)).toEqual([{ start: 3, end: 4, inserted: "2. new" }])
+  })
+
+  test("removing one is the line after it", () => {
+    const after = list.replace("2. two\n3. three", "2. three")
+    expect(editedLines(list, after)).toEqual([{ start: 3, end: 4, inserted: "" }])
   })
 })
 

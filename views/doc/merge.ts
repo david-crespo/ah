@@ -8,6 +8,7 @@
 // changed. See mergeDisk.
 
 import { diffArrays } from "diff"
+import { splice } from "./splice.ts"
 
 /** A range of `a` and the range of `b` that replaces it */
 type Run = { a: number; aEnd: number; b: number; bEnd: number }
@@ -380,4 +381,26 @@ export function lineChanges(before: string, after: string): Change[] {
     }
   }
   return changes
+}
+
+/** The lines of `after` that an edit of `before` changed, 0-based and
+ * [start, end), each with the text it put in, for the preview to flash
+ * (preview.ts). A line whose only change is its number in an ordered list
+ * doesn't count, so adding or removing an item doesn't flash the items after
+ * it. Lines only removed count as the line after them, to flash the block
+ * they were in. */
+export function editedLines(before: string, after: string) {
+  const unnumbered = (line: string) => line.replace(/^(\s*)\d+(?=[.)](\s|$))/, "$1#")
+  const lines = before.split("\n")
+  const next = after.split("\n")
+  return diff(lines.map(unnumbered), next.map(unnumbered)).map((r) => {
+    const now = next.slice(r.b, r.bEnd).join("\n")
+    const { start, insert } = splice(lines.slice(r.a, r.aEnd).join("\n"), now)
+    const lineOf = (offset: number) => r.b + now.slice(0, offset).split("\n").length - 1
+    return {
+      start: lineOf(start),
+      end: lineOf(start + insert.length) + 1,
+      inserted: insert,
+    }
+  })
 }
