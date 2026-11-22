@@ -91,6 +91,38 @@ test("a session an `opencode run` made in its directory is skipped, as a child i
     "ses_tui",
     "ses_other",
   ])
-  // Once per session created, not per event
-  expect(procs.reads).toBe(3)
+  // Once per session created, and per turn of a skipped one
+  expect(procs.reads).toBe(4)
+})
+
+test("a session an `opencode run` made is followed once a TUI resumes it", async () => {
+  const received: RegistryEvent[] = []
+  const core = {
+    receive: (e: RegistryEvent) => (received.push(e), null),
+    retitle: () => {},
+  }
+  const known = new Map()
+  const service = { url: "http://127.0.0.1:1", auth: "" }
+  const send = (event: "SessionStart" | "UserPromptSubmit" | "Stop") =>
+    apply(service, core, known, {
+      kind: "event",
+      event,
+      session: "ses_run",
+      cwd: event === "SessionStart" ? "/repo" : null,
+    })
+  procs.table = [{ pid: 7, ppid: 6, pgid: 6, args: "/h/.opencode/bin/opencode run fix it" }]
+  procs.cwds.set(7, "/repo")
+  await send("SessionStart")
+  await send("UserPromptSubmit")
+  // The run exits, which alone changes nothing
+  procs.table = []
+  await send("Stop")
+  expect(received).toEqual([])
+  // A turn with no run in the directory is a TUI's
+  await send("UserPromptSubmit")
+  await send("Stop")
+  expect(received.map((e) => e.kind === "hook" && [e.event, e.cwd])).toEqual([
+    ["UserPromptSubmit", "/repo"],
+    ["Stop", "/repo"],
+  ])
 })

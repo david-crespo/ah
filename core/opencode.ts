@@ -18,7 +18,9 @@
 // sessions of an `opencode run` an agent runs from its shell, which would
 // take over the agent's pane. Nothing in the stream tells one from a TUI's,
 // so a session is taken for one when an `opencode run` runs in its
-// directory as it's created.
+// directory as it's created. A TUI can resume such a session later, so the
+// check runs again at the start of each of its turns. Once a turn starts
+// with no `opencode run` in that directory, the session is followed.
 
 import { str } from "../platform/guards.ts"
 import { processCwds, processTable } from "../platform/proc.ts"
@@ -81,8 +83,9 @@ interface Service {
 interface SessionInfo {
   cwd: string | null
   title: string | null
-  /** A child session, or an `opencode run`'s */
-  skipped: boolean
+  /** Not followed: a child session for good, an `opencode run`'s until a
+   * turn starts without one */
+  skipped: "child" | "run" | null
 }
 
 async function fetchSession(service: Service, id: string): Promise<SessionInfo | null> {
@@ -98,7 +101,7 @@ async function fetchSession(service: Service, id: string): Promise<SessionInfo |
     return {
       cwd: str(location?.directory),
       title: str(s.title),
-      skipped: !!str(s.parentID),
+      skipped: str(s.parentID) ? "child" : null,
     }
   } catch {
     return null
@@ -154,14 +157,22 @@ export async function apply(
   update: OpencodeUpdate,
 ) {
   if (update.kind === "child") {
-    known.set(update.session, { cwd: null, title: null, skipped: true })
+    known.set(update.session, { cwd: null, title: null, skipped: "child" })
     return
   }
   let info = known.get(update.session)
   if (update.kind === "event" && update.event === "SessionStart") {
-    info = { cwd: update.cwd, title: null, skipped: runIn(update.cwd) }
+    info = { cwd: update.cwd, title: null, skipped: runIn(update.cwd) ? "run" : null }
     known.set(update.session, info)
   }
+  // A TUI may have resumed what an `opencode run` started
+  if (
+    info?.skipped === "run" &&
+    update.kind === "event" &&
+    update.event === "UserPromptSubmit" &&
+    !runIn(info.cwd)
+  )
+    info.skipped = null
   // A session that started before ah was following: ask the service
   if (!info) {
     const fetched = await fetchSession(service, update.session)
