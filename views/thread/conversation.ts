@@ -16,9 +16,23 @@ markdown.disable("image")
 /** Focus an element that was hidden until this task, once a frame has rendered
  * it. Focused in the same task, it gets DOM focus but Chrome's accessibility
  * tree keeps reporting the old element, so dictation tools that insert text
- * through accessibility (MacWhisper) miss it. */
+ * through accessibility (MacWhisper) miss it. A key typed before then would
+ * reach the page and any shortcuts it has, so it focuses the element at once
+ * instead, and the key lands there. */
 export function focusWhenRendered(element: HTMLElement) {
-  requestAnimationFrame(() => requestAnimationFrame(() => element.focus()))
+  const early = (e: KeyboardEvent) => {
+    if (e.metaKey || e.ctrlKey || e.altKey || document.activeElement !== document.body)
+      return
+    e.stopPropagation()
+    element.focus()
+  }
+  document.addEventListener("keydown", early, true)
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      document.removeEventListener("keydown", early, true)
+      element.focus()
+    }),
+  )
 }
 
 /** What the feed labels a request with and shows for it */
