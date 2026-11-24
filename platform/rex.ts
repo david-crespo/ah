@@ -291,18 +291,18 @@ async function appClient(): Promise<Record<string, unknown> | undefined> {
   )
 }
 
-/** Whether the Rex app is process `pid` and has `block` focused: the app shows
- * `session`, whose selected tab has `block` as its focused block */
-export async function appFocuses(
-  pid: number,
-  session: string,
-  block: string,
-): Promise<boolean> {
+/** Whether the Rex app is process `pid` and has `block` focused: one of the
+ * sessions the app shows has `block` as the focused block of its selected tab */
+export async function appFocuses(pid: number, block: string): Promise<boolean> {
   const app = await appClient()
   if (!app || !isRecord(app.principal) || app.principal.pid !== pid) return false
-  if (!Array.isArray(app.session_ids) || !app.session_ids.includes(session)) return false
-  const view = parseView(await call("session.view", { session_id: session }))
-  return view?.windows.find((w) => w.id === view.activeWindow)?.focused === block
+  if (!Array.isArray(app.session_ids)) return false
+  for (const session of app.session_ids.filter(isString)) {
+    const view = parseView(await call("session.view", { session_id: session }))
+    if (view?.windows.find((w) => w.id === view.activeWindow)?.focused === block)
+      return true
+  }
+  return false
 }
 
 /** Show a tab in the Rex app, leaving whichever app is in front there: the

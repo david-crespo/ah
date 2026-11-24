@@ -38,11 +38,10 @@ export interface Focus {
 export async function focusHere(): Promise<Focus> {
   const front = await frontmostPid()
   if (!currentAgent()) return { take: true, front }
-  const session = process.env.REX_SESSION
   const block = process.env.REX_BLOCK
-  if (front === null || !session || !block) return { take: false, front }
+  if (front === null || !block) return { take: false, front }
   try {
-    return { take: await appFocuses(front, session, block), front }
+    return { take: await appFocuses(front, block), front }
   } catch {
     return { take: false, front }
   }
