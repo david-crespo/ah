@@ -32,6 +32,7 @@ import {
   type Address,
   type AgentId,
   type AgentRef,
+  type BlockId,
   fileSubject,
   HARNESSES,
   HOOK_EVENTS,
@@ -115,8 +116,8 @@ type Listener = (registry: Registry, blocks: string[]) => void
 
 /** No agent to send to: none given, or it can't be reached */
 export class NoAgent extends Error {
-  constructor() {
-    super("no agent to send to")
+  constructor(reason = "no agent to send to") {
+    super(reason)
   }
 }
 
@@ -485,37 +486,55 @@ export class Core {
       return Response.json({ agent: body.agent })
     }
     if (rest === "send" && req.method === "POST") {
-      // { block, agent, cwd, text }: a message from a tool in pane `block`,
-      // which picks `agent` if given; or, outside Rex, straight to `agent`,
-      // else to an agent in the workspace of `cwd`, where the tool runs
+      // { block, agent, cwd, text }: a message from a tool in pane `block`
+      // to `agent`, which becomes its pick, or else to the agent it sends to
+      // (targetNear); or, outside Rex, straight to `agent`, else to an agent
+      // in the workspace of `cwd`, where the tool runs. With none to take
+      // it, the route refuses with the reason. The message isn't kept for the
+      // next agent, which may have started for something else.
       const body: unknown = await req.json().catch(() => null)
       if (!isRecord(body) || !isString(body.text) || !body.text.trim())
         return new Response("bad text", { status: 400 })
       const block = isString(body.block) ? body.block : null
       const agent = isString(body.agent) ? body.agent : null
-      if (!block) {
-        const cwd = isString(body.cwd) ? body.cwd : null
-        try {
-          await this.sendTo(agent, body.text, cwd)
-        } catch (e) {
-          const status = e instanceof NoAgent ? 409 : 502
-          return new Response((e as Error).message, { status })
-        }
-        return Response.json({ status: "sent" })
+      const cwd = isString(body.cwd) ? body.cwd : null
+      try {
+        await this.sendTo(
+          block ? await this.#targetIn(block, agent) : agent,
+          body.text,
+          cwd,
+        )
+      } catch (e) {
+        const status = e instanceof NoAgent ? 409 : 502
+        return new Response((e as Error).message, { status })
       }
-      await this.#rexReady()
-      if (agent) {
-        if (!this.directory.agentsNear(block).includes(agent))
-          return new Response(`${agent} isn't a live agent in this tab`, { status: 409 })
-        this.directory.pick(block, agent)
-      }
-      return Response.json({ status: await this.directory.send(block, body.text) })
+      return Response.json({ status: "sent" })
     }
     if (rest !== "") return new Response("not found", { status: 404 })
     return Response.json(this.agents(new URL(req.url).searchParams.has("all")))
   }
 
-  /** Post `text` to `agent` as a message from a tool outside Rex, like
+  /** The agent a message from pane `block` goes to: `agent`, which becomes
+   * the pane's pick, or the one it sends to. Throws NoAgent if there's none. */
+  async #targetIn(block: BlockId, agent: AgentId | null): Promise<AgentId> {
+    await this.#rexReady()
+    const near = this.directory.agentsNear(block)
+    if (agent) {
+      if (!near.includes(agent))
+        throw new NoAgent(`${agent} isn't a live agent in this tab`)
+      this.directory.pick(block, agent)
+      return agent
+    }
+    const target = this.directory.targetNear(block, near)
+    if (target) return target
+    throw new NoAgent(
+      near.length
+        ? `this tab has ${near.length} agents; pass --agent with one of them (ah workspace agents)`
+        : "no agent in this tab",
+    )
+  }
+
+  /** Post `text` to `agent` as a message from a tool, like
    * skepsis's Send, or if it's gone, to an agent in the workspace of `cwd`.
    * Throws NoAgent if there's none to reach. */
   async sendTo(

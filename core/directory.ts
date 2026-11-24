@@ -4,14 +4,15 @@
 // the registry, and where that agent can be reached now, which `open` and
 // Claude's hooks say. And which files hold requests no agent took, to send
 // when one turns up. A plain message from a tool in a Rex pane (`ah message
-// send`): the user's editor or a diff review, goes to the agent in its tab,
-// and waits in the pane's outbox until one is there.
+// send`): the user's editor or a diff review, goes to the agent in its tab
+// (targetNear), or is refused when there's none, since the next agent to
+// start there may be for something else.
 //
 // The core (core.ts) owns the registry and tells the directory about each
 // event and RexState.
 
 import { dirname } from "node:path"
-import { addressAlive, claudeSocket, postTo } from "../platform/session.ts"
+import { addressAlive, claudeSocket } from "../platform/session.ts"
 import {
   type Address,
   type AgentId,
@@ -51,9 +52,6 @@ export class Directory implements AgentDirectory {
   /** Each block's tab, kept after the block closes for as long as the
    * tab is open, so a closed pane's comments find the rest of its tab */
   #tabs = new Map<string, string>()
-  /** By pane: the flush of its outbox under way, so its messages go one at
-   * a time, in order */
-  #flushing = new Map<BlockId, Promise<void>>()
 
   constructor(source: Source) {
     this.#source = source
@@ -205,52 +203,6 @@ export class Directory implements AgentDirectory {
     if (this.#registry.picks.get(block) === agent) return
     this.#registry.picks.set(block, agent)
     this.#source.save()
-  }
-
-  /** A message from a tool in pane `block` to the agent it sends to
-   * (targetNear), after any it sent before that are still waiting. Whatever
-   * no agent takes waits in the pane's outbox for the next flush. */
-  async send(block: BlockId, text: string): Promise<"sent" | "held"> {
-    const waiting = this.#registry.outbox.get(block) ?? []
-    waiting.push(`${RELAYED}\n\n${text}`)
-    this.#registry.outbox.set(block, waiting)
-    this.#source.save()
-    await this.#flush(block)
-    return this.#registry.outbox.has(block) ? "held" : "sent"
-  }
-
-  /** Send every pane's waiting messages to the agent it sends to, if one is
-   * there now: for when agents come and go */
-  async flush() {
-    await Promise.all([...this.#registry.outbox.keys()].map((block) => this.#flush(block)))
-  }
-
-  #flush(block: BlockId): Promise<void> {
-    const flushing = (this.#flushing.get(block) ?? Promise.resolve())
-      .then(() => this.#drain(block))
-      .finally(() => {
-        if (this.#flushing.get(block) === flushing) this.#flushing.delete(block)
-      })
-    this.#flushing.set(block, flushing)
-    return flushing
-  }
-
-  async #drain(block: BlockId) {
-    const target = this.targetNear(block)
-    const address = target && this.reach(target)
-    const waiting = this.#registry.outbox.get(block)
-    if (!address || !waiting) return
-    while (waiting.length) {
-      try {
-        await postTo(address, waiting[0])
-      } catch (e) {
-        console.error(`ah: couldn't post to ${target}; its messages wait:`, e)
-        return
-      }
-      waiting.shift()
-      this.#source.save()
-    }
-    this.#registry.outbox.delete(block)
   }
 
   /** The live agents in `block`'s tab other than `except`, in its layout

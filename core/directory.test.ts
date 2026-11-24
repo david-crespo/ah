@@ -1,24 +1,10 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, beforeEach, expect, test, vi } from "vitest"
+import { afterEach, beforeEach, expect, test } from "vitest"
 import { type Address, fileSubject, type RexState } from "../model.ts"
 import { apply, emptyRegistry, type Registry, type RegistryEvent } from "./registry.ts"
-import { Directory, RELAYED } from "./directory.ts"
-
-/** What the directory posted, and whether posts fail, as when the agent's
- * session is gone */
-const inbox = vi.hoisted(() => ({
-  posts: [] as { to: Address; text: string }[],
-  down: false,
-}))
-vi.mock("../platform/session.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../platform/session.ts")>()),
-  postTo: async (to: Address, text: string) => {
-    if (inbox.down) throw new Error("no session")
-    inbox.posts.push({ to, text })
-  },
-}))
+import { Directory } from "./directory.ts"
 
 let dir: string
 let registry: Registry
@@ -26,8 +12,6 @@ let rex: RexState | null
 let directory: Directory
 let now: number
 beforeEach(() => {
-  inbox.posts = []
-  inbox.down = false
   dir = mkdtempSync(join(tmpdir(), "ah-directory-"))
   registry = emptyRegistry()
   rex = null
@@ -195,47 +179,10 @@ test("a file's workspace has no live agent once theirs ended", () => {
   expect(directory.route(fileSubject(join(repo, "tracker.html")))).toEqual(null)
 })
 
-const posted = () =>
-  inbox.posts.map(({ to, text }) => [to, text.replace(`${RELAYED}\n\n`, "")])
-
-test("a pane's message goes to the agent in its tab, or waits for one", async () => {
-  show({ t1: ["block:1", "block:9"] })
-  // No agent in the tab yet
-  expect(await directory.send("block:9", "first")).toBe("held")
-  expect(await directory.send("block:9", "second")).toBe("held")
-  expect(inbox.posts).toEqual([])
-  report(start("codex", "th1", "block:1"))
-  await directory.flush()
-  expect(posted()).toEqual([
-    [codex("th1"), "first"],
-    [codex("th1"), "second"],
-  ])
-  expect(inbox.posts[0].text.startsWith(RELAYED)).toBe(true)
-  expect(registry.outbox.has("block:9")).toBe(false)
-  expect(await directory.send("block:9", "third")).toBe("sent")
-  expect(posted().at(-1)).toEqual([codex("th1"), "third"])
-})
-
-test("a message from an agent's own pane goes to that agent", async () => {
+test("a tool in an agent's own pane sends to that agent", () => {
   // A tool the agent started, like a diff review, shares its pane
   show({ t1: ["block:1", "block:2"] })
   report(start("codex", "th1", "block:1"))
   report(start("codex", "th2", "block:2"))
   expect(directory.targetNear("block:1")).toBe("block:1")
-  expect(await directory.send("block:1", "mine")).toBe("sent")
-  expect(posted()).toEqual([[codex("th1"), "mine"]])
-})
-
-test("a message that can't be posted waits, behind the ones before it", async () => {
-  show({ t1: ["block:1", "block:9"] })
-  report(start("codex", "th1", "block:1"))
-  inbox.down = true
-  expect(await directory.send("block:9", "first")).toBe("held")
-  inbox.down = false
-  // An older message is still waiting, so this one goes after it
-  expect(await directory.send("block:9", "second")).toBe("sent")
-  expect(posted()).toEqual([
-    [codex("th1"), "first"],
-    [codex("th1"), "second"],
-  ])
 })

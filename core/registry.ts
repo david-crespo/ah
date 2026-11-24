@@ -52,9 +52,6 @@ export interface Registry {
   /** A shell pane -> the agent in its tab it picked, for the messages it
    * sends and the files it opens */
   picks: Map<BlockId, AgentId>
-  /** A pane -> the messages it sent that no agent has taken yet, oldest
-   * first, to send when one turns up in its tab */
-  outbox: Map<BlockId, string[]>
   /** The paths of subjects whose threads hold requests no agent has
    * taken, to send when one turns up */
   held: Set<string>
@@ -66,7 +63,6 @@ export const emptyRegistry = (): Registry => ({
   shellLabels: new Map(),
   bindings: new Map(),
   picks: new Map(),
-  outbox: new Map(),
   held: new Set(),
 })
 
@@ -275,7 +271,7 @@ export function prune(
       changed = true
     }
   }
-  for (const blocks of [r.shellLabels, r.picks, r.outbox]) {
+  for (const blocks of [r.shellLabels, r.picks]) {
     for (const block of blocks.keys()) {
       if (gone(block)) {
         blocks.delete(block)
@@ -296,7 +292,6 @@ interface Stored {
   shellLabels: Record<string, string>
   bindings: Record<string, AgentId>
   picks: Record<string, AgentId>
-  outbox: Record<string, string[]>
   held: string[]
 }
 
@@ -316,7 +311,6 @@ export function loadRegistry(file = registryFile()): Registry | null {
     shellLabels: entries(raw.shellLabels, isString),
     bindings: entries(raw.bindings, isString),
     picks: entries(raw.picks, isString),
-    outbox: entries(raw.outbox, isStrings),
     held: new Set(Array.isArray(raw.held) ? raw.held.filter(isString) : []),
   }
 }
@@ -358,8 +352,6 @@ const isWorkspaceRecord = (w: unknown): w is WorkspaceRecord =>
       typeof t.used === "number",
   )
 
-const isStrings = (v: unknown): v is string[] => Array.isArray(v) && v.every(isString)
-
 function entries<T>(value: unknown, is: (v: unknown) => v is T): Map<string, T> {
   const map = new Map<string, T>()
   if (!isRecord(value)) return map
@@ -374,7 +366,6 @@ export function saveRegistry(r: Registry, file = registryFile()) {
     shellLabels: Object.fromEntries(r.shellLabels),
     bindings: Object.fromEntries(r.bindings),
     picks: Object.fromEntries(r.picks),
-    outbox: Object.fromEntries(r.outbox),
     held: [...r.held],
   }
   mkdirSync(dirname(file), { recursive: true })

@@ -35,15 +35,16 @@
   void)
 
 ; Run `ah message send` with these arguments, and say in the status line
-; whether an agent took the comment (`sent`) or it waits for one (`held`).
-; Either means it went through, whatever ah says on stderr, like that it
-; started the server.
+; whether an agent took the comment (`sent`), or it waits for one in a file's
+; thread (`held`). Either means it went through, whatever ah says on stderr,
+; like that it started the server. With no agent in the Rex tab, ah fails and
+; says so on stderr.
 (define (ah-send args)
   (run-ah (append (list "message" "send") args)
           (lambda (out err)
             (cond
               [(starts-with? out "sent") (set-status! "Sent to agent")]
-              [(starts-with? out "held") (set-status! "Held until an agent is here")]
+              [(starts-with? out "held") (set-status! "Held until an agent opens the file")]
               [(not (equal? err "")) (set-error! err)]
               [else (set-error! (string-append "ah printed: " out))]))))
 

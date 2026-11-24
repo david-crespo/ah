@@ -265,23 +265,45 @@ test("a message names its agent, which becomes the pane's pick", async () => {
   await report(start("codex", "th1", undefined, "block:1"))
   await report(start("codex", "th2", undefined, "block:2"))
   await report(start("codex", "th4", undefined, "block:4"))
-  // Several agents and no pick: it waits rather than guess
-  expect(await (await sendFrom("block:9", "which?")).json()).toEqual({ status: "held" })
+  // Several agents and no pick: it refuses rather than guess
+  const which = await sendFrom("block:9", "which?")
+  expect([which.status, await which.text()]).toEqual([
+    409,
+    "this tab has 2 agents; pass --agent with one of them (ah workspace agents)",
+  ])
   expect((await sendFrom("block:9", "there", "block:4")).status).toBe(409)
   expect(await (await sendFrom("block:9", "to 2", "block:2")).json()).toEqual({
     status: "sent",
   })
   expect(core.directory.targetNear("block:9")).toBe("block:2")
-  expect(posted()).toEqual([
-    [codex("th2"), "which?"],
-    [codex("th2"), "to 2"],
-  ])
+  expect(posted()).toEqual([[codex("th2"), "to 2"]])
   // Outside Rex, straight to the agent named, or nowhere
   expect(await (await sendFrom(null, "from a shell", "block:4")).json()).toEqual({
     status: "sent",
   })
   expect(posted().at(-1)).toEqual([codex("th4"), "from a shell"])
   expect((await sendFrom(null, "to nobody")).status).toBe(409)
+})
+
+test("a message with no agent in its tab is refused, not kept for the next", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:9"] }))
+  const refused = await sendFrom("block:9", "anyone?")
+  expect([refused.status, await refused.text()]).toEqual([409, "no agent in this tab"])
+  // An agent that starts later doesn't get it
+  await report(start("codex", "th1", undefined, "block:1"))
+  expect(posted()).toEqual([])
+  expect((await sendFrom("block:9", "now")).status).toBe(200)
+  expect(posted()).toEqual([[codex("th1"), "now"]])
+})
+
+test("a message the agent can't take fails", async () => {
+  core.onRex(rex({ t1: ["block:1", "block:9"] }))
+  await report(start("codex", "th1", undefined, "block:1"))
+  inbox.down = true
+  expect((await sendFrom("block:9", "lost?")).status).toBe(502)
+  inbox.down = false
+  expect((await sendFrom("block:9", "again")).status).toBe(200)
+  expect(posted()).toEqual([[codex("th1"), "again"]])
 })
 
 test("hooks tell the agent its trackers, then what changed", async () => {

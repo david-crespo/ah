@@ -301,9 +301,6 @@ async function serve(port: number) {
   }
   refreshThreads()
   core.subscribe(refreshThreads)
-  // And the messages panes sent while no agent was in their tab
-  void core.directory.flush()
-  core.subscribe(() => void core.directory.flush())
   // opencode has no hooks: its service streams its sessions' events
   void watchOpencode(core)
 

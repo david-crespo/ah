@@ -88,7 +88,7 @@ A comment from the user on lines 12-14 of /Users/david/repos/ah/README.md, selec
 <the comment>
 ````
 
-The first line is there because Claude Code agents have a `SendMessage` tool for messaging other sessions, and might otherwise answer a message that came in on the inbox socket with it. Without `--lines`, the location line gives only the file path. Without `--selection`, that line ends in a colon and the comment follows after a blank line, with no code block. If there's no agent in the tab yet, the message is held until one starts there.
+The first line is there because Claude Code agents have a `SendMessage` tool for messaging other sessions, and might otherwise answer a message that came in on the inbox socket with it. Without `--lines`, the location line gives only the file path. Without `--selection`, that line ends in a colon and the comment follows after a blank line, with no code block. If there's no agent in the tab to take the message, the command fails with the reason on stderr, such as `ah: no agent in this tab`, and exits nonzero. The message isn't kept for an agent that starts later, which may have started for something else. Diff reviews like skepsis keep the draft open on a failed send, so it can be sent again once an agent is there.
 
 Outside of Rex, `--agent` sends directly to that agent without requiring `--file`. Without `--agent`, `--file` is required, and the comment goes into the file's thread. It becomes a `comment` request if there's a selection or line range, or a `chat` request if there isn't. A selection is quoted as given. With only `--lines`, the quote is the text of those lines.
 

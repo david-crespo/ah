@@ -85,7 +85,7 @@ When you run Helix in a normal Rex terminal pane, `ah` formats the file and line
 
 - If there is one agent, the comment box title shows its name, like `cli.ts:12 → ah (claude)`.
 - If there are several agents, the comment box lists them under the text input. You can cycle through them with Tab and Shift-Tab. `ah.scm` passes the selected agent to `ah message send` via `--agent`, and `ah` remembers that choice as the default for that terminal pane on future comments.
-- If no agent is running yet, `ah` queues the message and delivers it to the next agent that starts in the tab.
+- If no agent is running, the comment fails, and Helix shows `ah: no agent in this tab` as an error. `ah` doesn't keep it for the next agent that starts in the tab.
 
 When Helix is running inside the markdown editor web page, it doesn't know which Rex pane it's in, because the `ah` server removes Rex's environment variables from everything it starts. Instead, `ah` attaches the comment to the markdown page's comment thread on the selected text or cursor line, just like a comment made on the rendered preview side. The comment shows up in the page's chat pane, and the agent replies there. A comment on the whole file (`:ah-comment-file`) goes straight into that chat pane as a regular message.
 

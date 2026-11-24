@@ -53,7 +53,7 @@ export async function sendToTab(
   block: string | null,
   agent: string | null,
   text: string,
-): Promise<"sent" | "held"> {
+): Promise<void> {
   await ensureStarted(port)
   if (block && !agent) {
     const agents = await agentsNear(port, block)
@@ -64,9 +64,7 @@ export async function sendToTab(
       )
     }
   }
-  const { status } = await callServer<{ status: "sent" | "held" }>(
-    serverUrl(port, "core/send"),
-    { body: { block, agent, cwd: process.cwd(), text } },
-  )
-  return status
+  await callServer(serverUrl(port, "core/send"), {
+    body: { block, agent, cwd: process.cwd(), text },
+  })
 }
