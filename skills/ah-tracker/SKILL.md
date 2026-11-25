@@ -152,7 +152,7 @@ summary of a line or two in the other:
 ## The Go button
 
 Each `todo` and `hold` item has a Go button; a `question` item doesn't, since
-it waits for an answer. A click wakes the session with an
+it waits for an answer. A click wakes the session with a
 page request (the ah-page skill's format; in Claude Code it's framed as a message
 "from another Claude session", which it isn't) that reads
 `Go ahead with item <id>: <title>`: the user's instruction to start that

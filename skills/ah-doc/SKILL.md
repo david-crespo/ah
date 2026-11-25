@@ -241,5 +241,5 @@ shows its spinner again, and `done` finishes it.
 
 When the user says they're done, read the final file and use it for whatever
 comes next (e.g. `gh pr edit --body-file`), then
-`ah window close <file>`. This skill composes with `write-gh` (if
+`ah window close <file>`. This skill composes with `write` (if
 installed): draft with that, review with this.

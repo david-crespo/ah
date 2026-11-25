@@ -51,22 +51,24 @@ opened.
   "projects": [
     {
       "name": "Docs versioning",
-      "repos": ["/Users/me/oxide/docs"],
-      "prs": ["oxidecomputer/docs#935"],
-      "stack": "/Users/me/oxide/docs/.claude/notes/2026-11-05-vdocs-stack/index.html",
-      "workers": [{ "session": "8f2c…", "asked": "Answer Joe's three comments on #935" }]
+      "repos": ["/Users/me/repos/docs"],
+      "prs": ["acme/docs#935"],
+      "stack": "/Users/me/repos/docs/.claude/notes/2026-11-05-vdocs-stack/index.html",
+      "workers": [
+        { "session": "8f2c…", "asked": "Answer the three review comments on #935" }
+      ]
     }
   ],
   "waiting": [
     {
-      "id": "joe-935",
+      "id": "review-935",
       "project": "Docs versioning",
-      "text": "Review the rev answering Joe's comments, then push it",
+      "text": "Review the rev answering the comments on #935, then push it",
       "written": "2026-11-10T09:27:00-05:00",
-      "note": "Open: whether v21 should list Terraform v0.21.0.",
-      "link": "https://github.com/oxidecomputer/docs/pull/935",
+      "note": "Open: whether v21 should list the new CLI flags.",
+      "link": "https://github.com/acme/docs/pull/935",
       "links": [
-        { "label": "Suggested replies", "file": "notes/joe-935-replies.md" },
+        { "label": "Suggested replies", "file": "notes/review-935-replies.md" },
         { "label": "CI run", "href": "https://…" }
       ]
     }
