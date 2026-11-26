@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, expect, test, vi } from "vitest"
 import type { Core } from "../../core/core.ts"
 import { GRACE_MS } from "../../platform/presence.ts"
+import type { Problem } from "../../platform/install_check.ts"
 import type { DocBackend } from "../doc/routes.ts"
 import type { PageBackend } from "../page/routes.ts"
 import { Dashboard } from "./routes.ts"
@@ -34,18 +35,25 @@ vi.mock("./jj.ts", () => {
 
 let root: string
 let dashboard: Dashboard
+let setupProblems: Problem[] = []
 
 // One tab, in a workspace at `root`
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval"] })
   made.length = 0
+  setupProblems = []
   root = realpathSync(mkdtempSync(join(tmpdir(), "ah-dashboard-")))
   mkdirSync(join(root, ".jj"))
   const core = {
     subscribe() {},
     trackers: { get: () => ({ current: null, active: [], parked: [] }) },
   } as unknown as Core
-  dashboard = new Dashboard({ core, doc: {} as DocBackend, page: {} as PageBackend })
+  dashboard = new Dashboard({
+    core,
+    doc: {} as DocBackend,
+    page: {} as PageBackend,
+    setupProblems: () => setupProblems,
+  })
   dashboard.onRex({
     front: "s",
     sessions: [
@@ -98,5 +106,24 @@ test("the first page gets the log once it's rendered", async () => {
   let text = ""
   while (!text.includes("event: jj")) text += decoder.decode((await reader.read()).value)
   expect(text).toContain(JSON.stringify({ root, html: "<pre>log</pre>" }))
+  await reader.cancel()
+})
+
+test("a page hears what's wrong with ah's setup, and when that changes", async () => {
+  const stale = { problem: "a copy differs", fix: "cp" }
+  setupProblems = [stale]
+  const reader = (await connect()).getReader()
+  const decoder = new TextDecoder()
+  const health = async () => {
+    for (;;) {
+      const text = decoder.decode((await reader.read()).value)
+      const data = /event: health\ndata: (.*)/.exec(text)?.[1]
+      if (data) return JSON.parse(data)
+    }
+  }
+  expect(await health()).toEqual({ rex: null, setup: [stale] })
+  setupProblems = []
+  vi.advanceTimersByTime(15_000)
+  expect(await health()).toEqual({ rex: null, setup: [] })
   await reader.cancel()
 })

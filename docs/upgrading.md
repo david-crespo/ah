@@ -8,7 +8,7 @@ There are three kinds:
 - **Files in people's repos** that load ah's scripts or use its formats, such as tracker and stack pages. Agents write these, so ah never changes them. It finds them among the trackers it has records of and the pages it serves, and `ah doctor` lists the ones in the current workspace (`--all` for every workspace) with what to change in each, for an agent to do and check. ah keeps reading the old format, so a page that hasn't been changed yet still works, with a banner saying it's out of date.
 - **Setup**: each harness's copies or links of ah's skills, and Claude Code's hooks (the other harnesses' hooks aren't checked). `ah doctor` lists what's wrong and the command that fixes each, which it doesn't run.
 
-A session starting in a workspace with old files, or on a machine with setup problems, is told to run `ah doctor` and to offer the user the changes rather than make them unasked.
+A session starting in a workspace with old files is told to run `ah doctor` and to offer the user the changes rather than make them unasked. Setup problems are the user's to fix, so agents aren't told about them. While there are any, the dashboard shows a warning icon, with a popover that lists each problem and the command that fixes it.
 
 ## Stack pages on jjack
 

@@ -212,9 +212,9 @@ async function serve(port: number) {
 
   // The core: the agents, and where pages find the ones they're bound to
   const core = Core.load()
-  // Files in people's repos that use an old ah format, and ah's setup
+  // Files in people's repos that use an old ah format
   const upgrades = new Upgrades([pageScripts])
-  core.useUpgrades(upgrades, () => installProblems().filter((p) => !p.optional).length)
+  core.useUpgrades(upgrades)
   const docBackend = new DocBackend(port, core.directory)
   // A stack page's PR body, the stacks and files a home page lists, and the
   // notes a page's buttons ask for (views/workspaces/app.ts) open in a
@@ -257,6 +257,7 @@ async function serve(port: number) {
     doc: docBackend,
     page: pageBackend,
     core,
+    setupProblems: () => installProblems().filter((p) => !p.optional),
   })
   const tabTitles = new TitleSetter()
   const routes = {

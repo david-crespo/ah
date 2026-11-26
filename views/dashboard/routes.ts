@@ -4,13 +4,15 @@
 // every open workspace (jj.ts), and pushes both to the page (page.html, with
 // its script in client.ts), along with each tab's file, its workspace's
 // current tracker (core/trackers.ts), which the page shows with doc's <ah-markdown>
-// element, or in a frame for an html file. The focused workspace gets
+// element, or in a frame for an html file, and what's wrong with ah's setup,
+// which the page lists under a warning icon. The focused workspace gets
 // snapshotted once edits settle, so @ stays current between jj commands. The
 // logs and snapshots run only while a page is open, and for a few seconds
 // after the last one goes, for a reload.
 
 import { readFile } from "node:fs/promises"
 import { assetPath } from "../../platform/assets.ts"
+import type { Problem } from "../../platform/install_check.ts"
 import { ClientBundles } from "../../platform/bundle.ts"
 import type { PageBackend } from "../page/routes.ts"
 import type { DocBackend } from "../doc/routes.ts"
@@ -67,6 +69,11 @@ const docEvent = (tab: string, doc: ShownDoc | null) =>
     frame: doc?.frame ?? false,
   })
 
+interface Health {
+  rex: string | null
+  setup: Problem[]
+}
+
 export interface DashboardOptions {
   /** The page shows each file with <ah-markdown> or in a frame of an html
    * page, so the backend has to hold the file open before the page hears about it */
@@ -74,6 +81,9 @@ export interface DashboardOptions {
   page: PageBackend
   /** The agents, whose files the tabs show */
   core: Core
+  /** The problems `ah doctor` finds with ah's setup. They're the user's
+   * to fix, so the page shows them and agents aren't told. */
+  setupProblems: () => Problem[]
 }
 
 /** How often the stream says the server is still there; the page goes grey
@@ -103,8 +113,9 @@ export class Dashboard {
   /** tab -> what the page was last told to show */
   #shown = new Map<string, ShownDoc>()
   #docQueue: Promise<void> = Promise.resolve()
-  /** What's wrong with the server's view of Rex, as last sent */
-  #healthJson = JSON.stringify({ rex: null })
+  /** What's wrong with the server's view of Rex and with ah's setup, as
+   * last sent */
+  #health: Health = { rex: null, setup: [] }
 
   readonly options: DashboardOptions
 
@@ -113,15 +124,23 @@ export class Dashboard {
     options.core.subscribe(() => this.#syncFiles())
     // So the page can tell a hung server from a quiet one, which an open
     // stream alone doesn't
-    setInterval(() => this.#broadcast("ping", "{}"), PING_MS).unref()
+    setInterval(() => {
+      this.#broadcast("ping", "{}")
+      // So the warning goes away soon after the user fixes the setup
+      if (this.#clients.size) this.#setHealth({ setup: options.setupProblems() })
+    }, PING_MS).unref()
   }
 
   /** Why the server can't follow Rex, or null when it can */
   setRexTrouble(rex: string | null) {
-    const json = JSON.stringify({ rex })
-    if (json === this.#healthJson) return
-    this.#healthJson = json
-    this.#broadcast("health", json)
+    this.#setHealth({ rex })
+  }
+
+  #setHealth(change: Partial<Health>) {
+    const next = { ...this.#health, ...change }
+    if (JSON.stringify(next) === JSON.stringify(this.#health)) return
+    this.#health = next
+    this.#broadcast("health", JSON.stringify(next))
   }
 
   /** Each tab's file, its workspace's current tracker, and each
@@ -295,6 +314,7 @@ export class Dashboard {
     const body = new ReadableStream<Uint8Array>({
       start: (c) => {
         controller = c
+        this.#setHealth({ setup: this.options.setupProblems() })
         this.#clients.add(c)
         // Starts the watchers for the first page, which gets each log in
         // the broadcast after its first render
@@ -305,7 +325,7 @@ export class Dashboard {
         c.enqueue(encoder.encode("retry: 500\n\n"))
         send(c, "hello", JSON.stringify({ version: SERVER_VERSION }))
         send(c, "state", this.#stateJson)
-        send(c, "health", this.#healthJson)
+        send(c, "health", JSON.stringify(this.#health))
         for (const [root, watcher] of this.#logs) {
           if (watcher.html !== null) send(c, "jj", logEvent(root, watcher.html))
         }

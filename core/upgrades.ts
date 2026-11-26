@@ -73,15 +73,10 @@ export class Upgrades {
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 /** The line a starting agent gets about files in its workspace that use an
- * old format and problems with ah's setup, or null if there are none */
-export function doctorNotice(outdated: Outdated[], problems: number): string | null {
+ * old format, or null if there are none. Problems with ah's setup are the
+ * user's to fix, so the dashboard shows those and agents aren't told. */
+export function doctorNotice(outdated: Outdated[]): string | null {
   const files = new Set(outdated.map((o) => o.path)).size
-  const found = [
-    files &&
-      `${count(files, "file in this workspace that uses", "files in this workspace that use")} an old ah format`,
-    problems &&
-      count(problems, "problem with how ah is set up", "problems with how ah is set up"),
-  ].filter(Boolean)
-  if (!found.length) return null
-  return `ah: \`ah doctor\` finds ${found.join(" and ")}. Run it, as the whole Bash command so it runs outside the sandbox, to see what to change, then tell the user and offer to make the changes. Don't make them unasked.`
+  if (!files) return null
+  return `ah: \`ah doctor\` finds ${count(files, "file in this workspace that uses", "files in this workspace that use")} an old ah format. Run it, as the whole Bash command so it runs outside the sandbox, to see what to change, then tell the user and offer to make the changes. Don't make them unasked.`
 }

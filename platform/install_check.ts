@@ -1,5 +1,6 @@
-// Checks on how ah is set up in the agent harnesses, for `ah doctor`: the
-// skills each harness has of ah's, and Claude Code's hooks. They're the
+// Checks on how ah is set up in the agent harnesses, for `ah doctor` and the
+// dashboard's warning: the skills each harness has of ah's, and Claude Code's
+// hooks. They're the
 // user's config, so this says what's wrong and how to fix it, and changes
 // nothing. What an upgrade leaves wrong (a link that dangles, a copy that's
 // out of date, a missing hook) is a problem; a skill a harness never had is
@@ -47,7 +48,7 @@ export interface Problem {
   problem: string
   fix: string
   /** A skill the harness doesn't have, which may be on purpose: listed by
-   * `ah doctor`, and not counted in the notice sessions get */
+   * `ah doctor`, and left out of the dashboard's warning */
   optional?: true
 }
 

@@ -61,7 +61,7 @@ Active trackers in this workspace (`ah tool tracker ls`). The ah dashboard shows
 When picking up work, check the tracker it belongs to, and keep it updated.
 ```
 
-If `ah doctor` would find files in the workspace that use an old ah format, or problems with how ah is set up, a line after that says so and asks the agent to run it (`core/upgrades.ts`).
+If `ah doctor` would find files in the workspace that use an old ah format, a line after that says so and asks the agent to run it (`core/upgrades.ts`). Problems with how ah is set up aren't mentioned: the dashboard shows those to the user.
 
 On each prompt after that, the agent gets one line for each of these that changed since it was last told, and nothing if none did:
 

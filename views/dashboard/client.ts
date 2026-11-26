@@ -8,6 +8,7 @@
 // ../doc/preview.js, or an html file in a frame of its page on the html
 // pages port.
 
+import type { Problem } from "../../platform/install_check.ts"
 import type { State } from "./workspace.ts"
 
 const byId = (id: string) => document.getElementById(id)!
@@ -18,6 +19,8 @@ const docName = byId("doc-name")
 const trackerStrip = byId("trackers")
 const parkedMenu = byId("parked")
 const status = byId("status")
+const setup = byId("setup")
+const setupProblems = byId("setup-problems")
 
 let version: string | null = null
 let state: State = { focused: null, tabs: [] }
@@ -206,6 +209,10 @@ parkedMenu.addEventListener("beforetoggle", (e) => {
 // So it closes when the toggle moves out from under it, and on a click in a
 // frame, which the browser's light dismiss doesn't see but takes the focus
 // from this window
+// Under the bar, at its right edge
+setupProblems.addEventListener("beforetoggle", () => {
+  setupProblems.style.top = byId("top").getBoundingClientRect().bottom + 4 + "px"
+})
 const closeParked = () => parkedMenu.hidePopover()
 docPane.addEventListener("scroll", closeParked)
 window.addEventListener("resize", closeParked)
@@ -320,7 +327,28 @@ events.addEventListener("ping", () => {
   renderStatus()
 })
 events.addEventListener("health", (e) => {
-  rexTrouble = JSON.parse(e.data).rex
+  const health: { rex: string | null; setup: Problem[] } = JSON.parse(e.data)
+  rexTrouble = health.rex
+  setup.hidden = !health.setup.length
+  if (setup.hidden) setupProblems.hidePopover()
+  setupProblems.replaceChildren(
+    el(
+      "p",
+      {},
+      health.setup.length === 1
+        ? "1 problem with how ah is set up, which "
+        : `${health.setup.length} problems with how ah is set up, which `,
+      el("code", {}, "ah doctor"),
+      " lists too:",
+    ),
+    el(
+      "ul",
+      {},
+      ...health.setup.map(({ problem, fix }) =>
+        el("li", {}, problem, el("code", { className: "fix" }, fix)),
+      ),
+    ),
+  )
   renderStatus()
 })
 events.onopen = () => {

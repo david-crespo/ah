@@ -132,8 +132,6 @@ export class Core {
   #notices = new Notices()
   /** Files in people's repos that use an old ah format */
   #upgrades = new Upgrades([])
-  /** How many problems `ah doctor` finds with ah's setup */
-  #setupProblems = () => 0
   /** What windows show, from the backends (watchShowing) */
   #showing: () => Showing = () => ({ files: [], dashboard: false })
   /** Blocks named by an event in the last few seconds, which the
@@ -186,12 +184,10 @@ export class Core {
     this.#showing = showing
   }
 
-  /** Where files that use an old ah format are kept track of, and how to
-   * count problems with ah's setup, for telling agents and for `ah doctor`.
-   * Checks every tracker it has a record of. */
-  useUpgrades(upgrades: Upgrades, setupProblems: () => number) {
+  /** Where files that use an old ah format are kept track of, for telling
+   * agents and for `ah doctor`. Checks every tracker it has a record of. */
+  useUpgrades(upgrades: Upgrades) {
     this.#upgrades = upgrades
-    this.#setupProblems = setupProblems
     upgrades.scan(
       [...this.registry.trackers.values()].flatMap((w) => w.trackers.map((t) => t.path)),
     )
@@ -297,7 +293,7 @@ export class Core {
       this.#notices.start(agent, current, this.#showing())
       if (!root) return null
       const active = this.trackers.get(root).active.map((t) => t.path)
-      const doctor = doctorNotice(this.#outdatedIn(root), this.#setupProblems())
+      const doctor = doctorNotice(this.#outdatedIn(root))
       const lines = [startContext(current, active), doctor].filter(Boolean)
       return lines.length ? lines.join("\n\n") : null
     }

@@ -44,15 +44,13 @@ test("checks the files again, since an agent may have fixed them", () => {
   expect(upgrades.outdated()).toEqual([])
 })
 
-test("the notice counts files, not upgrades, and setup problems", () => {
-  expect(doctorNotice([], 0)).toEqual(null)
+test("the notice counts files, not upgrades", () => {
+  expect(doctorNotice([])).toEqual(null)
   const twice = [
     { path: a, what: "x", how: "" },
     { path: a, what: "y", how: "" },
   ]
-  expect(doctorNotice(twice, 0)).toMatch(
+  expect(doctorNotice(twice)).toMatch(
     /^ah: `ah doctor` finds 1 file in this workspace that uses an old ah format\. Run it/,
   )
-  expect(doctorNotice(twice, 2)).toContain("format and 2 problems with how ah is set up.")
-  expect(doctorNotice([], 1)).toMatch(/finds 1 problem with how ah is set up\. Run it/)
 })

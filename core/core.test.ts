@@ -406,8 +406,7 @@ test("a starting agent hears about old files in its workspace, wherever they are
   )
   core.trackers.add(second, tracker)
   const upgrades = new Upgrades([{ what: "old", needs: (t) => t === "old", how: "" }])
-  let problems = 0
-  core.useUpgrades(upgrades, () => problems)
+  core.useUpgrades(upgrades)
   upgrades.scan([page, elsewhere])
   const hook = (cwd: string, process: string) =>
     report({ ...start("claude", process, undefined, ""), process, cwd })
@@ -419,12 +418,6 @@ test("a starting agent hears about old files in its workspace, wherever they are
     "`ah doctor` finds 2 files in this workspace that use an old ah format. Run it",
   )
   expect(await context(main, "claude-4")).toContain("finds 3 files")
-  writeFileSync(tracker, "new")
-  writeFileSync(page, "new")
-  problems = 1
-  expect(await context(second, "claude-5")).toContain(
-    "`ah doctor` finds 1 problem with how ah is set up. Run it",
-  )
 })
 
 test("outside jj, a directory's old files are the ones under it", async () => {
@@ -439,7 +432,7 @@ test("outside jj, a directory's old files are the ones under it", async () => {
     writeFileSync(path, "old")
   }
   const upgrades = new Upgrades([{ what: "old", needs: (t) => t === "old", how: "" }])
-  core.useUpgrades(upgrades, () => 0)
+  core.useUpgrades(upgrades)
   upgrades.scan([page, nested, other])
   const paths = async (root: string) =>
     (
