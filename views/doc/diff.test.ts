@@ -19,7 +19,14 @@ function inline(prev: string, next: string): string {
 describe("diffMarkdown", () => {
   test("leaves an unchanged file alone", () => {
     const text = "# Title\n\nSome text.\n"
-    expect(diff(text, text)).toEqual({ text, old: [], removed: [], added: [], changes: 0 })
+    expect(diff(text, text)).toEqual({
+      text,
+      old: [],
+      removed: [],
+      added: [],
+      columns: [],
+      changes: 0,
+    })
   })
 
   test("leaves blank lines added or removed between blocks alone", () => {
@@ -37,6 +44,7 @@ describe("diffMarkdown", () => {
         old: [],
         removed: [],
         added: [],
+        columns: [],
         changes: 0,
       })
   })
@@ -305,6 +313,7 @@ describe("diffMarkdown", () => {
       old: [],
       removed: [{ line: 0, text: link("x") }],
       added: [[0, 1]],
+      columns: [],
       changes: 1,
     })
     expect(diff("A <b>word</b> here.\n", "A <i>word</i> here.\n").added).toEqual([[0, 1]])
@@ -416,5 +425,213 @@ describe("diffMarkdown", () => {
     const d = diff("", "# New\n\nText.\n")
     expect(d.added).toEqual([[0, 3]])
     expect(d.text).toBe("# New\n\nText.\n")
+  })
+})
+
+describe("tables", () => {
+  const table = (...rows: string[]) => `| Key | Value |\n|---|---|\n${rows.join("")}`
+  const head = table()
+
+  test("marks a change inside a cell's code span inline, in the cell", () => {
+    const settings = (refresh: string) =>
+      "| Key | Default | Meaning |\n|---|---|---|\n" +
+      "| `style.cursor` | `blue` | Cursor line color |\n" +
+      `| \`general.refresh\` | ${refresh} | When to reload status |\n` +
+      "| `diff.renderer` | `builtin` | Which renderer draws diffs |\n"
+    expect(inline(settings("`on-focus`"), settings("`on-change`"))).toBe(
+      settings("[-`on-focus`-]{+`on-change`+}"),
+    )
+  })
+
+  test("keeps changes in two cells of a row apart", () => {
+    expect(inline(table("| alpha | gamma |\n"), table("| delta | omega |\n"))).toBe(
+      table("| [-alpha-]{+delta+} | [-gamma-]{+omega+} |\n"),
+    )
+  })
+
+  test("marks a header cell's change inline", () => {
+    expect(
+      inline(
+        "| Key | Value |\n|---|---|\n| a | 1 |\n",
+        "| Name | Value |\n|---|---|\n| a | 1 |\n",
+      ),
+    ).toBe("| [-Key-]{+Name+} | Value |\n|---|---|\n| a | 1 |\n")
+  })
+
+  test("takes a new row as a block of its own", () => {
+    const d = diff(
+      table("| a | 1 |\n| c | 3 |\n"),
+      table("| a | 1 |\n| b | 2 |\n| c | 3 |\n"),
+    )
+    expect(d.removed).toEqual([])
+    expect(d.added).toEqual([[3, 4]])
+  })
+
+  test("returns a removed row with the table's header, to go back in it", () => {
+    const d = diff(
+      table("| a | 1 |\n| b | 2 |\n| c | 3 |\n"),
+      table("| a | 1 |\n| c | 3 |\n"),
+    )
+    expect(d.removed).toEqual([{ line: 3, text: `${head}| b | 2 |\n`, rows: true }])
+    expect(d.added).toEqual([])
+    const last = diff(table("| a | 1 |\n| b | 2 |\n"), table("| a | 1 |\n"))
+    expect(last.removed).toEqual([{ line: 3, text: `${head}| b | 2 |\n`, rows: true }])
+  })
+
+  test("takes a change that crosses cells as its row", () => {
+    const d = diff(table("| a | 1 |\n| b | 2 |\n"), table("| a | 1 |\n| b 2 |\n"))
+    expect(d.removed).toEqual([{ line: 3, text: `${head}| b | 2 |\n`, rows: true }])
+    expect(d.added).toEqual([[3, 4]])
+  })
+
+  test("takes the whole table when its delimiter row changes", () => {
+    const old = table("| a | 1 |\n")
+    const aligned = diff(old, "| Key | Value |\n|---|--:|\n| a | 1 |\n")
+    expect(aligned.removed).toEqual([{ line: 0, text: old }])
+    expect(aligned.added).toEqual([[0, 3]])
+  })
+
+  test("doesn't take an escaped pipe for a cell's edge", () => {
+    expect(inline(table("| a \\| b | 1 |\n"), table("| a \\| c | 1 |\n"))).toBe(
+      table("| a \\| [-b-]{+c+} | 1 |\n"),
+    )
+    expect(inline(table("| `a\\|b` | 1 |\n"), table("| `a\\|c` | 1 |\n"))).toBe(
+      table("| [-`a\\|b`-]{+`a\\|c`+} | 1 |\n"),
+    )
+  })
+
+  test("takes a change in a code span with a pipe in it as its row, since the pipe splits it", () => {
+    const d = diff(table("| `a|b` | 1 |\n"), table("| `a|c` | 1 |\n"))
+    expect(d.removed).toEqual([{ line: 2, text: `${head}| \`a|b\` | 1 |\n`, rows: true }])
+    expect(d.added).toEqual([[2, 3]])
+  })
+
+  test("keeps a new row apart from a paragraph added after the table", () => {
+    const d = diff(
+      `${table("| a | 1 |\n")}\nEnd.\n`,
+      `${table("| a | 1 |\n| b | 2 |\n")}\nNew.\n\nEnd.\n`,
+    )
+    expect(d.removed).toEqual([])
+    expect(d.added).toEqual([
+      [3, 4],
+      [4, 6],
+    ])
+  })
+})
+
+describe("table columns", () => {
+  /** A table of `|`-separated cells, a row to a string, with a delimiter row
+   * after the first */
+  const grid = (...rows: string[]) =>
+    rows
+      .map((r) => `| ${r.split("|").join(" | ")} |\n`)
+      .toSpliced(
+        1,
+        0,
+        `|${rows[0]
+          .split("|")
+          .map(() => "---")
+          .join("|")}|\n`,
+      )
+      .join("")
+  const whole = (prev: string, next: string) => {
+    const d = diff(prev, next)
+    expect(d.columns).toEqual([])
+    expect(d.removed).toEqual([{ line: 0, text: prev }])
+    expect(d.added).toEqual([[0, next.split("\n").length - 1]])
+  }
+
+  test("takes a column added at the end, in the middle, or at the start as a column of its own", () => {
+    const old = grid("Key|Value", "a|1", "b|2")
+    for (const [next, at] of [
+      [grid("Key|Value|Note", "a|1|x", "b|2|y"), 2],
+      [grid("Key|Note|Value", "a|x|1", "b|y|2"), 1],
+      [grid("Note|Key|Value", "x|a|1", "y|b|2"), 0],
+    ] as const) {
+      expect(diff(old, next)).toEqual({
+        text: next,
+        old: [],
+        removed: [],
+        added: [],
+        columns: [{ line: 0, at: [at] }],
+        changes: 1,
+      })
+    }
+  })
+
+  test("returns a removed column with the old table and the line each old row is on now", () => {
+    const next = grid("Key|Value", "a|1", "b|2")
+    for (const [prev, at] of [
+      [grid("Key|Value|Note", "a|1|x", "b|2|y"), 2],
+      [grid("Key|Note|Value", "a|x|1", "b|y|2"), 1],
+      [grid("Note|Key|Value", "x|a|1", "y|b|2"), 0],
+    ] as const) {
+      expect(diff(prev, next)).toEqual({
+        text: next,
+        old: [],
+        removed: [{ line: 0, text: prev, columns: { at: [at], rows: [0, 2, 3] } }],
+        added: [],
+        columns: [],
+        changes: 1,
+      })
+    }
+  })
+
+  test("takes two columns added at once", () => {
+    const d = diff(grid("Key|Value", "a|1"), grid("Key|One|Value|Two", "a|x|1|y"))
+    expect(d.columns).toEqual([{ line: 0, at: [1, 3] }])
+    expect(d.changes).toBe(2)
+  })
+
+  test("marks a cell edited beside a new column inline", () => {
+    const next = grid("Key|Note|Value", "a|x|1", "b|y|3")
+    expect(inline(grid("Key|Value", "a|1", "b|2"), next)).toBe(
+      grid("Key|Note|Value", "a|x|1", "b|y|[-2-]{+3+}"),
+    )
+    expect(diff(grid("Key|Value", "a|1", "b|2"), next).columns).toEqual([
+      { line: 0, at: [1] },
+    ])
+  })
+
+  test("takes a row added alongside a new column as a block of its own", () => {
+    const d = diff(grid("Key|Value", "a|1"), grid("Key|Value|Note", "a|1|x", "b|2|y"))
+    expect(d.columns).toEqual([{ line: 0, at: [2] }])
+    expect(d.added).toEqual([[3, 4]])
+    expect(d.removed).toEqual([])
+  })
+
+  test("returns a row removed alongside a new column with an empty cell under it", () => {
+    const d = diff(grid("Key|Value", "a|1", "b|2"), grid("Key|Value|Note", "a|1|x"))
+    expect(d.columns).toEqual([{ line: 0, at: [2] }])
+    expect(d.removed).toEqual([
+      { line: 3, text: "| Key | Value | Note |\n|---|---|---|\n| b | 2 | |\n", rows: true },
+    ])
+  })
+
+  test("returns a row removed alongside a removed column with all its cells", () => {
+    const prev = grid("Key|Value|Note", "a|1|x", "b|2|y")
+    const d = diff(prev, grid("Key|Value", "a|1"))
+    expect(d.removed).toEqual([
+      {
+        line: 3,
+        text: "| Key | Value | Note |\n|---|---|---|\n| b | 2 | y |\n",
+        rows: true,
+      },
+      { line: 0, text: prev, columns: { at: [2], rows: [0, 2, null] } },
+    ])
+  })
+
+  test("takes the whole table when columns are reordered, ambiguous, or changed besides", () => {
+    const old = grid("Key|Value", "a|1")
+    // Columns in another order
+    whole(old, grid("Value|Key", "1|a"))
+    // A column added and another one's alignment changed
+    whole(old, "| Key | Value | Note |\n|---|--:|---|\n| a | 1 | x |\n")
+    // A column added and a header renamed
+    whole(old, grid("Name|Value|Note", "a|1|x"))
+    // A column added beside one with the same header, which could be either
+    whole(grid("Key|Key", "a|b"), grid("Key|Key|Key", "a|b|c"))
+    // Rows without their outer `|`s
+    whole("Key | Value\n--|--\na | 1\n", "Key | Value | Note\n--|--|--\na | 1 | x\n")
   })
 })

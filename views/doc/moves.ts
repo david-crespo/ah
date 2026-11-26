@@ -22,11 +22,13 @@ export type Move = {
 
 /** The moves from `prev` to `next`, in the order of `next`. `blocks` are each
  * text's leaf blocks, as for diffMarkdown. */
-export function findMoves(
-  prev: string,
-  next: string,
-  [oldBlocks, newBlocks]: [Block[], Block[]],
-): Move[] {
+export function findMoves(prev: string, next: string, blocks: [Block[], Block[]]): Move[] {
+  // A table moves whole: its rows are blocks of their own only to the diff
+  const [oldBlocks, newBlocks] = blocks.map((all) =>
+    all.flatMap((b) =>
+      !b.table ? [b] : b.start === b.table.start ? [{ ...b.table, opaque: true }] : [],
+    ),
+  )
   const a = oldBlocks.map((b) => blockText(prev, b))
   const b = newBlocks.map((b) => blockText(next, b))
   const n = a.length

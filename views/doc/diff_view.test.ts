@@ -139,10 +139,68 @@ describe("added and removed blocks", () => {
       content.querySelector("pre code[data-line]")!.closest("pre")!.parentElement!
         .className,
     ).toBe("diff-added")
-    const table = preview("| a |\n|---|\n| 1 |\n", "| a |\n|---|\n| 1 |\n| 2 |\n")
+    // A table takes its rows' marks, but a new alignment takes all of it
+    const table = preview("| a |\n|---|\n| 1 |\n", "| a |\n|:-:|\n| 1 |\n")
     expect(table.querySelector("table[data-line]")!.parentElement!.className).toBe(
       "diff-added",
     )
+  })
+})
+
+describe("tables", () => {
+  const table = (...rows: string[]) => `| Key | Value |\n|---|---|\n${rows.join("")}`
+
+  test("a change in a cell is marked inline, in one table", () => {
+    const settings = (refresh: string) =>
+      "| Key | Default | Meaning |\n|---|---|---|\n" +
+      "| `style.cursor` | `blue` | Cursor line color |\n" +
+      `| \`general.refresh\` | \`${refresh}\` | When to reload status |\n` +
+      "| `diff.renderer` | `builtin` | Which renderer draws diffs |\n"
+    const content = preview(settings("on-focus"), settings("on-change"))
+    expect(content.querySelectorAll("table").length).toBe(1)
+    expect(content.querySelector(".diff-added, .diff-removed")).toBeNull()
+    const cell = content.querySelector("del.diff-old")!.closest("td")!
+    expect(cell.innerHTML).toBe(
+      '<del class="diff-old"><code>on-focus</code></del><ins class="diff-new"><code>on-change</code></ins>',
+    )
+  })
+
+  test("an added row is marked in the table", () => {
+    const content = preview(table("| a | 1 |\n"), table("| a | 1 |\n| b | 2 |\n"))
+    expect(outline(content)).toEqual(["Key Value", "a 1", "+ b 2"])
+    expect(content.querySelector("tr.diff-added")).not.toBeNull()
+    expect(content.querySelector("table")!.parentElement).toBe(content)
+  })
+
+  test("a removed row goes back in the table where it was, without its lines", () => {
+    const content = preview(
+      table("| a | 1 |\n| b | 2 |\n| c | 3 |\n"),
+      table("| a | 1 |\n| c | 3 |\n"),
+    )
+    expect(outline(content)).toEqual(["Key Value", "a 1", "- b 2", "c 3"])
+    expect(content.querySelectorAll("table").length).toBe(1)
+    expect(content.querySelector("tr.diff-removed")!.parentElement!.tagName).toBe("TBODY")
+    expect(
+      content.querySelector(".diff-removed [data-line], tr.diff-removed[data-line]"),
+    ).toBeNull()
+    expect(outline(preview(table("| a | 1 |\n| b | 2 |\n"), table("| a | 1 |\n")))).toEqual(
+      ["Key Value", "a 1", "- b 2"],
+    )
+    expect(outline(preview(table("| a | 1 |\n"), table()))).toEqual(["Key Value", "- a 1"])
+  })
+
+  test("a row changed across cells is the old row, then the new", () => {
+    expect(
+      outline(preview(table("| a | 1 |\n| b | 2 |\n"), table("| a | 1 |\n| b 2 |\n"))),
+    ).toEqual(["Key Value", "a 1", "- b 2", "+ b 2"])
+  })
+
+  test("rows that swapped are removed and added in the table, not moved", () => {
+    const one = "| the first row has a good many words in it | 1 |\n"
+    const two = "| the second row has a good many words in it too | 2 |\n"
+    const content = preview(table(one, two, "| c | 3 |\n"), table(two, one, "| c | 3 |\n"))
+    expect(content.querySelector(".diff-moved, .diff-moved-from")).toBeNull()
+    expect(content.querySelectorAll("table").length).toBe(1)
   })
 })
 
@@ -200,5 +258,97 @@ describe("moves", () => {
     for (const li of content.querySelectorAll("li"))
       expect(li.parentElement!.tagName).toMatch(/^[UO]L$/)
     expect(content.querySelector("ul:empty, ol:empty")).toBeNull()
+  })
+})
+
+describe("table columns", () => {
+  /** A table of `|`-separated cells, a row to a string, with a delimiter row
+   * after the first */
+  const grid = (...rows: string[]) =>
+    rows
+      .map((r) => `| ${r.split("|").join(" | ")} |\n`)
+      .toSpliced(
+        1,
+        0,
+        `|${rows[0]
+          .split("|")
+          .map(() => "---")
+          .join("|")}|\n`,
+      )
+      .join("")
+  /** Each row's cells, after + or - when the cell or its row is marked */
+  const cells = (content: HTMLElement) =>
+    [...content.querySelectorAll("tr")].map((tr) =>
+      [...tr.children].map((cell) => {
+        const mark = cell.closest(".diff-added, .diff-removed")
+        const sign = !mark ? "" : mark.classList.contains("diff-added") ? "+" : "-"
+        return `${sign}${cell.textContent}`
+      }),
+    )
+
+  test("a new column's cells are marked, in one table", () => {
+    const content = preview(grid("Key|Value", "a|1"), grid("Key|Note|Value", "a|x|1"))
+    expect(content.querySelectorAll("table").length).toBe(1)
+    expect(content.querySelector("table")!.parentElement).toBe(content)
+    expect(cells(content)).toEqual([
+      ["Key", "+Note", "Value"],
+      ["a", "+x", "1"],
+    ])
+  })
+
+  test("a removed column's cells go back where they were, from the old table", () => {
+    const content = preview(grid("Key|Note|Value", "a|*x*|1"), grid("Key|Value", "a|1"))
+    expect(content.querySelectorAll("table").length).toBe(1)
+    expect(cells(content)).toEqual([
+      ["Key", "-Note", "Value"],
+      ["a", "-x", "1"],
+    ])
+    expect(content.querySelector("td.diff-removed em")).not.toBeNull()
+    expect(content.querySelector("th.diff-removed")).not.toBeNull()
+  })
+
+  test("a row removed alongside a new column goes back with an empty cell under it", () => {
+    const content = preview(
+      grid("Key|Value", "a|1", "b|2"),
+      grid("Key|Value|Note", "a|1|x"),
+    )
+    expect(cells(content)).toEqual([
+      ["Key", "Value", "+Note"],
+      ["a", "1", "+x"],
+      ["-b", "-2", "-"],
+    ])
+  })
+
+  test("a row added alongside a removed column has an empty cell where the column was", () => {
+    const content = preview(
+      grid("Key|Note|Value", "a|x|1"),
+      grid("Key|Value", "a|1", "b|2"),
+    )
+    expect(cells(content)).toEqual([
+      ["Key", "-Note", "Value"],
+      ["a", "-x", "1"],
+      ["+b", "-", "+2"],
+    ])
+  })
+
+  test("a row removed alongside a removed column goes back with all its cells", () => {
+    const content = preview(
+      grid("Key|Note|Value", "a|x|1", "b|y|2"),
+      grid("Key|Value", "a|1"),
+    )
+    expect(cells(content)).toEqual([
+      ["Key", "-Note", "Value"],
+      ["a", "-x", "1"],
+      ["-b", "-y", "-2"],
+    ])
+  })
+
+  test("a cell edited beside a new column is marked inline", () => {
+    const content = preview(grid("Key|Value", "a|1"), grid("Key|Note|Value", "a|x|2"))
+    expect(cells(content)).toEqual([
+      ["Key", "+Note", "Value"],
+      ["a", "+x", "12"],
+    ])
+    expect(content.querySelector("del.diff-old")!.closest("td")!.cellIndex).toBe(2)
   })
 })

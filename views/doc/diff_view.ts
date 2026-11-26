@@ -3,8 +3,10 @@
 // The diff mode in the rendered preview (preview.ts): the blocks a diff
 // (diff.ts) added marked, the ones it removed put back where they were, and
 // the ones that moved (moves.ts) marked where they are now, numbered, with a
-// placeholder where each was. Blocks are found by their data-line, the
-// source lines render.ts stamps on them.
+// placeholder where each was. A table's rows and columns are marked one by
+// one, the removed ones put back in it, unless the whole table changed.
+// Blocks are found by their data-line, the source lines render.ts stamps on
+// them.
 
 import type { MarkdownDiff } from "./diff.ts"
 import type { Move } from "./moves.ts"
@@ -31,15 +33,27 @@ export function showDiff(
   moves: Move[],
 ) {
   const blocks = [...content.querySelectorAll<HTMLElement>("[data-line]")]
-  const added = new Set(innermostBlocks(content, diff.added).map(outer))
+  // A table's rows are marked one by one, unless all of it is new
+  const allNew = (el: HTMLElement) => {
+    const [s, e] = lines(el)
+    return diff.added.some(([start, end]) => start <= s && e <= end)
+  }
+  const added = new Set(
+    innermostBlocks(content, diff.added).map((el) => {
+      const table = el.closest("table")
+      return table && !allNew(table) ? el : outer(el)
+    }),
+  )
   // The removed go back first, so they go before an added <pre> or <table>,
   // not into its wrapper
-  for (const [i, { line }] of diff.removed.entries()) {
+  for (const [i, { line, rows, columns }] of diff.removed.entries()) {
     const panel = document.createElement("div")
     panel.className = "diff-removed"
     panel.innerHTML = removed[i]
     // Its lines aren't the file's: don't let flashes or ⌘-click find it
     for (const el of panel.querySelectorAll("[data-line]")) el.removeAttribute("data-line")
+    if (rows && putRows(panel, blocks, line)) continue
+    if (columns && putColumns(panel, blocks, line, columns)) continue
     const next = blocks.find((el) => lines(el)[0] >= line)
     if (next && putItems(panel, outer(next))) continue
     if (next?.matches("li")) {
@@ -53,6 +67,11 @@ export function showDiff(
     else content.append(panel)
   }
   for (const el of added) mark(el, "diff-added")
+  for (const { line, at } of diff.columns) {
+    const table = blocks.find((el) => el.matches("table") && lines(el)[0] === line)
+    for (const tr of table?.querySelectorAll("tr[data-line]") ?? [])
+      for (const i of at) tr.children[i]?.classList.add("diff-added")
+  }
   for (const [i, move] of moves.entries()) {
     const n = String(i + 1)
     const moved = markMoved(content, move.to)
@@ -84,7 +103,7 @@ export function showDiff(
 }
 
 /** The element a block's lines are marked on: the <pre> of a fence's
- * <code>, the <table> of a row */
+ * <code>, the <table> of a row when all of the table is marked */
 const outer = (el: HTMLElement) => el.closest<HTMLElement>("pre, table") ?? el
 
 /** Give top-level blocks added one after another one bar, as the removed
@@ -119,7 +138,8 @@ function groupAdded(content: HTMLElement) {
 
 /** Mark a block with `cls`. A fence's lines are on its <code> and a table's
  * on its rows, but the <pre> or <table> would clip the mark's bar, so it goes
- * on a wrapper. Returns what has the mark. */
+ * on a wrapper. A row on its own takes the mark, which CSS shows on its
+ * cells. Returns what has the mark. */
 function mark(el: HTMLElement, cls: string): HTMLElement {
   if (!el.matches("pre, table")) {
     el.classList.add(cls)
@@ -193,6 +213,56 @@ function putItems(panel: HTMLElement, next: HTMLElement): boolean {
     item.classList.add("diff-removed")
     if (before) before.before(item)
     else into.append(item)
+  }
+  return true
+}
+
+/** Move the body rows rendered in `panel`, with the old table's header, into
+ * the new table at `line`, marked removed, before its row on that line or
+ * after its last row. Returns whether it could. */
+function putRows(panel: HTMLElement, blocks: HTMLElement[], line: number): boolean {
+  const table = blocks.find((el) => {
+    const [s, e] = lines(el)
+    return el.matches("table") && s + 2 <= line && line <= e
+  })
+  const rows = panel.querySelectorAll("tbody tr")
+  if (!table || !rows.length) return false
+  const before = blocks.find(
+    (el) => table.contains(el) && el.matches("tbody tr") && lines(el)[0] >= line,
+  )
+  const body =
+    table.querySelector("tbody") ?? table.appendChild(document.createElement("tbody"))
+  for (const row of rows) {
+    row.classList.add("diff-removed")
+    if (before) before.before(row)
+    else body.append(row)
+  }
+  return true
+}
+
+/** Put a table's removed columns back in it, marked removed. The cells in
+ * columns `at` of each row of the old table in `panel` go in the row on its
+ * line in `rows`, and new rows with no old one get empty cells. Returns
+ * whether it could. */
+function putColumns(
+  panel: HTMLElement,
+  blocks: HTMLElement[],
+  line: number,
+  { at, rows }: { at: number[]; rows: (number | null)[] },
+): boolean {
+  const table = blocks.find((el) => el.matches("table") && lines(el)[0] === line)
+  const old = [...panel.querySelectorAll("tr")]
+  if (!table || old.length !== rows.length) return false
+  for (const tr of table.querySelectorAll<HTMLElement>("tr[data-line]")) {
+    const from = old[rows.indexOf(lines(tr)[0])]
+    // Read before any are inserted, which would shift the indexes after them
+    const cells = at.map(
+      (i) => from?.children[i] ?? document.createElement(tr.closest("thead") ? "th" : "td"),
+    )
+    for (const [k, i] of at.entries()) {
+      cells[k].classList.add("diff-removed")
+      tr.insertBefore(cells[k], tr.children[i] ?? null)
+    }
   }
   return true
 }

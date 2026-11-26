@@ -12,13 +12,20 @@
 // words, with the old words kept aside and only their index in the text. The
 // marked text has the file's lines, so data-line stamps still point at the
 // file. A change that crosses blocks, or is inside one that inline markers
-// can't go in (a code fence, table or HTML), takes whole blocks: the old ones
-// come back to be rendered where they were, and the new ones as line ranges.
+// can't go in (a code fence or HTML), takes whole blocks: the old ones come
+// back to be rendered where they were, and the new ones as line ranges. Each
+// row of a table is a block of its own, so a change in a cell is marked
+// inline and one across cells takes the row. One that would take a table's
+// header or delimiter row, or both its rows and a block around it, takes the
+// whole table. Columns added to or removed from a table are found first, by
+// its header and delimiter rows (columnChanges). The diff is from a base with
+// those changes made, so they're marked as columns and the rest of the
+// table's changes as before.
 // The markup language matters only in which lines and spans markers can't go
 // in (Syntax), and in the leaf blocks the caller passes, so this diffs
 // AsciiDoc (asciidoc.ts) too. Imports only merge.ts, for tests.
 
-import { atBoundary, atLineStart, hunks, LINE_MARKER, words } from "./merge.ts"
+import { atBoundary, atLineStart, diff, hunks, LINE_MARKER, words } from "./merge.ts"
 
 /** Words, runs of space and other characters one at a time, and newlines
  * alone. Unlike the merge's tokens, space is its own token, so `end.` and the
@@ -46,9 +53,10 @@ export type Syntax = {
 export const MARKDOWN: Syntax = {
   lineMarker: LINE_MARKER,
   markup: /[*_`[\]()<>|\\]/,
-  // Code spans, links and images, autolinks and bare URLs
+  // Code spans, links and images, autolinks, bare URLs, and backslash
+  // escapes such as `\|` in a table cell
   spans:
-    /(`+)[\s\S]*?[^`]\1(?!`)|!?\[[^\]\n]*\]\([^)\n]*\)|<[a-z][\w+.-]*:[^\s<>]*>|\bhttps?:\/\/[^\s<>()]*[^\s<>().,;:!?'"*_]/gi,
+    /(`+)[\s\S]*?[^`]\1(?!`)|!?\[[^\]\n]*\]\([^)\n]*\)|<[a-z][\w+.-]*:[^\s<>]*>|\bhttps?:\/\/[^\s<>()]*[^\s<>().,;:!?'"*_]|\\[!-/:-@[-`{-~]/gi,
   tags: /<\/?[a-z][\w-]*(?:\s[^<>]*)?\/?>/gi,
 }
 
@@ -71,8 +79,14 @@ export const OPEN = "{"
 export const CLOSE = "{}"
 
 /** A leaf block's lines, [start, end), and whether inline markers can't go
- * in it */
-export type Block = { start: number; end: number; opaque: boolean }
+ * in it. A table's header, delimiter, and body rows are each a block, with
+ * `table` set to the table's lines. The delimiter row is opaque. */
+export type Block = {
+  start: number
+  end: number
+  opaque: boolean
+  table?: { start: number; end: number }
+}
 
 const LEAVES = new Set([
   "paragraph_open",
@@ -80,29 +94,30 @@ const LEAVES = new Set([
   "fence",
   "code_block",
   "html_block",
-  "table_open",
   "hr",
   "conflict",
   "gh_embed",
 ])
-const OPAQUE = new Set([
-  "fence",
-  "code_block",
-  "html_block",
-  "table_open",
-  "conflict",
-  "gh_embed",
-])
+const OPAQUE = new Set(["fence", "code_block", "html_block", "conflict", "gh_embed"])
 
 /** The leaf blocks among markdown-it's tokens for a text */
 export function leafBlocks(
   tokens: { type: string; map: [number, number] | null }[],
 ): Block[] {
-  return tokens.flatMap((t) =>
-    t.map && LEAVES.has(t.type)
-      ? [{ start: t.map[0], end: t.map[1], opaque: OPAQUE.has(t.type) }]
-      : [],
-  )
+  let table: Block["table"]
+  return tokens.flatMap((t) => {
+    if (!t.map) return []
+    const [start, end] = t.map
+    if (t.type === "table_open") table = { start, end }
+    if (t.type === "tr_open") {
+      const row = { start, end, opaque: false, table }
+      // The header row, then the delimiter row, which has no token
+      return start === table?.start
+        ? [row, { start: end, end: end + 1, opaque: true, table }]
+        : [row]
+    }
+    return LEAVES.has(t.type) ? [{ start, end, opaque: OPAQUE.has(t.type) }] : []
+  })
 }
 
 export type MarkdownDiff = {
@@ -110,12 +125,156 @@ export type MarkdownDiff = {
   text: string
   /** The old words of each inline marker, by index */
   old: string[]
-  /** Old blocks that are gone, each to show before the new text's `line` */
-  removed: { line: number; text: string }[]
+  /** Old blocks that are gone, each to show before the new text's `line`.
+   * Rows of a table that's still there go back in it. Their text has the old
+   * table's header and delimiter rows first, so it parses as a table. A
+   * table's removed columns have the old table's text, the columns'
+   * indexes `at`, and for each old row, header first, the line it's on now in
+   * `rows`, or null when it's gone. Their cells go back in the new table
+   * that starts at `line`. */
+  removed: {
+    line: number
+    text: string
+    rows?: true
+    columns?: { at: number[]; rows: (number | null)[] }
+  }[]
   /** New blocks, as line ranges [start, end) of the new text */
   added: [number, number][]
+  /** Columns new to a table, as the new table's first line and the
+   * columns' indexes */
+  columns: { line: number; at: number[] }[]
   /** How many changes there are */
   changes: number
+}
+
+type Table = NonNullable<Block["table"]>
+
+/** How the columns of an old table `a` changed in the new table `b`: the
+ * ones added (by their indexes in `b`), the ones removed (by their indexes
+ * in `a`), or the same ones in another order */
+type ColumnChange = {
+  a: Table
+  b: Table
+  kind: "added" | "removed" | "moved"
+  at: number[]
+}
+
+/** A table row's text split at the `|`s around its cells: what's before
+ * the first, each cell, and what's after the last. As in GFM, every
+ * unescaped `|` separates cells. */
+function split(line: string): string[] {
+  const out = [""]
+  const t = tokens(line)
+  for (const [i, tok] of t.entries())
+    if (tok === "|" && t[i - 1] !== "\\") out.push("")
+    else out[out.length - 1] += tok
+  return out
+}
+
+/** How the columns changed from the old table's rows `a` to the new one's
+ * `b`, each row split. A column is its header and delimiter cells. The
+ * columns kept have the same of both in the two tables, and the ones added
+ * or removed must be the only ones that get from one table's columns to the
+ * other's. Null when the columns didn't change or the change is ambiguous,
+ * and undefined when `b` can't be the same table. Only for tables whose rows
+ * all start and end with `|` and have as many cells as the header, since an
+ * empty cell at a row's edge needs its `|`. */
+function columnChange(
+  a: string[][],
+  b: string[][],
+): Omit<ColumnChange, "a" | "b"> | null | undefined {
+  const piped = (rows: string[][]) =>
+    rows.every(
+      (r) => r.length === rows[0].length && /^[\s>]*$/.test(r[0]) && !r.at(-1)!.trim(),
+    )
+  if (!piped(a) || !piped(b)) return null
+  const keys = (rows: string[][]) =>
+    rows[0]
+      .slice(1, -1)
+      .map((cell, i) => JSON.stringify([cell.trim(), rows[1][i + 1].trim()]))
+  const [ka, kb] = [keys(a), keys(b)]
+  if (ka.length === kb.length) {
+    const same = (x: string[], y: string[]) => x.join("\n") === y.join("\n")
+    return !same(ka, kb) && same(ka.toSorted(), kb.toSorted())
+      ? { kind: "moved", at: [] }
+      : null
+  }
+  const [short, long] = ka.length < kb.length ? [ka, kb] : [kb, ka]
+  // ways[i][j]: the ways short[i..] is in long[j..], in order
+  const ways = Array.from({ length: short.length + 1 }, (_, i) =>
+    Array<number>(long.length + 1).fill(i === short.length ? 1 : 0),
+  )
+  for (let i = short.length - 1; i >= 0; i--)
+    for (let j = long.length - 1; j >= 0; j--)
+      ways[i][j] = ways[i][j + 1] + (short[i] === long[j] ? ways[i + 1][j + 1] : 0)
+  if (ways[0][0] === 0) return undefined
+  if (ways[0][0] > 1) return null
+  const at: number[] = []
+  for (let i = 0, j = 0; j < long.length; j++)
+    if (i < short.length && short[i] === long[j] && ways[i + 1][j + 1]) i++
+    else at.push(j)
+  return { kind: ka.length < kb.length ? "added" : "removed", at }
+}
+
+/** The tables whose columns changed, each old one paired with the first new
+ * one after the previous pair whose columns it could have become, and a
+ * base: `prev` with the added columns put in and the removed ones taken out,
+ * so a diff from it to `next` has only the tables' other changes */
+function columnChanges(
+  prev: string,
+  next: string,
+  [oldBlocks, newBlocks]: [Block[], Block[]],
+): { base: string; changes: ColumnChange[] } {
+  const lines = [prev.split("\n"), next.split("\n")]
+  const tables = [oldBlocks, newBlocks].map((blocks) => [
+    ...new Set(blocks.flatMap((b) => b.table ?? [])),
+  ])
+  const rows = (side: 0 | 1, t: Table) => lines[side].slice(t.start, t.end).map(split)
+  const changes: ColumnChange[] = []
+  let k = 0
+  for (const a of tables[0]) {
+    for (let j = k; j < tables[1].length; j++) {
+      const b = tables[1][j]
+      const change = columnChange(rows(0, a), rows(1, b))
+      if (change === undefined) continue
+      if (change) changes.push({ a, b, ...change })
+      k = j + 1
+      break
+    }
+  }
+  const base = [...lines[0]]
+  for (const { a, b, kind, at } of changes) {
+    const [old, now] = [rows(0, a), rows(1, b)]
+    if (kind === "removed")
+      for (const [i, cells] of old.entries()) {
+        for (const j of at.toReversed()) cells.splice(j + 1, 1)
+        base[a.start + i] = cells.join("|")
+      }
+    if (kind !== "added") continue
+    // An old row that matches a new one apart from the new columns gets that
+    // row's cells in them. The two are then the same, so the diff lines them
+    // up. Other old rows get empty cells.
+    const key = (cells: string[]) => JSON.stringify(cells.map((c) => c.trim()))
+    const keys = [
+      old.map(key),
+      now.map((cells) => key(cells.filter((_, j) => !at.includes(j - 1)))),
+    ]
+    const same = new Map<number, string[]>()
+    let [x, y] = [0, 0]
+    const pair = (end: number) => {
+      while (x < end) same.set(x++, now[y++])
+    }
+    for (const r of diff(keys[0], keys[1])) {
+      pair(r.a)
+      ;[x, y] = [r.aEnd, r.bEnd]
+    }
+    pair(old.length)
+    for (const [i, cells] of old.entries()) {
+      for (const j of at) cells.splice(j + 1, 0, same.get(i)?.[j + 1] ?? " ")
+      base[a.start + i] = cells.join("|")
+    }
+  }
+  return { base: base.join("\n"), changes }
 }
 
 /** A change: tokens [a, aEnd) of the old text became [b, bEnd) of the new.
@@ -197,6 +356,27 @@ class Side {
     return { blocks, loose: covered < le - ls }
   }
 
+  /** The table, when tokens [s, e) touch only its body rows. Those rows are
+   * marked one by one, whereas a change that touches a table's header or
+   * delimiter row, or a block outside it, takes each table it touches whole. */
+  rows(s: number, e: number): Block["table"] {
+    const { blocks } = this.touched(s, e)
+    const table = blocks[0]?.table
+    return table && blocks.every((b) => b.table === table && b.start >= table.start + 2)
+      ? table
+      : undefined
+  }
+
+  /** Whether tokens [s, e) have a `|` between the cells of a table's row.
+   * As in GFM, every `|` that isn't escaped separates cells, even in a code
+   * span. */
+  cells(s: number, e: number): boolean {
+    return (
+      this.touched(s, e).blocks.some((b) => b.table) &&
+      this.t.slice(s, e).some((tok, k) => tok === "|" && this.t[s + k - 1] !== "\\")
+    )
+  }
+
   /** What the diff compares the tokens by. A line break inside a paragraph
    * is a space, unless it's a hard break, since rewrapping doesn't show. An
    * ordered item's number is `#`, since adding an item renumbers the ones
@@ -242,7 +422,10 @@ export function diffMarkdown(
   blocks: [Block[], Block[]],
   syntax: Syntax = MARKDOWN,
 ): MarkdownDiff {
-  const o = new Side(prev, blocks[0], syntax)
+  // A table's added and removed columns are marked as columns. The diff is
+  // from a base with those changes made, so it has only what changed besides.
+  const { base, changes: columnsChanged } = columnChanges(prev, next, blocks)
+  const o = new Side(base, blocks[0], syntax)
   const n = new Side(next, blocks[1], syntax)
   /** A line's marker, when that's all there is before token i */
   const marker = new RegExp(`(?:${syntax.lineMarker.source})$`)
@@ -284,7 +467,8 @@ export function diffMarkdown(
   // that's no longer than either joins them. In a sentence, one no longer
   // than both together does too, so a reworded stretch reads as the old
   // words, then the new, not the two taking turns. Not across lines, which
-  // the line diff already aligned.
+  // the line diff already aligned, or across a table's cells, since a change
+  // across a `|` takes the whole row.
   const chars = (t: string[], s: number, e: number) => t.slice(s, e).join("").length
   const size = (r: Run) => Math.max(chars(o.t, r.a, r.aEnd), chars(n.t, r.b, r.bEnd))
   const inSentence = (s: number, e: number) => {
@@ -298,6 +482,7 @@ export function diffMarkdown(
     const [small, big] = [size(prev), size(r)].sort((x, y) => x - y)
     if (
       !gap.includes("\n") &&
+      !o.cells(prev.aEnd, r.a) &&
       (length <= small || (length <= small + big && inSentence(prev.aEnd, r.a)))
     ) {
       prev.aEnd = r.aEnd
@@ -362,6 +547,21 @@ export function diffMarkdown(
     r.b += best
     r.bEnd += best
   }
+  // An addition or removal that runs past a table's edge splits there, so
+  // the rows in it are marked one by one and the rest doesn't take the whole
+  // table
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const r = runs[i]
+    if (r.a !== r.aEnd && r.b !== r.bEnd) continue
+    const [side, s, e] =
+      r.a === r.aEnd ? ([n, "b", "bEnd"] as const) : ([o, "a", "aEnd"] as const)
+    const edges = side.blocks
+      .flatMap((b) => (b.table ? [b.table.start, b.table.end] : []))
+      .map((l) => side.lineStart[l])
+      .filter((at) => r[s] < at && at < r[e])
+    const at = [r[s], ...new Set(edges), r[e]]
+    runs.splice(i, 1, ...at.slice(1).map((end, k) => ({ ...r, [s]: at[k], [e]: end })))
+  }
 
   /** Grow run i until its range on one side covers [start, end), taking in
    * the runs it reaches; returns where run i now is */
@@ -418,6 +618,7 @@ export function diffMarkdown(
         loose ||
         blocks.length > 1 ||
         blocks.some((b) => b.opaque) ||
+        side.cells(s, e) ||
         side.inMarker(s, s === e) ||
         tagStart < s ||
         tagEnd > e
@@ -443,10 +644,12 @@ export function diffMarkdown(
         [n, "b"],
       ] as const) {
         const r = runs[i]
-        const [ls, le] = side.lines(r[key], r[key === "a" ? "aEnd" : "bEnd"])
-        const { blocks } = side.touched(r[key], r[key === "a" ? "aEnd" : "bEnd"])
-        const start = Math.min(ls, ...blocks.map((b) => b.start))
-        const end = Math.max(le, ...blocks.map((b) => b.end))
+        const [s, e] = [r[key], r[key === "a" ? "aEnd" : "bEnd"]]
+        const [ls, le] = side.lines(s, e)
+        const { blocks } = side.touched(s, e)
+        const whole = side.rows(s, e) ? [] : blocks.flatMap((b) => b.table ?? [])
+        const start = Math.min(ls, ...[...blocks, ...whole].map((b) => b.start))
+        const end = Math.max(le, ...[...blocks, ...whole].map((b) => b.end))
         i = grow(
           i,
           key,
@@ -458,6 +661,12 @@ export function diffMarkdown(
     return i
   }
 
+  // Columns in another order take the whole table, as a change to its header
+  // row does, rather than a mark in each cell for the one it swapped with
+  for (const { a } of columnsChanged.filter((c) => c.kind === "moved"))
+    for (const r of runs)
+      if (o.touched(r.a, r.aEnd).blocks.some((b) => b.table === a && b.start === a.start))
+        r.block = true
   for (let i = 0; i < runs.length; i++) {
     for (;;) {
       const r = runs[i]
@@ -504,30 +713,89 @@ export function diffMarkdown(
   }
   for (let i = 0; i < runs.length; i++) if (runs[i].block) i = takeBlocks(i)
   // Blocks changed one after another, with only blank lines kept between
-  // them, read as the old ones, then the new, not the two taking turns
+  // them, read as the old ones, then the new, not the two taking turns. A
+  // table's changed rows stay apart, each old row above its new one. They
+  // also stay apart from the blocks around the table, which would take the
+  // whole table.
+  const rows = (r: Run) => o.rows(r.a, r.aEnd) ?? n.rows(r.b, r.bEnd)
   for (let i = 1; i < runs.length;) {
     const [prev, r] = [runs[i - 1], runs[i]]
-    if (prev.block && r.block && !o.t.slice(prev.aEnd, r.a).join("").trim()) {
+    if (
+      prev.block &&
+      r.block &&
+      !rows(prev) &&
+      !rows(r) &&
+      !o.t.slice(prev.aEnd, r.a).join("").trim()
+    ) {
       prev.aEnd = r.aEnd
       prev.bEnd = r.bEnd
       runs.splice(i, 1)
     } else i++
   }
 
+  // A table taken whole already has its old columns and new ones, so its
+  // column changes aren't marked on their own
+  const columns = columnsChanged.filter(
+    ({ a, kind }) =>
+      kind !== "moved" &&
+      !runs.some(
+        (r) => r.block && r.a <= o.lineStart[a.start] && o.lineStart[a.start] < r.aEnd,
+      ),
+  )
+  // The cells of the added columns in the new text, as token ranges inside
+  // their `|`s. Where the base has empty cells, the diff fills them in, which
+  // isn't marked as a change.
+  const filled: [number, number][] = []
+  for (const { b, at } of columns.filter((c) => c.kind === "added"))
+    for (let l = b.start; l < b.end; l++) {
+      if (l === b.start + 1) continue
+      const pipes: number[] = []
+      for (let i = n.lineStart[l]; i < n.lineStart[l + 1]; i++)
+        if (n.t[i] === "|" && n.t[i - 1] !== "\\") pipes.push(i)
+      for (const i of at) filled.push([pipes[i] + 1, pipes[i + 1]])
+    }
+  /** Lines [start, end) of a text, with their line breaks */
+  const lines = (text: string, start: number, end: number) =>
+    text
+      .split(/(?<=\n)/)
+      .slice(start, end)
+      .join("")
+
   const old: string[] = []
   const removed: MarkdownDiff["removed"] = []
   const added: MarkdownDiff["added"] = []
   let text = ""
   let at = 0
+  let changes = 0
   for (const r of runs) {
     text += n.t.slice(at, r.b).join("")
     const [before, after] = texts(r)
     if (r.block) {
-      if (before) removed.push({ line: n.lineOf[r.b], text: before })
+      changes++
+      // The old text comes from `prev`, without the base's changes to its
+      // tables, except for removed rows of a table with new columns. Those
+      // come from the base, so their empty cells line up with the new ones.
+      // Removed rows have the table's header and delimiter rows first, so
+      // they parse as a table and go back in it (diff_view.ts).
+      const table = o.rows(r.a, r.aEnd)
+      const from = columns.some((c) => c.a === table && c.kind === "added") ? base : prev
+      const end = r.aEnd < o.t.length ? o.lineOf[r.aEnd] : Infinity
+      const gone = lines(from, o.lineOf[r.a], end)
+      const line = n.lineOf[r.b]
+      if (before && table)
+        removed.push({
+          line,
+          text: lines(from, table.start, table.start + 2) + gone,
+          rows: true,
+        })
+      else if (before) removed.push({ line, text: gone })
       if (after)
         added.push([n.lineOf[r.b], n.lineOf[r.bEnd] + (after.endsWith("\n") ? 0 : 1)])
       text += after
+    } else if (!before.trim() && filled.some(([s, e]) => s <= r.b && r.bEnd <= e)) {
+      text += after
     } else {
+      changes++
       // Space the new words start or end with stays outside, when the old
       // ones have it too or there are none, and so does a quote's marker
       // they end with
@@ -544,5 +812,26 @@ export function diffMarkdown(
     at = r.bEnd
   }
   text += n.t.slice(at).join("")
-  return { text, old, removed, added, changes: runs.length }
+
+  /** The new line old line `l` is on now, or null when it's gone */
+  const lineNow = (l: number) => {
+    const p = o.lineStart[l]
+    if (runs.some((r) => r.block && r.a <= p && p < r.aEnd)) return null
+    const r = runs.findLast((r) => r.aEnd <= p)
+    return n.lineOf[r ? p - r.aEnd + r.bEnd : p]
+  }
+  const newColumns: MarkdownDiff["columns"] = []
+  for (const { a, b, kind, at } of columns) {
+    changes += at.length
+    if (kind === "added") newColumns.push({ line: b.start, at })
+    else {
+      const body = Array.from({ length: a.end - a.start - 2 }, (_, i) => a.start + 2 + i)
+      removed.push({
+        line: b.start,
+        text: lines(prev, a.start, a.end),
+        columns: { at, rows: [a.start, ...body].map(lineNow) },
+      })
+    }
+  }
+  return { text, old, removed, added, columns: newColumns, changes }
 }

@@ -19,7 +19,7 @@ type Run = { a: number; aEnd: number; b: number; bEnd: number }
 const MAX_EDITS = 1000
 
 /** The runs that turn `a` into `b`, in order */
-function diff(a: string[], b: string[]): Run[] {
+export function diff(a: string[], b: string[]): Run[] {
   let s = 0
   while (s < a.length && s < b.length && a[s] === b[s]) s++
   let e = 0

@@ -113,8 +113,9 @@ ah-markdown {
   .diff-removed {
     opacity: 0.55;
   }
-  /* A panel, not a list's item put back in it, which keeps its spacing */
-  .diff-removed:not(li, dt, dd) {
+  /* A panel, not a list's item or a table's row or cell put back in it,
+     which keeps its spacing */
+  .diff-removed:not(li, dt, dd, tr, td, th) {
     margin-bottom: 16px;
   }
   .diff-removed::before {
@@ -123,6 +124,20 @@ ah-markdown {
   .diff-removed > :last-child,
   .diff-moved > :last-child {
     margin-bottom: 0 !important;
+  }
+  /* A marked table row or column has its cells tinted, as GitHub tints a
+     diff's lines, since the table would clip a bar */
+  :is(tr, td, th).diff-added::before,
+  :is(tr, td, th).diff-removed::before {
+    content: none;
+  }
+  tr.diff-added > td,
+  :is(td, th).diff-added {
+    background: #e6ffec;
+  }
+  tr.diff-removed > td,
+  :is(td, th).diff-removed {
+    background: #ffebe9;
   }
   /* A block that moved, and where it was, with its number on the bar */
   .diff-moved::before {
@@ -481,6 +496,14 @@ ah-markdown {
     }
     .diff-removed::before {
       background: #f85149;
+    }
+    tr.diff-added > td,
+    :is(td, th).diff-added {
+      background: #2ea04326;
+    }
+    tr.diff-removed > td,
+    :is(td, th).diff-removed {
+      background: #f8514926;
     }
     .diff-moved::before {
       background: #a371f799;
